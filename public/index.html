@@ -198,8 +198,9 @@
     </main>
 
     <script>
-      function easeInCubic(t) {
-        return t * t * t;
+      // Soft ease-out that decelerates into the final value
+      function easeOutQuint(t) {
+        return 1 - Math.pow(1 - t, 5);
       }
 
       function animateCount(el, target, durationMs) {
@@ -207,8 +208,8 @@
         const from = 0;
         function frame(now) {
           const t = Math.min(1, (now - start) / durationMs);
-          // Starts slow near 0, then accelerates into the final number
-          const eased = easeInCubic(t);
+          // Gentle rise that slows and settles on the final number
+          const eased = easeOutQuint(t);
           const value = Math.floor(from + (target - from) * eased);
           el.textContent = value.toLocaleString();
           if (t < 1) {
@@ -246,8 +247,8 @@
       (async () => {
         const el = document.getElementById("newsletter-count");
         const count = await resolveCount();
-        // Longer duration + ease-in = slow start, then speeds up
-        animateCount(el, count, 3200 + Math.min(count, 400) * 4);
+        // Slightly longer so the ease-out landing feels unhurried
+        animateCount(el, count, 3800 + Math.min(count, 400) * 5);
       })();
     </script>
   </body>
