@@ -425,7 +425,10 @@
             : "border border-rose-400/40 bg-rose-500/15 text-rose-100");
       }
 
+      let graphicsReady = false;
+
       async function loadGraphics() {
+        graphicsReady = false;
         try {
           const res = await fetch("/graphics");
           const data = await res.json();
@@ -440,6 +443,10 @@
 
           if (!data.success || !data.graphics?.length) {
             placeholder.textContent = "No graphics available yet";
+            showMessage(
+              "No graphics are available yet. Add options in the graphic_options database table, then refresh.",
+              false
+            );
             return;
           }
 
@@ -449,6 +456,8 @@
             opt.textContent = g.label + "  ·  " + g.code;
             graphicSelect.appendChild(opt);
           }
+          graphicsReady = true;
+          message.classList.add("hidden");
         } catch {
           graphicSelect.innerHTML = "";
           const opt = document.createElement("option");
@@ -457,6 +466,7 @@
           opt.selected = true;
           opt.textContent = "Couldn’t load graphics";
           graphicSelect.appendChild(opt);
+          showMessage("Couldn’t load graphics. Refresh and try again.", false);
         }
       }
 
@@ -471,8 +481,27 @@
         const email = document.getElementById("email").value.trim();
         const graphic_code = graphicSelect.value;
 
-        if (!real_name || !angel_name || !email || !graphic_code) {
-          showMessage("Fill out every field, including the graphic.", false);
+        if (!real_name) {
+          showMessage("Please enter your real name.", false);
+          return;
+        }
+        if (!angel_name) {
+          showMessage("Please enter your angel name.", false);
+          return;
+        }
+        if (!email) {
+          showMessage("Please enter your email.", false);
+          return;
+        }
+        if (!graphicsReady || !graphicSelect.options || graphicSelect.options.length <= 1) {
+          showMessage(
+            "No graphics are available yet. Add graphic_options in the database, then refresh this page.",
+            false
+          );
+          return;
+        }
+        if (!graphic_code) {
+          showMessage("Please choose a graphic from the dropdown.", false);
           return;
         }
 
@@ -492,15 +521,6 @@
               ? Object.values(data.details).flat().join(" ")
               : data.error || "Something went wrong.";
             showMessage(detail, false);
-            return;
-          }
-
-          if (data.duplicate) {
-            showMessage(
-              data.message ||
-                "That angel name is already in our database. We'll send you an update soon — please check your email.",
-              true
-            );
             return;
           }
 

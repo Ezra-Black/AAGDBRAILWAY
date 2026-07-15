@@ -12,12 +12,13 @@ import {
   getEntryByAngelName,
   getEntryById,
   getEntryByRealName,
+  listAngelGroupsForAdmin,
   listEntries,
-  listEntriesForAdmin,
   listPending,
-  touchEntryEmail,
+  markAngelNameComplete,
   updateEntryStatus,
 } from "./db/entries";
+import { z } from "zod";
 import { graphicCodeExists, listActiveGraphics } from "./db/graphics";
 import { logger } from "./logger";
 import {
@@ -90,46 +91,35 @@ apiRouter.get(
   })
 );
 
-/** GET /admin/entries — angel names + graphics for dashboard */
+/** GET /admin/entries — angel names grouped with graphics + all emails */
 apiRouter.get(
   "/admin/entries",
   requireAdmin,
   asyncHandler(async (_req, res) => {
-    const entries = await listEntriesForAdmin(500);
-    res.json({ success: true, count: entries.length, entries });
+    const groups = await listAngelGroupsForAdmin(2000);
+    res.json({ success: true, count: groups.length, groups });
   })
 );
 
-/** PATCH /admin/entries/:id/complete — mark pending/processing as processed */
+/** PATCH /admin/angel-names/complete — mark all rows for a name as processed */
 apiRouter.patch(
-  "/admin/entries/:id/complete",
+  "/admin/angel-names/complete",
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const idCheck = uuidSchema.safeParse(req.params.id);
-    if (!idCheck.success) {
-      res.status(400).json({ success: false, error: "Invalid entry ID" });
+    const parsed = z
+      .object({ angel_name: z.string().trim().min(1).max(120) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: "angel_name is required" });
       return;
     }
 
-    const existing = await getEntryById(idCheck.data);
-    if (!existing) {
-      res.status(404).json({ success: false, error: "Entry not found" });
-      return;
-    }
-
-    if (existing.status === "processed") {
-      res.json({ success: true, entry: existing });
-      return;
-    }
-
-    const entry = await updateEntryStatus(idCheck.data, "processed");
-    if (!entry) {
-      res.status(404).json({ success: false, error: "Entry not found" });
-      return;
-    }
-
-    logger.info("Admin marked entry complete", { id: entry.id });
-    res.json({ success: true, entry });
+    const updated = await markAngelNameComplete(parsed.data.angel_name);
+    logger.info("Admin marked angel name complete", {
+      angel_name: parsed.data.angel_name,
+      updated,
+    });
+    res.json({ success: true, updated });
   })
 );
 
@@ -170,24 +160,6 @@ apiRouter.post(
     }
 
     const existing = await getEntryByAngelName(angel_name);
-    if (existing) {
-      const entry =
-        (await touchEntryEmail(existing.id, email)) ?? existing;
-
-      logger.info("Duplicate angel name submit", {
-        id: entry.id,
-        angel_name: entry.angel_name,
-      });
-
-      res.status(200).json({
-        success: true,
-        duplicate: true,
-        message:
-          "That angel name is already in our database. We'll send you an update soon — please check your email.",
-        entry,
-      });
-      return;
-    }
 
     const entry = await createEntry({
       real_name,
@@ -202,7 +174,19 @@ apiRouter.post(
       angel_name: entry.angel_name,
       graphic_code: entry.graphic_code,
       status: entry.status,
+      name_already_claimed: Boolean(existing),
     });
+
+    if (existing) {
+      res.status(201).json({
+        success: true,
+        duplicate: true,
+        message:
+          "That angel name is already in our database. We’ll send you an update soon — please check your email.",
+        entry,
+      });
+      return;
+    }
 
     res.status(201).json({
       success: true,

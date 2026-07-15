@@ -73,9 +73,18 @@ export interface AdminEntryListItem {
   created_at: Date;
 }
 
-/** Admin dashboard list: angel name + graphic (label when available). */
+export interface AdminAngelGroup {
+  angel_name: string;
+  graphics: { code: string; label: string | null }[];
+  emails: string[];
+  entry_ids: string[];
+  has_pending: boolean;
+  latest_at: Date;
+}
+
+/** Raw admin rows (one per submission). */
 export async function listEntriesForAdmin(
-  limit = 500
+  limit = 2000
 ): Promise<AdminEntryListItem[]> {
   const result = await query(
     `SELECT
@@ -106,6 +115,80 @@ export async function listEntriesForAdmin(
   }));
 }
 
+/** Group submissions by angel name for the admin portal. */
+export async function listAngelGroupsForAdmin(
+  limit = 2000
+): Promise<AdminAngelGroup[]> {
+  const rows = await listEntriesForAdmin(limit);
+  const groups = new Map<string, AdminAngelGroup>();
+
+  for (const row of rows) {
+    const key = row.angel_name.trim().toLowerCase();
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        angel_name: row.angel_name,
+        graphics: [],
+        emails: [],
+        entry_ids: [],
+        has_pending: false,
+        latest_at: row.created_at,
+      };
+      groups.set(key, group);
+    }
+
+    group.entry_ids.push(row.id);
+    if (
+      row.status === "pending" ||
+      row.status === "processing"
+    ) {
+      group.has_pending = true;
+    }
+    if (row.created_at > group.latest_at) {
+      group.latest_at = row.created_at;
+      group.angel_name = row.angel_name;
+    }
+
+    if (row.graphic_code) {
+      const exists = group.graphics.some((g) => g.code === row.graphic_code);
+      if (!exists) {
+        group.graphics.push({
+          code: row.graphic_code,
+          label: row.graphic_label,
+        });
+      }
+    }
+
+    if (row.email) {
+      const emailKey = row.email.trim().toLowerCase();
+      const emailExists = group.emails.some(
+        (e) => e.toLowerCase() === emailKey
+      );
+      if (!emailExists) {
+        group.emails.push(row.email.trim());
+      }
+    }
+  }
+
+  return Array.from(groups.values()).sort(
+    (a, b) => b.latest_at.getTime() - a.latest_at.getTime()
+  );
+}
+
+export async function markAngelNameComplete(
+  angelName: string
+): Promise<number> {
+  const result = await query(
+    `UPDATE entries
+     SET status = 'processed',
+         updated_at = NOW()
+     WHERE lower(angel_name) = lower($1)
+       AND status IN ('pending', 'processing')`,
+    [angelName]
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function getEntryById(id: string): Promise<Entry | null> {
   const result = await query(`SELECT * FROM entries WHERE id = $1`, [id]);
   return result.rows[0] ? mapRow(result.rows[0]) : null;
@@ -120,22 +203,6 @@ export async function getEntryByAngelName(
      ORDER BY created_at DESC
      LIMIT 1`,
     [angelName]
-  );
-  return result.rows[0] ? mapRow(result.rows[0]) : null;
-}
-
-/** Refresh contact email when a known angel name resubmits. */
-export async function touchEntryEmail(
-  id: string,
-  email: string
-): Promise<Entry | null> {
-  const result = await query(
-    `UPDATE entries
-     SET email = $2,
-         updated_at = NOW()
-     WHERE id = $1
-     RETURNING *`,
-    [id, email]
   );
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }

@@ -30,13 +30,10 @@
       .status-complete {
         color: #6ee7b7;
       }
-      .status-other {
-        color: #9ca3af;
-      }
     </style>
   </head>
   <body class="px-5 py-8 sm:px-8">
-    <main class="mx-auto max-w-3xl">
+    <main class="mx-auto max-w-4xl">
       <header class="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 class="text-2xl font-semibold text-white">Requests</h1>
@@ -55,10 +52,13 @@
         id="list"
         class="overflow-hidden rounded-xl border border-gray-800 bg-gray-900/60"
       >
-        <div class="grid grid-cols-[1fr_1fr] gap-3 border-b border-gray-800 px-4 py-3 text-xs font-medium uppercase tracking-wide text-gray-500 sm:grid-cols-[1.2fr_1.4fr_0.7fr]">
+        <div
+          class="hidden gap-4 border-b border-gray-800 px-4 py-3 text-xs font-medium uppercase tracking-wide text-gray-500 sm:grid sm:grid-cols-[1fr_1.2fr_1.4fr_0.7fr]"
+        >
           <span>Angel name</span>
-          <span>Graphic</span>
-          <span class="hidden sm:inline">Status</span>
+          <span>Graphics</span>
+          <span>Emails</span>
+          <span>Status</span>
         </div>
         <div id="rows" class="divide-y divide-gray-800"></div>
       </div>
@@ -66,7 +66,7 @@
       <p id="empty" class="mt-6 hidden text-sm text-gray-500">No requests yet.</p>
       <p id="error" class="mt-6 hidden text-sm text-rose-400"></p>
       <p class="mt-4 text-xs text-gray-500">
-        Tip: click <span class="text-amber-300">pending</span> to mark a request complete.
+        Tip: click <span class="text-amber-300">pending</span> to mark every claim for that angel name complete.
       </p>
     </main>
 
@@ -87,38 +87,22 @@
         return data.admin;
       }
 
-      function graphicText(entry) {
-        if (entry.graphic_label && entry.graphic_code) {
-          return entry.graphic_label + " (" + entry.graphic_code + ")";
-        }
-        return entry.graphic_label || entry.graphic_code || "—";
+      function graphicText(graphics) {
+        if (!graphics?.length) return "—";
+        return graphics
+          .map((g) => (g.label ? g.label + " (" + g.code + ")" : g.code))
+          .join(", ");
       }
 
-      function statusLabel(status) {
-        if (status === "processed") return "complete";
-        return status;
-      }
-
-      function statusClass(status) {
-        if (status === "pending" || status === "processing") return "status-pending";
-        if (status === "processed") return "status-complete";
-        return "status-other";
-      }
-
-      function canMarkComplete(status) {
-        return status === "pending" || status === "processing";
-      }
-
-      async function markComplete(id, buttonEls) {
-        for (const el of buttonEls) {
-          el.textContent = "…";
-          el.style.pointerEvents = "none";
-        }
-
+      async function markComplete(angelName, buttonEl) {
+        buttonEl.textContent = "…";
+        buttonEl.style.pointerEvents = "none";
         try {
-          const res = await fetch("/admin/entries/" + id + "/complete", {
+          const res = await fetch("/admin/angel-names/complete", {
             method: "PATCH",
             credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ angel_name: angelName }),
           });
           if (res.status === 401) {
             window.location.href = "/admin/login";
@@ -128,8 +112,6 @@
           if (!res.ok || !data.success) {
             errorEl.textContent = data.error || "Could not update status";
             errorEl.classList.remove("hidden");
-            await loadEntries();
-            return;
           }
           await loadEntries();
         } catch {
@@ -139,26 +121,32 @@
         }
       }
 
-      function renderStatusControl(entry) {
-        const label = statusLabel(entry.status);
-        const cls = statusClass(entry.status);
-        if (canMarkComplete(entry.status)) {
+      function renderStatus(group) {
+        if (group.has_pending) {
           return (
-            '<button type="button" data-complete="' +
-            escapeHtml(entry.id) +
-            '" class="' +
-            cls +
-            ' text-sm capitalize bg-transparent p-0 border-0" title="Mark complete">' +
-            escapeHtml(label) +
+            '<button type="button" data-complete-name="' +
+            escapeAttr(group.angel_name) +
+            '" class="status-pending text-sm capitalize bg-transparent p-0 border-0" title="Mark complete">' +
+            "pending" +
             "</button>"
           );
         }
+        return '<span class="status-complete text-sm capitalize">complete</span>';
+      }
+
+      function renderEmails(emails) {
+        if (!emails?.length) {
+          return '<span class="text-gray-500">—</span>';
+        }
         return (
-          '<span class="' +
-          cls +
-          ' text-sm capitalize">' +
-          escapeHtml(label) +
-          "</span>"
+          '<ul class="space-y-1 text-sm text-gray-300">' +
+          emails
+            .map(
+              (email) =>
+                '<li class="break-all">' + escapeHtml(email) + "</li>"
+            )
+            .join("") +
+          "</ul>"
         );
       }
 
@@ -176,45 +164,52 @@
           return;
         }
 
-        const entries = data.entries || [];
+        const groups = data.groups || [];
         subtitle.textContent = adminEmail
-          ? adminEmail + " · " + entries.length + " total"
-          : entries.length + " total";
+          ? adminEmail + " · " + groups.length + " angel names"
+          : groups.length + " angel names";
         rowsEl.innerHTML = "";
-        empty.classList.toggle("hidden", entries.length > 0);
+        empty.classList.toggle("hidden", groups.length > 0);
 
-        if (!entries.length) return;
+        if (!groups.length) return;
 
-        for (const entry of entries) {
+        for (const group of groups) {
           const row = document.createElement("div");
           row.className =
-            "grid grid-cols-[1fr_1fr] gap-3 px-4 py-3.5 sm:grid-cols-[1.2fr_1.4fr_0.7fr]";
+            "grid gap-3 px-4 py-4 sm:grid-cols-[1fr_1.2fr_1.4fr_0.7fr] sm:gap-4";
           row.innerHTML =
             '<div class="min-w-0">' +
-            '<p class="truncate font-medium text-white">' +
-            escapeHtml(entry.angel_name) +
+            '<p class="font-medium text-white">' +
+            escapeHtml(group.angel_name) +
             "</p>" +
-            '<div class="mt-0.5 sm:hidden">' +
-            renderStatusControl(entry) +
+            '<p class="mt-1 text-xs text-gray-500">' +
+            (group.emails?.length || 0) +
+            " email" +
+            ((group.emails?.length || 0) === 1 ? "" : "s") +
+            "</p>" +
+            '<div class="mt-2 sm:hidden">' +
+            renderStatus(group) +
             "</div>" +
             "</div>" +
             '<div class="min-w-0 text-sm text-gray-300">' +
-            escapeHtml(graphicText(entry)) +
+            '<p class="text-xs uppercase tracking-wide text-gray-500 sm:hidden mb-1">Graphics</p>' +
+            escapeHtml(graphicText(group.graphics)) +
+            "</div>" +
+            '<div class="min-w-0">' +
+            '<p class="text-xs uppercase tracking-wide text-gray-500 sm:hidden mb-1">Emails</p>' +
+            renderEmails(group.emails) +
             "</div>" +
             '<div class="hidden sm:block">' +
-            renderStatusControl(entry) +
+            renderStatus(group) +
             "</div>";
           rowsEl.appendChild(row);
         }
 
-        rowsEl.querySelectorAll("[data-complete]").forEach((btn) => {
+        rowsEl.querySelectorAll("[data-complete-name]").forEach((btn) => {
           btn.addEventListener("click", () => {
-            const id = btn.getAttribute("data-complete");
-            if (!id) return;
-            const twins = rowsEl.querySelectorAll(
-              '[data-complete="' + id + '"]'
-            );
-            markComplete(id, twins);
+            const name = btn.getAttribute("data-complete-name");
+            if (!name) return;
+            markComplete(name, btn);
           });
         });
       }
@@ -225,6 +220,10 @@
           .replace(/</g, "&lt;")
           .replace(/>/g, "&gt;")
           .replace(/"/g, "&quot;");
+      }
+
+      function escapeAttr(str) {
+        return escapeHtml(str).replace(/'/g, "&#39;");
       }
 
       document.getElementById("logout-btn").addEventListener("click", async () => {
