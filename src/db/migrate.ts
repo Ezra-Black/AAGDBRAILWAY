@@ -88,7 +88,19 @@ export async function migrate(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires
       ON admin_sessions (expires_at);
+
+    CREATE TABLE IF NOT EXISTS site_stats (
+      key         TEXT PRIMARY KEY,
+      value       BIGINT NOT NULL DEFAULT 0,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
+
+  await query(
+    `INSERT INTO site_stats (key, value)
+     VALUES ('newsletter_signups', 55)
+     ON CONFLICT (key) DO NOTHING`
+  );
 
   // Repair common manual-insert issues so the dropdown can see rows
   await query(`

@@ -92,6 +92,10 @@ app.get("/", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
+app.get("/form", (_req, res) => {
+  res.sendFile(path.join(publicDir, "form.html"));
+});
+
 app.get("/admin", (_req, res) => {
   res.redirect(302, "/admin/");
 });

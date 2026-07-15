@@ -3,22 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Audreys Angel Graphics Request Form</title>
+    <title>Audrey’s Angel Graphics</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             colors: {
-              dusk: "#1a1208",
+              dusk: "#0c0a08",
               honey: "#f0c45c",
-              amberglow: "#e8a838",
-              golddeep: "#9a6b1f",
-              cream: "#fff4d6",
+              cream: "#fff6e4",
             },
             fontFamily: {
-              display: ['"Playfair Display"', "Georgia", "serif"],
-              body: ['"Outfit"', "system-ui", "sans-serif"],
+              display: ['"SF Pro Display"', '"Inter"', "system-ui", "sans-serif"],
+              body: ['"SF Pro Text"', '"Inter"', "system-ui", "sans-serif"],
             },
           },
         },
@@ -27,594 +25,230 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,700;1,500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <style>
-      html,
-      body {
-        min-height: 100%;
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
       }
       body {
         margin: 0;
-        background: #120c06;
-        color: #fff4d6;
+        min-height: 100vh;
+        font-family: Inter, system-ui, sans-serif;
+        color: #f7f1e6;
+        background:
+          radial-gradient(ellipse 90% 60% at 50% -10%, rgba(240, 196, 92, 0.22), transparent 55%),
+          radial-gradient(ellipse 50% 40% at 100% 80%, rgba(232, 168, 56, 0.08), transparent 50%),
+          linear-gradient(180deg, #120e0a 0%, #070605 55%, #050403 100%);
         overflow-x: hidden;
       }
-      #webgl {
-        position: fixed;
-        inset: 0;
-        z-index: 0;
-        pointer-events: none;
+      .glass-nav {
+        background: rgba(18, 14, 10, 0.45);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: saturate(160%) blur(22px);
+        -webkit-backdrop-filter: saturate(160%) blur(22px);
       }
-      .page {
-        position: relative;
-        z-index: 1;
-      }
-      .glass {
-        background: linear-gradient(
-          145deg,
-          rgba(255, 214, 120, 0.14),
-          rgba(40, 24, 8, 0.55) 45%,
-          rgba(20, 12, 4, 0.72)
-        );
-        border: 1px solid rgba(240, 196, 92, 0.35);
+      .glass-panel {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(28px) saturate(140%);
+        -webkit-backdrop-filter: blur(28px) saturate(140%);
         box-shadow:
-          0 0 0 1px rgba(255, 220, 140, 0.08) inset,
-          0 25px 60px rgba(0, 0, 0, 0.45),
-          0 0 80px rgba(232, 168, 56, 0.12);
-        backdrop-filter: blur(18px);
+          0 30px 80px rgba(0, 0, 0, 0.35),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
-      .field input,
-      .field select {
-        background: rgba(18, 10, 4, 0.55);
-        border: 1px solid rgba(240, 196, 92, 0.28);
-        color: #fff4d6;
-        transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+      .nav-link {
+        color: rgba(255, 246, 228, 0.55);
+        transition: color 0.35s ease, opacity 0.35s ease;
       }
-      .field input::placeholder {
-        color: rgba(255, 244, 214, 0.35);
+      .nav-link:hover {
+        color: rgba(255, 246, 228, 0.95);
       }
-      .field input:focus,
-      .field select:focus {
-        outline: none;
-        border-color: rgba(240, 196, 92, 0.75);
-        box-shadow: 0 0 0 3px rgba(232, 168, 56, 0.2);
+      .nav-link.active {
+        color: #fff6e4;
       }
-      .field select option {
-        background: #1a1208;
-        color: #fff4d6;
+      .fade-up {
+        opacity: 0;
+        transform: translateY(28px);
+        animation: fadeUp 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
       }
-      .gold-btn {
-        background: linear-gradient(120deg, #f6d56a, #e8a838 45%, #c4841f);
-        color: #1a1208;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        box-shadow: 0 10px 30px rgba(232, 168, 56, 0.35);
-        transition: transform 0.15s, filter 0.15s, box-shadow 0.15s;
-      }
-      .gold-btn:hover:not(:disabled) {
-        filter: brightness(1.06);
-        transform: translateY(-1px);
-        box-shadow: 0 14px 36px rgba(232, 168, 56, 0.45);
-      }
-      .gold-btn:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
-      }
-      @keyframes driftIn {
-        from {
-          opacity: 0;
-          transform: translateY(18px) rotate(-0.4deg);
-        }
+      .delay-1 { animation-delay: 0.12s; }
+      .delay-2 { animation-delay: 0.28s; }
+      .delay-3 { animation-delay: 0.48s; }
+      .delay-4 { animation-delay: 0.72s; }
+      @keyframes fadeUp {
         to {
           opacity: 1;
-          transform: translateY(0) rotate(0);
+          transform: translateY(0);
         }
       }
-      @keyframes shimmer {
-        0%,
-        100% {
-          background-position: 0% 50%;
-        }
-        50% {
-          background-position: 100% 50%;
-        }
-      }
-      .title-shine {
-        background: linear-gradient(
-          100deg,
-          #9a6b1f 0%,
-          #f6d56a 28%,
-          #fff4d6 50%,
-          #f0c45c 72%,
-          #c4841f 100%
-        );
-        background-size: 200% auto;
+      .counter {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.04em;
+        background: linear-gradient(180deg, #fff8ea 10%, #f0c45c 55%, #c9952a 100%);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
-        animation: shimmer 7s ease-in-out infinite;
+        text-shadow: 0 0 80px rgba(240, 196, 92, 0.18);
       }
-      .animate-in {
-        animation: driftIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+      .cta {
+        transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), background 0.35s ease, box-shadow 0.35s ease;
       }
-      .stagger-2 {
-        animation-delay: 0.12s;
+      .cta:hover {
+        transform: translateY(-2px) scale(1.01);
+        box-shadow: 0 18px 40px rgba(240, 196, 92, 0.22);
       }
-      .stagger-3 {
-        animation-delay: 0.22s;
-      }
-      .vignette {
+      .orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(60px);
+        opacity: 0.45;
+        animation: drift 12s ease-in-out infinite alternate;
         pointer-events: none;
-        position: fixed;
-        inset: 0;
-        z-index: 0;
-        background:
-          radial-gradient(ellipse 70% 55% at 50% 20%, rgba(240, 196, 92, 0.12), transparent 55%),
-          radial-gradient(ellipse 90% 70% at 50% 100%, rgba(0, 0, 0, 0.55), transparent 60%);
+      }
+      @keyframes drift {
+        from { transform: translate3d(0, 0, 0) scale(1); }
+        to { transform: translate3d(24px, -18px, 0) scale(1.08); }
       }
     </style>
   </head>
-  <body class="font-body antialiased">
-    <canvas id="webgl" aria-hidden="true"></canvas>
-    <div class="vignette" aria-hidden="true"></div>
+  <body>
+    <div class="orb" style="width:280px;height:280px;background:#f0c45c;top:12%;left:8%;opacity:0.18"></div>
+    <div class="orb" style="width:360px;height:360px;background:#e8a838;bottom:8%;right:4%;opacity:0.12;animation-delay:1.5s"></div>
 
-    <main class="page mx-auto flex min-h-screen max-w-xl flex-col justify-center px-5 py-14 sm:px-6">
-      <header class="mb-9 animate-in text-left sm:mb-11">
-        <p class="mb-3 text-xs font-medium uppercase tracking-[0.28em] text-honey/70">
+    <header class="fixed inset-x-0 top-0 z-40 px-4 pt-4">
+      <nav class="glass-nav mx-auto flex max-w-5xl items-center justify-between rounded-full px-5 py-3">
+        <a href="/" class="text-sm font-medium tracking-wide text-cream/90">
           Audrey’s Angel Graphics
+        </a>
+        <div class="flex items-center gap-6 text-sm">
+          <a href="/" class="nav-link active">Home</a>
+          <a href="/form" class="nav-link">Form</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="relative z-10 mx-auto flex min-h-screen max-w-5xl flex-col justify-center px-5 pb-20 pt-28">
+      <section class="fade-up text-center">
+        <p class="text-xs font-medium uppercase tracking-[0.35em] text-honey/70">
+          Welcome
         </p>
-        <h1 class="font-display title-shine text-4xl font-bold leading-[1.1] sm:text-5xl">
-          Audreys Angel Graphics<br class="hidden sm:block" />
-          Request Form
+        <h1 class="mt-4 text-4xl font-semibold tracking-tight text-cream sm:text-6xl md:text-7xl" style="letter-spacing:-0.03em">
+          Audrey’s Angel Graphics
         </h1>
-        <p class="mt-4 max-w-md text-base font-light leading-relaxed text-cream/70">
-          Drop your names, email, and which graphic you want worked on.
-          We’ll pick it up from there.
+        <p class="mx-auto mt-5 max-w-2xl text-base font-light leading-relaxed text-cream/60 sm:text-lg">
+          Custom angel-name art made with care — luminous portraits, celestial accents,
+          and pieces tailored to the name that feels like you.
         </p>
-      </header>
+      </section>
 
-      <form
-        id="submit-form"
-        class="glass animate-in stagger-2 space-y-5 rounded-[1.75rem] p-6 sm:p-8"
-        novalidate
-      >
-        <!-- Honeypot: leave empty. Hidden from real users. -->
-        <div
-          aria-hidden="true"
-          style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden"
-        >
-          <label for="website">Website</label>
-          <input
-            id="website"
-            name="website"
-            type="text"
-            tabindex="-1"
-            autocomplete="off"
-          />
-        </div>
-
-        <div class="field">
-          <label for="real_name" class="mb-1.5 block text-sm text-cream/80">
-            Real Name
-          </label>
-          <input
-            id="real_name"
-            name="real_name"
-            type="text"
-            autocomplete="name"
-            maxlength="120"
-            required
-            placeholder="Who you are IRL"
-            class="w-full rounded-2xl px-4 py-3 text-[15px]"
-          />
-        </div>
-
-        <div class="field">
-          <label for="angel_name" class="mb-1.5 block text-sm text-cream/80">
-            Angel Name
-          </label>
-          <input
-            id="angel_name"
-            name="angel_name"
-            type="text"
-            maxlength="120"
-            required
-            placeholder="Your angel name"
-            class="w-full rounded-2xl px-4 py-3 text-[15px]"
-          />
-        </div>
-
-        <div class="field">
-          <label for="email" class="mb-1.5 block text-sm text-cream/80">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autocomplete="email"
-            maxlength="254"
-            required
-            placeholder="you@email.com"
-            class="w-full rounded-2xl px-4 py-3 text-[15px]"
-          />
-        </div>
-
-        <div class="field">
-          <label for="graphic_code" class="mb-1.5 block text-sm text-cream/80">
-            Which graphic?
-          </label>
-          <select
-            id="graphic_code"
-            name="graphic_code"
-            required
-            class="w-full rounded-2xl px-4 py-3 text-[15px]"
+      <section class="fade-up delay-2 mt-14 sm:mt-20">
+        <div class="glass-panel mx-auto max-w-3xl rounded-[2rem] px-6 py-12 text-center sm:px-12 sm:py-16">
+          <p class="text-xs font-medium uppercase tracking-[0.28em] text-cream/45">
+            Users signed up for our newsletter
+          </p>
+          <p
+            id="newsletter-count"
+            class="counter mt-4 text-6xl font-semibold sm:text-8xl md:text-9xl"
+            aria-live="polite"
           >
-            <option value="">Loading options…</option>
-          </select>
-          <p class="mt-1.5 text-xs text-cream/45">
-            Codes come from the live database — add more anytime.
+            0
+          </p>
+          <p class="mt-4 text-sm text-cream/40">
+            Growing quietly with every visitor who finds us.
           </p>
         </div>
+      </section>
 
-        <button type="submit" id="submit-btn" class="gold-btn mt-2 w-full rounded-2xl px-4 py-3.5 text-sm uppercase">
-          Send Request
-        </button>
-
-        <div
-          id="message"
-          role="status"
-          aria-live="polite"
-          hidden
-          class="rounded-2xl px-4 py-3.5 text-sm leading-relaxed animate-in"
-        ></div>
-      </form>
-
-      <p class="animate-in stagger-3 mt-8 text-center text-xs text-cream/40">
-        Requests land as pending for the graphics pipeline.
-      </p>
-
-      <div class="mt-6 text-center animate-in stagger-3">
+      <section class="fade-up delay-3 mx-auto mt-14 max-w-2xl text-center">
+        <h2 class="text-xl font-medium tracking-tight text-cream/90 sm:text-2xl">
+          What we do
+        </h2>
+        <p class="mt-4 text-sm font-light leading-7 text-cream/55 sm:text-base">
+          You share your real name and angel name, pick the graphic you want,
+          and we bring it to life. Soft gold light, winged silhouettes, and custom
+          celestial artwork — delivered with the warmth your name deserves.
+        </p>
         <a
-          href="/admin/login"
-          class="inline-block rounded-full border border-honey/25 px-4 py-1.5 text-xs tracking-wide text-cream/50 transition hover:border-honey/50 hover:text-cream/80"
+          href="/form"
+          class="cta mt-8 inline-flex items-center justify-center rounded-full bg-white/95 px-7 py-3 text-sm font-semibold text-dusk"
         >
-          Admin
+          Request your graphic
         </a>
-      </div>
+      </section>
 
-      <p class="mt-8 text-center text-xs text-cream/35 animate-in stagger-3">
+      <p class="fade-up delay-4 mt-16 text-center text-xs text-cream/30">
         built by
         <a
           href="https://buymeacoffee.com/ezrablack"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-cream/55 underline decoration-honey/40 underline-offset-2 transition hover:text-honey"
+          class="underline decoration-honey/30 underline-offset-2 hover:text-cream/50"
         >
           ezra black
         </a>
       </p>
     </main>
 
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
-        }
-      }
-    </script>
-    <script type="module">
-      import * as THREE from "three";
-
-      const canvas = document.getElementById("webgl");
-      const renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: true,
-        alpha: true,
-        powerPreference: "high-performance",
-      });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setClearColor(0x000000, 0);
-
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(
-        55,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        100
-      );
-      camera.position.z = 8;
-
-      const rays = new THREE.Group();
-      scene.add(rays);
-
-      function makeRay(length, width, color, opacity) {
-        const geo = new THREE.PlaneGeometry(width, length);
-        const mat = new THREE.MeshBasicMaterial({
-          color,
-          transparent: true,
-          opacity,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-        });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.y = length * 0.35;
-        return mesh;
-      }
-
-      const rayConfigs = [
-        { len: 9, w: 0.08, color: 0xffe7a0, opacity: 0.35, angle: -0.55, drift: 0.12 },
-        { len: 11, w: 0.12, color: 0xf0c45c, opacity: 0.28, angle: -0.22, drift: 0.08 },
-        { len: 10, w: 0.06, color: 0xfff4d6, opacity: 0.4, angle: 0.05, drift: 0.15 },
-        { len: 12, w: 0.1, color: 0xe8a838, opacity: 0.22, angle: 0.32, drift: 0.1 },
-        { len: 8.5, w: 0.05, color: 0xffd978, opacity: 0.45, angle: 0.58, drift: 0.18 },
-        { len: 10.5, w: 0.09, color: 0xd4a017, opacity: 0.2, angle: -0.78, drift: 0.09 },
-        { len: 7.5, w: 0.04, color: 0xfff0c0, opacity: 0.38, angle: 0.85, drift: 0.14 },
-        { len: 9.5, w: 0.07, color: 0xf6d56a, opacity: 0.26, angle: -1.05, drift: 0.11 },
-      ];
-
-      const rayMeshes = rayConfigs.map((cfg) => {
-        const wrap = new THREE.Group();
-        wrap.rotation.z = cfg.angle;
-        const mesh = makeRay(cfg.len, cfg.w, cfg.color, cfg.opacity);
-        wrap.add(mesh);
-        rays.add(wrap);
-        return { wrap, mesh, cfg, phase: Math.random() * Math.PI * 2 };
-      });
-
-      // Soft gold bloom orb near top
-      const orbGeo = new THREE.CircleGeometry(2.2, 48);
-      const orbMat = new THREE.MeshBasicMaterial({
-        color: 0xf0c45c,
-        transparent: true,
-        opacity: 0.12,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const orb = new THREE.Mesh(orbGeo, orbMat);
-      orb.position.set(0, 3.2, -1);
-      scene.add(orb);
-
-      // Floating light motes
-      const moteCount = 60;
-      const motePositions = new Float32Array(moteCount * 3);
-      const motePhases = [];
-      for (let i = 0; i < moteCount; i++) {
-        motePositions[i * 3] = (Math.random() - 0.5) * 14;
-        motePositions[i * 3 + 1] = (Math.random() - 0.5) * 10;
-        motePositions[i * 3 + 2] = (Math.random() - 0.5) * 4;
-        motePhases.push(Math.random() * Math.PI * 2);
-      }
-      const moteGeo = new THREE.BufferGeometry();
-      moteGeo.setAttribute("position", new THREE.BufferAttribute(motePositions, 3));
-      const moteMat = new THREE.PointsMaterial({
-        color: 0xffe7a0,
-        size: 0.06,
-        transparent: true,
-        opacity: 0.55,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        sizeAttenuation: true,
-      });
-      const motes = new THREE.Points(moteGeo, moteMat);
-      scene.add(motes);
-
-      function onResize() {
-        const w = window.innerWidth;
-        const h = window.innerHeight;
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-        renderer.setSize(w, h);
-      }
-      window.addEventListener("resize", onResize);
-
-      const clock = new THREE.Clock();
-      function animate() {
-        const t = clock.getElapsedTime();
-        rayMeshes.forEach(({ wrap, mesh, cfg, phase }, i) => {
-          wrap.rotation.z = cfg.angle + Math.sin(t * cfg.drift + phase) * 0.06;
-          mesh.material.opacity =
-            cfg.opacity * (0.7 + 0.3 * Math.sin(t * 0.7 + phase + i));
-          mesh.scale.x = 0.85 + 0.2 * Math.sin(t * 0.5 + phase);
-        });
-        orb.material.opacity = 0.08 + 0.05 * Math.sin(t * 0.6);
-        orb.scale.setScalar(1 + 0.08 * Math.sin(t * 0.4));
-
-        const pos = moteGeo.attributes.position.array;
-        for (let i = 0; i < moteCount; i++) {
-          pos[i * 3 + 1] += Math.sin(t * 0.35 + motePhases[i]) * 0.002;
-          pos[i * 3] += Math.cos(t * 0.2 + motePhases[i]) * 0.0015;
-        }
-        moteGeo.attributes.position.needsUpdate = true;
-
-        rays.rotation.z = Math.sin(t * 0.05) * 0.04;
-        renderer.render(scene, camera);
-        requestAnimationFrame(animate);
-      }
-      animate();
-    </script>
-
     <script>
-      const form = document.getElementById("submit-form");
-      const btn = document.getElementById("submit-btn");
-      const message = document.getElementById("message");
-      const graphicSelect = document.getElementById("graphic_code");
-
-      function showMessage(text, ok) {
-        message.hidden = false;
-        message.textContent = text;
-        message.className =
-          "rounded-2xl px-4 py-3.5 text-sm leading-relaxed animate-in " +
-          (ok
-            ? "border border-emerald-400/40 bg-emerald-500/15 text-emerald-100"
-            : "border border-rose-400/40 bg-rose-500/15 text-rose-100");
-        message.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      function easeInCubic(t) {
+        return t * t * t;
       }
 
-      function selectedGraphicCode() {
-        const opt = graphicSelect.options[graphicSelect.selectedIndex];
-        if (!opt) return "";
-        return String(opt.value || "").trim();
+      function animateCount(el, target, durationMs) {
+        const start = performance.now();
+        const from = 0;
+        function frame(now) {
+          const t = Math.min(1, (now - start) / durationMs);
+          // Starts slow near 0, then accelerates into the final number
+          const eased = easeInCubic(t);
+          const value = Math.floor(from + (target - from) * eased);
+          el.textContent = value.toLocaleString();
+          if (t < 1) {
+            requestAnimationFrame(frame);
+          } else {
+            el.textContent = target.toLocaleString();
+          }
+        }
+        requestAnimationFrame(frame);
       }
 
-      async function loadGraphics(options = {}) {
-        const keepMessage = Boolean(options.keepMessage);
+      async function resolveCount() {
+        let count = 55;
         try {
-          const res = await fetch("/graphics", { cache: "no-store" });
-          let data = null;
+          const getRes = await fetch("/newsletter/count", { cache: "no-store" });
+          const getData = await getRes.json();
+          if (getRes.ok && getData.success) count = Number(getData.count) || count;
+        } catch {}
+
+        const visitedKey = "aag_newsletter_visit_v1";
+        if (!sessionStorage.getItem(visitedKey)) {
+          sessionStorage.setItem(visitedKey, "1");
           try {
-            data = await res.json();
-          } catch {
-            data = null;
-          }
-
-          graphicSelect.innerHTML = "";
-
-          if (!res.ok || !data?.success) {
-            const opt = document.createElement("option");
-            opt.value = "";
-            opt.textContent = "Couldn’t load graphics";
-            graphicSelect.appendChild(opt);
-            if (!keepMessage) {
-              showMessage(
-                (data && data.error) ||
-                  "Couldn’t load graphics (HTTP " + res.status + "). Refresh and try again.",
-                false
-              );
+            const visitRes = await fetch("/newsletter/visit", { method: "POST" });
+            const visitData = await visitRes.json();
+            if (visitRes.ok && visitData.success && visitData.count != null) {
+              count = Number(visitData.count) || count;
             }
-            return;
-          }
-
-          const graphics = Array.isArray(data.graphics) ? data.graphics : [];
-          if (!graphics.length) {
-            const opt = document.createElement("option");
-            opt.value = "";
-            opt.textContent = "No graphics available yet";
-            graphicSelect.appendChild(opt);
-            if (!keepMessage) {
-              showMessage(
-                "No graphics available yet. In Postgres, check graphic_options has code, label, and active = true.",
-                false
-              );
-            }
-            return;
-          }
-
-          const placeholder = document.createElement("option");
-          placeholder.value = "";
-          placeholder.textContent = "Pick a graphic…";
-          graphicSelect.appendChild(placeholder);
-
-          for (const g of graphics) {
-            const code = String(g.code || g.label || "").trim();
-            if (!code) continue;
-            const opt = document.createElement("option");
-            opt.value = code;
-            opt.textContent =
-              (g.label || code) +
-              (g.code && g.code !== g.label ? "  ·  " + g.code : "");
-            graphicSelect.appendChild(opt);
-          }
-
-          if (graphicSelect.options.length > 1) {
-            graphicSelect.selectedIndex = 1;
-          } else if (!keepMessage) {
-            showMessage(
-              "Graphics rows were found but had empty code/label values.",
-              false
-            );
-          }
-        } catch {
-          graphicSelect.innerHTML = "";
-          const opt = document.createElement("option");
-          opt.value = "";
-          opt.textContent = "Couldn’t load graphics";
-          graphicSelect.appendChild(opt);
-          if (!keepMessage) {
-            showMessage("Couldn’t load graphics. Refresh and try again.", false);
-          }
+          } catch {}
         }
+
+        return count;
       }
 
-      loadGraphics();
-
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        message.hidden = true;
-
-        const real_name = document.getElementById("real_name").value.trim();
-        const angel_name = document.getElementById("angel_name").value.trim();
-        const email = document.getElementById("email").value.trim();
-        const graphic_code = selectedGraphicCode();
-
-        if (!real_name) {
-          showMessage("Please enter your real name.", false);
-          return;
-        }
-        if (!angel_name) {
-          showMessage("Please enter your angel name.", false);
-          return;
-        }
-        if (!email) {
-          showMessage("Please enter your email.", false);
-          return;
-        }
-        if (!graphic_code) {
-          showMessage(
-            "Please choose a graphic from the dropdown (or refresh if options didn’t load).",
-            false
-          );
-          return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = "Sending…";
-
-        try {
-          const website = document.getElementById("website").value;
-          const res = await fetch("/submit", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              real_name,
-              angel_name,
-              email,
-              graphic_code,
-              website,
-            }),
-          });
-          const data = await res.json();
-
-          if (!res.ok || !data.success) {
-            const detail = data.details
-              ? Object.values(data.details).flat().join(" ")
-              : data.error || "Something went wrong.";
-            showMessage(detail, false);
-            return;
-          }
-
-          const successText = data.duplicate
-            ? data.message ||
-              "That angel name is already in our database. We’ll send you an update soon — please check your email."
-            : data.message ||
-              "Submitted! You’re on the list — keep an eye on your email for an update.";
-
-          document.getElementById("real_name").value = "";
-          document.getElementById("angel_name").value = "";
-          document.getElementById("email").value = "";
-          await loadGraphics({ keepMessage: true });
-          showMessage(successText, true);
-        } catch {
-          showMessage("Network glitch. Try again in a sec.", false);
-        } finally {
-          btn.disabled = false;
-          btn.textContent = "Send Request";
-        }
-      });
+      (async () => {
+        const el = document.getElementById("newsletter-count");
+        const count = await resolveCount();
+        // Longer duration + ease-in = slow start, then speeds up
+        animateCount(el, count, 3200 + Math.min(count, 400) * 4);
+      })();
     </script>
   </body>
 </html>

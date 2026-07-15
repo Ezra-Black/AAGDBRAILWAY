@@ -46,6 +46,18 @@ export const loginLimiter = rateLimit({
   },
 });
 
+/** Visit bump: once an hour per IP so refreshes don’t explode the counter. */
+export const newsletterVisitLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 1,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Visit already counted",
+  },
+});
+
 /** Read/automation endpoints — keep enumeration expensive. */
 export const readLimiter = rateLimit({
   windowMs: 60 * 1000,

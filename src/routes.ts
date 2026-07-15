@@ -26,11 +26,13 @@ import { graphicCodeExists, listActiveGraphics, createGraphicOption, deleteGraph
 import { logger } from "./logger";
 import {
   loginLimiter,
+  newsletterVisitLimiter,
   readLimiter,
   rejectHoneypot,
   requireAutomationKeyIfConfigured,
   submitLimiter,
 } from "./security";
+import { bumpNewsletterCount, getNewsletterCount } from "./db/stats";
 import {
   adminGraphicCreateSchema,
   adminJoinCheckSchema,
@@ -547,3 +549,26 @@ apiRouter.patch(
 apiRouter.get("/health", (_req, res) => {
   res.json({ ok: true, time: new Date().toISOString() });
 });
+
+/** GET /newsletter/count — current public newsletter signup total */
+apiRouter.get(
+  "/newsletter/count",
+  readLimiter,
+  asyncHandler(async (_req, res) => {
+    const count = await getNewsletterCount();
+    res.json({ success: true, count });
+  })
+);
+
+/**
+ * POST /newsletter/visit — bump counter by 3–4 when someone joins the site.
+ * Limited to once per IP per hour; clients should also gate with sessionStorage.
+ */
+apiRouter.post(
+  "/newsletter/visit",
+  newsletterVisitLimiter,
+  asyncHandler(async (_req, res) => {
+    const { value, added } = await bumpNewsletterCount();
+    res.json({ success: true, count: value, added });
+  })
+);
