@@ -30,6 +30,17 @@
       .status-complete {
         color: #6ee7b7;
       }
+      input,
+      select {
+        background: #030712;
+        border: 1px solid #374151;
+        color: #e5e7eb;
+      }
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: #6b7280;
+      }
     </style>
   </head>
   <body class="px-5 py-8 sm:px-8">
@@ -47,6 +58,68 @@
           Log out
         </button>
       </header>
+
+      <section class="mb-8 rounded-xl border border-gray-800 bg-gray-900/60 p-4 sm:p-5">
+        <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-medium text-white">Graphic options</h2>
+            <p class="mt-1 text-xs text-gray-500">
+              Add or remove categories that appear in the public form dropdown.
+            </p>
+          </div>
+        </div>
+
+        <form id="graphic-form" class="mb-4 grid gap-3 sm:grid-cols-[1.4fr_1fr_auto]">
+          <div>
+            <label for="graphic_label" class="mb-1 block text-xs text-gray-400">Label</label>
+            <input
+              id="graphic_label"
+              name="label"
+              type="text"
+              maxlength="120"
+              required
+              placeholder="Fairy Ring"
+              class="w-full rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label for="graphic_code" class="mb-1 block text-xs text-gray-400">
+              Code <span class="text-gray-600">(optional)</span>
+            </label>
+            <input
+              id="graphic_code"
+              name="code"
+              type="text"
+              maxlength="64"
+              placeholder="auto from label"
+              class="w-full rounded-lg px-3 py-2 text-sm"
+            />
+          </div>
+          <div class="flex items-end">
+            <button
+              type="submit"
+              id="graphic-add-btn"
+              class="w-full rounded-lg bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100 disabled:opacity-50 sm:w-auto"
+            >
+              Add
+            </button>
+          </div>
+        </form>
+
+        <div id="graphics-list" class="divide-y divide-gray-800 rounded-lg border border-gray-800"></div>
+        <p id="graphics-empty" class="mt-3 hidden text-sm text-gray-500">No graphic options yet.</p>
+      </section>
+
+      <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <label for="filter_graphic" class="mb-1 block text-xs text-gray-400">
+            Filter by graphic
+          </label>
+          <select id="filter_graphic" class="min-w-[220px] rounded-lg px-3 py-2 text-sm">
+            <option value="">All graphics</option>
+          </select>
+        </div>
+      </div>
 
       <div
         id="list"
@@ -75,7 +148,14 @@
       const subtitle = document.getElementById("subtitle");
       const empty = document.getElementById("empty");
       const errorEl = document.getElementById("error");
+      const graphicsList = document.getElementById("graphics-list");
+      const graphicsEmpty = document.getElementById("graphics-empty");
+      const filterSelect = document.getElementById("filter_graphic");
+      const graphicForm = document.getElementById("graphic-form");
+      const graphicAddBtn = document.getElementById("graphic-add-btn");
+
       let adminEmail = "";
+      let graphicsCache = [];
 
       async function ensureAuth() {
         const res = await fetch("/admin/me", { credentials: "include" });
@@ -93,6 +173,136 @@
           .map((g) => (g.label ? g.label + " (" + g.code + ")" : g.code))
           .join(", ");
       }
+
+      function populateFilter(selected) {
+        const current = selected ?? filterSelect.value;
+        filterSelect.innerHTML = "";
+        const all = document.createElement("option");
+        all.value = "";
+        all.textContent = "All graphics";
+        filterSelect.appendChild(all);
+
+        for (const g of graphicsCache) {
+          const opt = document.createElement("option");
+          opt.value = g.code;
+          opt.textContent = g.label + "  ·  " + g.code;
+          filterSelect.appendChild(opt);
+        }
+        filterSelect.value = current || "";
+      }
+
+      async function loadGraphics() {
+        const res = await fetch("/admin/graphics", { credentials: "include" });
+        if (res.status === 401) {
+          window.location.href = "/admin/login";
+          return;
+        }
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          errorEl.textContent = data.error || "Could not load graphics";
+          errorEl.classList.remove("hidden");
+          return;
+        }
+
+        graphicsCache = data.graphics || [];
+        populateFilter();
+        graphicsList.innerHTML = "";
+        graphicsEmpty.classList.toggle("hidden", graphicsCache.length > 0);
+
+        for (const g of graphicsCache) {
+          const row = document.createElement("div");
+          row.className =
+            "flex flex-wrap items-center justify-between gap-3 px-3 py-3 text-sm";
+          row.innerHTML =
+            '<div class="min-w-0">' +
+            '<p class="font-medium text-white">' +
+            escapeHtml(g.label) +
+            "</p>" +
+            '<p class="text-xs text-gray-500">' +
+            escapeHtml(g.code) +
+            "</p>" +
+            "</div>" +
+            '<button type="button" data-delete-graphic="' +
+            escapeAttr(g.id) +
+            '" class="rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-500/10">' +
+            "Remove" +
+            "</button>";
+          graphicsList.appendChild(row);
+        }
+
+        graphicsList.querySelectorAll("[data-delete-graphic]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-delete-graphic");
+            if (!id) return;
+            if (!confirm("Remove this graphic option from the dropdown?")) return;
+            btn.disabled = true;
+            try {
+              const del = await fetch("/admin/graphics/" + id, {
+                method: "DELETE",
+                credentials: "include",
+              });
+              if (del.status === 401) {
+                window.location.href = "/admin/login";
+                return;
+              }
+              const payload = await del.json();
+              if (!del.ok || !payload.success) {
+                errorEl.textContent = payload.error || "Could not remove graphic";
+                errorEl.classList.remove("hidden");
+                return;
+              }
+              await loadGraphics();
+              await loadEntries();
+            } catch {
+              errorEl.textContent = "Network error removing graphic";
+              errorEl.classList.remove("hidden");
+            }
+          });
+        });
+      }
+
+      graphicForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        errorEl.classList.add("hidden");
+        graphicAddBtn.disabled = true;
+        graphicAddBtn.textContent = "Adding…";
+
+        const label = document.getElementById("graphic_label").value.trim();
+        const code = document.getElementById("graphic_code").value.trim();
+
+        try {
+          const res = await fetch("/admin/graphics", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ label, code: code || undefined }),
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            errorEl.textContent =
+              data.error ||
+              (data.details ? Object.values(data.details).flat().join(" ") : "Could not add graphic");
+            errorEl.classList.remove("hidden");
+            return;
+          }
+          graphicForm.reset();
+          await loadGraphics();
+        } catch {
+          errorEl.textContent = "Network error adding graphic";
+          errorEl.classList.remove("hidden");
+        } finally {
+          graphicAddBtn.disabled = false;
+          graphicAddBtn.textContent = "Add";
+        }
+      });
+
+      filterSelect.addEventListener("change", () => {
+        loadEntries();
+      });
 
       async function markComplete(angelName, buttonEl) {
         buttonEl.textContent = "…";
@@ -141,10 +351,7 @@
         return (
           '<ul class="space-y-1 text-sm text-gray-300">' +
           emails
-            .map(
-              (email) =>
-                '<li class="break-all">' + escapeHtml(email) + "</li>"
-            )
+            .map((email) => '<li class="break-all">' + escapeHtml(email) + "</li>")
             .join("") +
           "</ul>"
         );
@@ -152,7 +359,11 @@
 
       async function loadEntries() {
         errorEl.classList.add("hidden");
-        const res = await fetch("/admin/entries", { credentials: "include" });
+        const code = filterSelect.value;
+        const url =
+          "/admin/entries" +
+          (code ? "?graphic_code=" + encodeURIComponent(code) : "");
+        const res = await fetch(url, { credentials: "include" });
         if (res.status === 401) {
           window.location.href = "/admin/login";
           return;
@@ -165,11 +376,21 @@
         }
 
         const groups = data.groups || [];
-        subtitle.textContent = adminEmail
-          ? adminEmail + " · " + groups.length + " angel names"
-          : groups.length + " angel names";
+        const filterLabel = code
+          ? graphicsCache.find((g) => g.code === code)?.label || code
+          : null;
+        subtitle.textContent =
+          (adminEmail || "Admin") +
+          " · " +
+          groups.length +
+          " angel names" +
+          (filterLabel ? " · " + filterLabel : "");
+
         rowsEl.innerHTML = "";
         empty.classList.toggle("hidden", groups.length > 0);
+        empty.textContent = filterLabel
+          ? "No requests for this graphic yet."
+          : "No requests yet.";
 
         if (!groups.length) return;
 
@@ -239,6 +460,7 @@
         if (!admin) return;
         adminEmail = admin.email;
         subtitle.textContent = admin.email;
+        await loadGraphics();
         await loadEntries();
       })();
     </script>

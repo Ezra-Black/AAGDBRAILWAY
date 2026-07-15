@@ -115,14 +115,24 @@ export async function listEntriesForAdmin(
   }));
 }
 
-/** Group submissions by angel name for the admin portal. */
+/** Group submissions by angel name for the admin portal.
+ *  Optional graphicCode filter: only rows for that graphic category.
+ */
 export async function listAngelGroupsForAdmin(
-  limit = 2000
+  limit = 2000,
+  graphicCode?: string | null
 ): Promise<AdminAngelGroup[]> {
   const rows = await listEntriesForAdmin(limit);
+  const filterCode = graphicCode?.trim().toLowerCase() || "";
+  const filtered = filterCode
+    ? rows.filter(
+        (row) => (row.graphic_code || "").trim().toLowerCase() === filterCode
+      )
+    : rows;
+
   const groups = new Map<string, AdminAngelGroup>();
 
-  for (const row of rows) {
+  for (const row of filtered) {
     const key = row.angel_name.trim().toLowerCase();
     let group = groups.get(key);
     if (!group) {
@@ -138,10 +148,7 @@ export async function listAngelGroupsForAdmin(
     }
 
     group.entry_ids.push(row.id);
-    if (
-      row.status === "pending" ||
-      row.status === "processing"
-    ) {
+    if (row.status === "pending" || row.status === "processing") {
       group.has_pending = true;
     }
     if (row.created_at > group.latest_at) {

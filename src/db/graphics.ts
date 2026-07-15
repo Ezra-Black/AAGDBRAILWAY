@@ -36,6 +36,19 @@ export async function listActiveGraphics(): Promise<GraphicOption[]> {
     .filter((g): g is GraphicOption => g !== null);
 }
 
+/** Admin list — every graphic option. */
+export async function listAllGraphics(): Promise<GraphicOption[]> {
+  const result = await query(
+    `SELECT id, code, label, active, sort_order
+     FROM graphic_options
+     ORDER BY sort_order ASC NULLS LAST, label ASC NULLS LAST`
+  );
+
+  return result.rows
+    .map((row) => mapGraphic(row as Record<string, unknown>))
+    .filter((g): g is GraphicOption => g !== null);
+}
+
 export async function graphicCodeExists(code: string): Promise<boolean> {
   const result = await query(
     `SELECT 1 FROM graphic_options
@@ -48,4 +61,47 @@ export async function graphicCodeExists(code: string): Promise<boolean> {
     [code]
   );
   return result.rowCount !== null && result.rowCount > 0;
+}
+
+export async function createGraphicOption(input: {
+  code: string;
+  label: string;
+  sort_order?: number;
+}): Promise<GraphicOption> {
+  const sortOrder = Number.isFinite(input.sort_order)
+    ? Number(input.sort_order)
+    : 0;
+
+  const result = await query(
+    `INSERT INTO graphic_options (code, label, active, sort_order)
+     VALUES ($1, $2, true, $3)
+     RETURNING id, code, label, active, sort_order`,
+    [input.code, input.label, sortOrder]
+  );
+
+  const mapped = mapGraphic(result.rows[0] as Record<string, unknown>);
+  if (!mapped) {
+    throw new Error("Failed to create graphic option");
+  }
+  return mapped;
+}
+
+export async function deleteGraphicOption(id: string): Promise<boolean> {
+  const result = await query(
+    `DELETE FROM graphic_options WHERE id = $1 RETURNING id`,
+    [id]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function getGraphicById(id: string): Promise<GraphicOption | null> {
+  const result = await query(
+    `SELECT id, code, label, active, sort_order
+     FROM graphic_options
+     WHERE id = $1
+     LIMIT 1`,
+    [id]
+  );
+  if (!result.rows[0]) return null;
+  return mapGraphic(result.rows[0] as Record<string, unknown>);
 }

@@ -81,3 +81,39 @@ export const lookupQuerySchema = z
   .refine((v) => Boolean(v.angel_name || v.real_name), {
     message: "Provide angel_name or real_name",
   });
+
+function slugCode(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+
+export const adminGraphicCreateSchema = z
+  .object({
+    label: z
+      .string()
+      .transform(sanitizeText)
+      .pipe(
+        z
+          .string()
+          .min(1, "Label is required")
+          .max(120, "Label is too long")
+          .refine((v) => !/[<>{};`$\\]/.test(v), "Invalid characters")
+      ),
+    code: z.string().max(64).optional(),
+    sort_order: z.coerce.number().int().min(0).max(100000).optional(),
+  })
+  .strict()
+  .transform((data) => {
+    const label = data.label;
+    let code = sanitizeText(data.code ?? "");
+    code = code || slugCode(label) || `graphic-${Date.now().toString(36)}`;
+    code = code.replace(/[<>{};`$\\]/g, "").slice(0, 64);
+    return {
+      label,
+      code: code || `graphic-${Date.now().toString(36)}`,
+      sort_order: data.sort_order ?? 0,
+    };
+  });

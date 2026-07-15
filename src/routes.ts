@@ -19,7 +19,7 @@ import {
   updateEntryStatus,
 } from "./db/entries";
 import { z } from "zod";
-import { graphicCodeExists, listActiveGraphics } from "./db/graphics";
+import { graphicCodeExists, listActiveGraphics, createGraphicOption, deleteGraphicOption, listAllGraphics } from "./db/graphics";
 import { logger } from "./logger";
 import {
   loginLimiter,
@@ -29,6 +29,7 @@ import {
   submitLimiter,
 } from "./security";
 import {
+  adminGraphicCreateSchema,
   adminLoginSchema,
   lookupQuerySchema,
   statusSchema,
@@ -95,9 +96,92 @@ apiRouter.get(
 apiRouter.get(
   "/admin/entries",
   requireAdmin,
+  asyncHandler(async (req, res) => {
+    const graphicCode =
+      typeof req.query.graphic_code === "string"
+        ? req.query.graphic_code.trim()
+        : "";
+    const groups = await listAngelGroupsForAdmin(
+      2000,
+      graphicCode || null
+    );
+    res.json({
+      success: true,
+      count: groups.length,
+      filter: graphicCode || null,
+      groups,
+    });
+  })
+);
+
+/** GET /admin/graphics — manage dropdown options */
+apiRouter.get(
+  "/admin/graphics",
+  requireAdmin,
   asyncHandler(async (_req, res) => {
-    const groups = await listAngelGroupsForAdmin(2000);
-    res.json({ success: true, count: groups.length, groups });
+    const graphics = await listAllGraphics();
+    res.json({ success: true, count: graphics.length, graphics });
+  })
+);
+
+/** POST /admin/graphics — add a graphic option */
+apiRouter.post(
+  "/admin/graphics",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const parsed = adminGraphicCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    try {
+      const graphic = await createGraphicOption(parsed.data);
+      logger.info("Admin created graphic option", {
+        id: graphic.id,
+        code: graphic.code,
+      });
+      res.status(201).json({ success: true, graphic });
+    } catch (err) {
+      const pgCode =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code: unknown }).code)
+          : "";
+      if (pgCode === "23505") {
+        res.status(409).json({
+          success: false,
+          error: "A graphic with that code already exists",
+        });
+        return;
+      }
+      throw err;
+    }
+  })
+);
+
+/** DELETE /admin/graphics/:id — remove a graphic option */
+apiRouter.delete(
+  "/admin/graphics/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid graphic ID" });
+      return;
+    }
+
+    const removed = await deleteGraphicOption(idCheck.data);
+    if (!removed) {
+      res.status(404).json({ success: false, error: "Graphic not found" });
+      return;
+    }
+
+    logger.info("Admin deleted graphic option", { id: idCheck.data });
+    res.json({ success: true });
   })
 );
 
