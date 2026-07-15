@@ -19,7 +19,7 @@ const graphicCodeField = z
   .trim()
   .min(1, "Choose a graphic")
   .max(64, "Invalid graphic code")
-  .regex(/^[a-zA-Z0-9_-]+$/, "Invalid graphic code");
+  .refine((v) => !/[<>{};]/.test(v), "Invalid graphic code");
 
 export const submitSchema = z.object({
   real_name: nameField,
