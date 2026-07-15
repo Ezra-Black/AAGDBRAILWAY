@@ -24,7 +24,7 @@ Designed so an external automation script can poll for `pending` rows and trigge
 | `updated_at`   | TIMESTAMPTZ | Updated on status changes                  |
 | `metadata`     | JSONB       | Extensible bag (photo URLs, errors, etc.)  |
 
-Dropdown options live in `graphic_options` (`code`, `label`, `active`, `sort_order`). Seeded examples: `graphic1`, `graphic2`, `a7k9xm`.
+Dropdown options live in `graphic_options` (`code`, `label`, `active`, `sort_order`). Add rows in Postgres as needed — nothing is auto-seeded on boot.
 
 Indexes on `real_name`, `angel_name`, `status`, and a partial index for pending rows.
 

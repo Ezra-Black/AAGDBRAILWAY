@@ -8,7 +8,7 @@ const SEED_ADMIN_PASSWORD = "EzraIsAwesome1!";
 
 /**
  * Creates / extends schema. Safe to re-run on every boot.
- * graphic_options feeds the request-form dropdown; seed a few test codes.
+ * graphic_options feeds the request-form dropdown (managed in DB, not seeded here).
  * admins table holds login accounts (password hashes only).
  */
 export async function migrate(): Promise<void> {
@@ -89,23 +89,6 @@ export async function migrate(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires
       ON admin_sessions (expires_at);
   `);
-
-  await query(
-    `INSERT INTO graphic_options (code, label, active, sort_order)
-     VALUES
-       ($1, $2, true, 1),
-       ($3, $4, true, 2),
-       ($5, $6, true, 3)
-     ON CONFLICT (code) DO NOTHING`,
-    [
-      "graphic1",
-      "Golden Halo Portrait",
-      "graphic2",
-      "Winged Silhouette",
-      "a7k9xm",
-      "Celestial Burst (Test Code)",
-    ]
-  );
 
   const passwordHash = await bcrypt.hash(SEED_ADMIN_PASSWORD, 12);
   await query(
