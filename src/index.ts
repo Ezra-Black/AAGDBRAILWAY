@@ -1,6 +1,7 @@
 import "dotenv/config";
 import path from "path";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import express, {
   type Request,
   type Response,
@@ -68,6 +69,7 @@ app.use(
 );
 
 app.use(express.json({ limit: "16kb" }));
+app.use(cookieParser());
 
 const limiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
@@ -85,6 +87,18 @@ app.use(express.static(publicDir));
 
 app.get("/", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
+});
+
+app.get("/admin", (_req, res) => {
+  res.redirect(302, "/admin/");
+});
+
+app.get("/admin/", (_req, res) => {
+  res.sendFile(path.join(publicDir, "admin", "index.html"));
+});
+
+app.get("/admin/login", (_req, res) => {
+  res.sendFile(path.join(publicDir, "admin", "login.html"));
 });
 
 app.use((_req, res) => {

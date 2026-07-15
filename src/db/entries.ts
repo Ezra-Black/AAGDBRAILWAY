@@ -62,6 +62,50 @@ export async function listEntries(limit = 100, offset = 0): Promise<Entry[]> {
   return result.rows.map(mapRow);
 }
 
+export interface AdminEntryListItem {
+  id: string;
+  angel_name: string;
+  graphic_code: string | null;
+  graphic_label: string | null;
+  real_name: string;
+  email: string | null;
+  status: EntryStatus;
+  created_at: Date;
+}
+
+/** Admin dashboard list: angel name + graphic (label when available). */
+export async function listEntriesForAdmin(
+  limit = 500
+): Promise<AdminEntryListItem[]> {
+  const result = await query(
+    `SELECT
+       e.id,
+       e.angel_name,
+       e.graphic_code,
+       g.label AS graphic_label,
+       e.real_name,
+       e.email,
+       e.status,
+       e.created_at
+     FROM entries e
+     LEFT JOIN graphic_options g ON g.code = e.graphic_code
+     ORDER BY e.created_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id as string,
+    angel_name: row.angel_name as string,
+    graphic_code: (row.graphic_code as string) ?? null,
+    graphic_label: (row.graphic_label as string) ?? null,
+    real_name: row.real_name as string,
+    email: (row.email as string) ?? null,
+    status: row.status as EntryStatus,
+    created_at: row.created_at as Date,
+  }));
+}
+
 export async function getEntryById(id: string): Promise<Entry | null> {
   const result = await query(`SELECT * FROM entries WHERE id = $1`, [id]);
   return result.rows[0] ? mapRow(result.rows[0]) : null;

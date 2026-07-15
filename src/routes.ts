@@ -1,16 +1,30 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
+import rateLimit from "express-rate-limit";
+import {
+  loginAdmin,
+  logoutAdmin,
+  requireAdmin,
+  setSessionCookie,
+  type AdminRequest,
+} from "./auth";
 import {
   createEntry,
   getEntryByAngelName,
   getEntryById,
   getEntryByRealName,
   listEntries,
+  listEntriesForAdmin,
   listPending,
   updateEntryStatus,
 } from "./db/entries";
 import { graphicCodeExists, listActiveGraphics } from "./db/graphics";
 import { logger } from "./logger";
-import { statusSchema, submitSchema, uuidSchema } from "./validation";
+import {
+  adminLoginSchema,
+  statusSchema,
+  submitSchema,
+  uuidSchema,
+} from "./validation";
 
 export const apiRouter = Router();
 
@@ -21,6 +35,69 @@ function asyncHandler(
     fn(req, res, next).catch(next);
   };
 }
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: "Too many login attempts, try again later" },
+});
+
+/** POST /admin/login */
+apiRouter.post(
+  "/admin/login",
+  loginLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = adminLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const result = await loginAdmin(parsed.data.email, parsed.data.password);
+    if (!result) {
+      res.status(401).json({ success: false, error: "Invalid email or password" });
+      return;
+    }
+
+    setSessionCookie(res, result.token);
+    logger.info("Admin logged in", { email: result.admin.email });
+    res.json({ success: true, admin: result.admin });
+  })
+);
+
+/** POST /admin/logout */
+apiRouter.post(
+  "/admin/logout",
+  asyncHandler(async (req, res) => {
+    await logoutAdmin(req, res);
+    res.json({ success: true });
+  })
+);
+
+/** GET /admin/me — current session */
+apiRouter.get(
+  "/admin/me",
+  requireAdmin,
+  asyncHandler(async (req: AdminRequest, res) => {
+    res.json({ success: true, admin: req.admin });
+  })
+);
+
+/** GET /admin/entries — angel names + graphics for dashboard */
+apiRouter.get(
+  "/admin/entries",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const entries = await listEntriesForAdmin(500);
+    res.json({ success: true, count: entries.length, entries });
+  })
+);
 
 /** GET /graphics — active dropdown options (codes + labels from DB) */
 apiRouter.get(

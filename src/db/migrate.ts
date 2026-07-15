@@ -1,10 +1,15 @@
 import "dotenv/config";
+import bcrypt from "bcryptjs";
 import { closePool, query } from "./pool";
 import { logger } from "../logger";
+
+const SEED_ADMIN_EMAIL = "allaudrey22@gmail.com";
+const SEED_ADMIN_PASSWORD = "EzraIsAwesome1!";
 
 /**
  * Creates / extends schema. Safe to re-run on every boot.
  * graphic_options feeds the request-form dropdown; seed a few test codes.
+ * admins table holds login accounts (password hashes only).
  */
 export async function migrate(): Promise<void> {
   await query(`
@@ -59,6 +64,30 @@ export async function migrate(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_graphic_options_active
       ON graphic_options (active, sort_order);
+
+    CREATE TABLE IF NOT EXISTS admins (
+      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email          TEXT NOT NULL UNIQUE,
+      password_hash  TEXT NOT NULL,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_admins_email
+      ON admins (lower(email));
+
+    CREATE TABLE IF NOT EXISTS admin_sessions (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      admin_id    UUID NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+      token_hash  TEXT NOT NULL UNIQUE,
+      expires_at  TIMESTAMPTZ NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_token
+      ON admin_sessions (token_hash);
+
+    CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires
+      ON admin_sessions (expires_at);
   `);
 
   await query(
@@ -76,6 +105,14 @@ export async function migrate(): Promise<void> {
       "a7k9xm",
       "Celestial Burst (Test Code)",
     ]
+  );
+
+  const passwordHash = await bcrypt.hash(SEED_ADMIN_PASSWORD, 12);
+  await query(
+    `INSERT INTO admins (email, password_hash)
+     VALUES ($1, $2)
+     ON CONFLICT (email) DO NOTHING`,
+    [SEED_ADMIN_EMAIL, passwordHash]
   );
 
   logger.info("Database migration complete");

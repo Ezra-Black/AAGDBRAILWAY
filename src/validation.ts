@@ -37,3 +37,8 @@ export const statusSchema = z.object({
 });
 
 export const uuidSchema = z.string().uuid("Invalid entry ID");
+
+export const adminLoginSchema = z.object({
+  email: emailField,
+  password: z.string().min(1, "Password is required").max(200),
+});
