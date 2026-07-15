@@ -6,6 +6,8 @@ export interface Entry {
   id: string;
   real_name: string;
   angel_name: string;
+  email: string | null;
+  graphic_code: string | null;
   status: EntryStatus;
   created_at: Date;
   updated_at: Date;
@@ -15,6 +17,8 @@ export interface Entry {
 export interface CreateEntryInput {
   real_name: string;
   angel_name: string;
+  email: string;
+  graphic_code: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -23,6 +27,8 @@ function mapRow(row: Record<string, unknown>): Entry {
     id: row.id as string,
     real_name: row.real_name as string,
     angel_name: row.angel_name as string,
+    email: (row.email as string) ?? null,
+    graphic_code: (row.graphic_code as string) ?? null,
     status: row.status as EntryStatus,
     created_at: row.created_at as Date,
     updated_at: row.updated_at as Date,
@@ -32,12 +38,14 @@ function mapRow(row: Record<string, unknown>): Entry {
 
 export async function createEntry(input: CreateEntryInput): Promise<Entry> {
   const result = await query(
-    `INSERT INTO entries (real_name, angel_name, metadata)
-     VALUES ($1, $2, $3::jsonb)
+    `INSERT INTO entries (real_name, angel_name, email, graphic_code, metadata)
+     VALUES ($1, $2, $3, $4, $5::jsonb)
      RETURNING *`,
     [
       input.real_name,
       input.angel_name,
+      input.email,
+      input.graphic_code,
       JSON.stringify(input.metadata ?? {}),
     ]
   );

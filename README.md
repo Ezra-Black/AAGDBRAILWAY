@@ -12,15 +12,19 @@ Designed so an external automation script can poll for `pending` rows and trigge
 
 ## Schema
 
-| Column       | Type        | Notes                                      |
-|--------------|-------------|--------------------------------------------|
-| `id`         | UUID        | Primary key (`gen_random_uuid()`)          |
-| `real_name`  | TEXT        | Required                                   |
-| `angel_name` | TEXT        | Required                                   |
-| `status`     | TEXT        | `pending` \| `processing` \| `processed` \| `failed` |
-| `created_at` | TIMESTAMPTZ | Set on insert                              |
-| `updated_at` | TIMESTAMPTZ | Updated on status changes                  |
-| `metadata`   | JSONB       | Extensible bag (photo URLs, errors, etc.)  |
+| Column         | Type        | Notes                                      |
+|----------------|-------------|--------------------------------------------|
+| `id`           | UUID        | Primary key (`gen_random_uuid()`)          |
+| `real_name`    | TEXT        | Required                                   |
+| `angel_name`   | TEXT        | Required                                   |
+| `email`        | TEXT        | Required on submit                         |
+| `graphic_code` | TEXT        | Selected from `graphic_options.code`       |
+| `status`       | TEXT        | `pending` \| `processing` \| `processed` \| `failed` |
+| `created_at`   | TIMESTAMPTZ | Set on insert                              |
+| `updated_at`   | TIMESTAMPTZ | Updated on status changes                  |
+| `metadata`     | JSONB       | Extensible bag (photo URLs, errors, etc.)  |
+
+Dropdown options live in `graphic_options` (`code`, `label`, `active`, `sort_order`). Seeded examples: `graphic1`, `graphic2`, `a7k9xm`.
 
 Indexes on `real_name`, `angel_name`, `status`, and a partial index for pending rows.
 
@@ -30,7 +34,8 @@ Migrations run automatically on app boot.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `POST` | `/submit` | `{ "real_name", "angel_name" }` → create entry (`status: pending`) |
+| `GET` | `/graphics` | Active graphic dropdown options from DB |
+| `POST` | `/submit` | `{ "real_name", "angel_name", "email", "graphic_code" }` → create entry (`status: pending`) |
 | `GET` | `/entries` | List entries (`?limit=&offset=`) |
 | `GET` | `/pending` | Unprocessed entries (oldest first) — **for automation** |
 | `GET` | `/entry/:id` | Fetch by UUID |
@@ -43,7 +48,7 @@ Migrations run automatically on app boot.
 ```bash
 curl -X POST https://YOUR_APP.up.railway.app/submit \
   -H 'Content-Type: application/json' \
-  -d '{"real_name":"Alex Rivera","angel_name":"Seraphine"}'
+  -d '{"real_name":"Alex Rivera","angel_name":"Seraphine","email":"alex@example.com","graphic_code":"graphic1"}'
 ```
 
 ### Example: poll pending (automation)

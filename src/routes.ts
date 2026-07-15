@@ -8,6 +8,7 @@ import {
   listPending,
   updateEntryStatus,
 } from "./db/entries";
+import { graphicCodeExists, listActiveGraphics } from "./db/graphics";
 import { logger } from "./logger";
 import { statusSchema, submitSchema, uuidSchema } from "./validation";
 
@@ -21,7 +22,16 @@ function asyncHandler(
   };
 }
 
-/** POST /submit — save a real_name ↔ angel_name pair */
+/** GET /graphics — active dropdown options (codes + labels from DB) */
+apiRouter.get(
+  "/graphics",
+  asyncHandler(async (_req, res) => {
+    const graphics = await listActiveGraphics();
+    res.json({ success: true, count: graphics.length, graphics });
+  })
+);
+
+/** POST /submit — save request with email + chosen graphic */
 apiRouter.post(
   "/submit",
   asyncHandler(async (req, res) => {
@@ -35,12 +45,31 @@ apiRouter.post(
       return;
     }
 
-    const { real_name, angel_name, metadata } = parsed.data;
-    const entry = await createEntry({ real_name, angel_name, metadata });
+    const { real_name, angel_name, email, graphic_code, metadata } =
+      parsed.data;
+
+    const validCode = await graphicCodeExists(graphic_code);
+    if (!validCode) {
+      res.status(400).json({
+        success: false,
+        error: "Unknown or inactive graphic code",
+        details: { graphic_code: ["Select a valid graphic from the list"] },
+      });
+      return;
+    }
+
+    const entry = await createEntry({
+      real_name,
+      angel_name,
+      email,
+      graphic_code,
+      metadata,
+    });
 
     logger.info("Entry created", {
       id: entry.id,
       angel_name: entry.angel_name,
+      graphic_code: entry.graphic_code,
       status: entry.status,
     });
 

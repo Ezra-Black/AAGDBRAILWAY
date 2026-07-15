@@ -3,9 +3,8 @@ import { closePool, query } from "./pool";
 import { logger } from "../logger";
 
 /**
- * Creates the entries table if it does not exist.
- * Schema is automation-friendly: status + timestamps + UUID for polling.
- * Extra metadata lives in a JSONB column so you can extend without migrations.
+ * Creates / extends schema. Safe to re-run on every boot.
+ * graphic_options feeds the request-form dropdown; seed a few test codes.
  */
 export async function migrate(): Promise<void> {
   await query(`
@@ -15,6 +14,8 @@ export async function migrate(): Promise<void> {
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       real_name     TEXT NOT NULL,
       angel_name    TEXT NOT NULL,
+      email         TEXT,
+      graphic_code  TEXT,
       status        TEXT NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'processing', 'processed', 'failed')),
       created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -22,11 +23,20 @@ export async function migrate(): Promise<void> {
       metadata      JSONB NOT NULL DEFAULT '{}'::jsonb
     );
 
+    ALTER TABLE entries ADD COLUMN IF NOT EXISTS email TEXT;
+    ALTER TABLE entries ADD COLUMN IF NOT EXISTS graphic_code TEXT;
+
     CREATE INDEX IF NOT EXISTS idx_entries_real_name
       ON entries (lower(real_name));
 
     CREATE INDEX IF NOT EXISTS idx_entries_angel_name
       ON entries (lower(angel_name));
+
+    CREATE INDEX IF NOT EXISTS idx_entries_email
+      ON entries (lower(email));
+
+    CREATE INDEX IF NOT EXISTS idx_entries_graphic_code
+      ON entries (graphic_code);
 
     CREATE INDEX IF NOT EXISTS idx_entries_status
       ON entries (status);
@@ -37,7 +47,36 @@ export async function migrate(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_entries_pending
       ON entries (created_at ASC)
       WHERE status = 'pending';
+
+    CREATE TABLE IF NOT EXISTS graphic_options (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      code        TEXT NOT NULL UNIQUE,
+      label       TEXT NOT NULL,
+      active      BOOLEAN NOT NULL DEFAULT true,
+      sort_order  INT NOT NULL DEFAULT 0,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_graphic_options_active
+      ON graphic_options (active, sort_order);
   `);
+
+  await query(
+    `INSERT INTO graphic_options (code, label, active, sort_order)
+     VALUES
+       ($1, $2, true, 1),
+       ($3, $4, true, 2),
+       ($5, $6, true, 3)
+     ON CONFLICT (code) DO NOTHING`,
+    [
+      "graphic1",
+      "Golden Halo Portrait",
+      "graphic2",
+      "Winged Silhouette",
+      "a7k9xm",
+      "Celestial Burst (Test Code)",
+    ]
+  );
 
   logger.info("Database migration complete");
 }

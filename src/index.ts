@@ -21,21 +21,40 @@ app.set("trust proxy", 1);
 
 app.use(
   helmet({
-contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          styleSrc: [
-            "'self'",
-            "'unsafe-inline'",
-            "https://cdn.tailwindcss.com",
-            "https://fonts.googleapis.com",
-          ],
-          scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com"],
-          imgSrc: ["'self'", "data:"],
-          connectSrc: ["'self'"],
-          fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-        },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://cdn.tailwindcss.com",
+          "https://fonts.googleapis.com",
+        ],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://cdn.tailwindcss.com",
+          "https://cdn.jsdelivr.net",
+          "https://unpkg.com",
+        ],
+        scriptSrcElem: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://cdn.tailwindcss.com",
+          "https://cdn.jsdelivr.net",
+          "https://unpkg.com",
+        ],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: [
+          "'self'",
+          "https://cdn.jsdelivr.net",
+          "https://unpkg.com",
+        ],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        workerSrc: ["'self'", "blob:"],
+        childSrc: ["'self'", "blob:"],
       },
+    },
   })
 );
 

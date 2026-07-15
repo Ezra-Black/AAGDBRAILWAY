@@ -5,14 +5,27 @@ const nameField = z
   .trim()
   .min(1, "Required")
   .max(120, "Must be 120 characters or fewer")
-  .refine(
-    (v) => !/[<>{};]/.test(v),
-    "Contains invalid characters"
-  );
+  .refine((v) => !/[<>{};]/.test(v), "Contains invalid characters");
+
+const emailField = z
+  .string()
+  .trim()
+  .min(1, "Email is required")
+  .max(254, "Email is too long")
+  .email("Enter a valid email");
+
+const graphicCodeField = z
+  .string()
+  .trim()
+  .min(1, "Choose a graphic")
+  .max(64, "Invalid graphic code")
+  .regex(/^[a-zA-Z0-9_-]+$/, "Invalid graphic code");
 
 export const submitSchema = z.object({
   real_name: nameField,
   angel_name: nameField,
+  email: emailField,
+  graphic_code: graphicCodeField,
   metadata: z.record(z.unknown()).optional(),
 });
 
