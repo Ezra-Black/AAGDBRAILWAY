@@ -180,6 +180,21 @@
         class="glass animate-in stagger-2 space-y-5 rounded-[1.75rem] p-6 sm:p-8"
         novalidate
       >
+        <!-- Honeypot: leave empty. Hidden from real users. -->
+        <div
+          aria-hidden="true"
+          style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden"
+        >
+          <label for="website">Website</label>
+          <input
+            id="website"
+            name="website"
+            type="text"
+            tabindex="-1"
+            autocomplete="off"
+          />
+        </div>
+
         <div class="field">
           <label for="real_name" class="mb-1.5 block text-sm text-cream/80">
             Real Name
@@ -548,10 +563,17 @@
         btn.textContent = "Sending…";
 
         try {
+          const website = document.getElementById("website").value;
           const res = await fetch("/submit", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ real_name, angel_name, email, graphic_code }),
+            body: JSON.stringify({
+              real_name,
+              angel_name,
+              email,
+              graphic_code,
+              website,
+            }),
           });
           const data = await res.json();
 

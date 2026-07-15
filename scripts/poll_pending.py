@@ -4,6 +4,7 @@ Example automation poller for pending angel-name entries.
 
 Usage:
   export API_BASE=https://your-app.up.railway.app
+  export AUTOMATION_API_KEY=your-key   # required if set on the server
   python scripts/poll_pending.py
 
 Mark an entry processed after photo generation:
@@ -20,10 +21,22 @@ import urllib.request
 
 API_BASE = os.environ.get("API_BASE", "http://localhost:3000").rstrip("/")
 POLL_SECONDS = float(os.environ.get("POLL_SECONDS", "10"))
+API_KEY = os.environ.get("AUTOMATION_API_KEY", "").strip()
+
+
+def _headers(extra: dict | None = None) -> dict:
+    headers = dict(extra or {})
+    if API_KEY:
+        headers["x-api-key"] = API_KEY
+    return headers
 
 
 def get_json(path: str) -> dict:
-    req = urllib.request.Request(f"{API_BASE}{path}", method="GET")
+    req = urllib.request.Request(
+        f"{API_BASE}{path}",
+        method="GET",
+        headers=_headers(),
+    )
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode())
 
@@ -37,7 +50,7 @@ def patch_status(entry_id: str, status: str, metadata: dict | None = None) -> di
         f"{API_BASE}/entry/{entry_id}/status",
         data=data,
         method="PATCH",
-        headers={"Content-Type": "application/json"},
+        headers=_headers({"Content-Type": "application/json"}),
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
         return json.loads(resp.read().decode())

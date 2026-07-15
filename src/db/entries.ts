@@ -207,6 +207,28 @@ export async function getEntryByAngelName(
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }
 
+/**
+ * Same email + angel name within a cooldown window (anti multi-submit spam).
+ * Uses parameterized SQL only — never string-concatenated user input.
+ */
+export async function findRecentDuplicateClaim(
+  email: string,
+  angelName: string,
+  cooldownHours = 24
+): Promise<Entry | null> {
+  const hours = Math.min(Math.max(Math.floor(Number(cooldownHours) || 24), 1), 168);
+  const result = await query(
+    `SELECT * FROM entries
+     WHERE lower(email) = lower($1)
+       AND lower(angel_name) = lower($2)
+       AND created_at > NOW() - make_interval(hours => $3::int)
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [email, angelName, hours]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
 export async function getEntryByRealName(
   realName: string
 ): Promise<Entry | null> {

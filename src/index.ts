@@ -7,12 +7,12 @@ import express, {
   type Response,
   type NextFunction,
 } from "express";
-import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { migrate } from "./db/migrate";
 import { closePool } from "./db/pool";
 import { logger } from "./logger";
 import { apiRouter } from "./routes";
+import { globalLimiter } from "./security";
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -68,17 +68,20 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "16kb" }));
+app.use(express.json({ limit: "8kb" }));
+app.use(express.urlencoded({ extended: false, limit: "8kb" }));
 app.use(cookieParser());
 
-const limiter = rateLimit({
-  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_MAX) || 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: "Too many requests, please try again later" },
+app.use(globalLimiter);
+
+// Basic abuse headers
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
 });
-app.use(limiter);
 
 app.use(apiRouter);
 

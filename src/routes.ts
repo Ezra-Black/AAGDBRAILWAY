@@ -1,5 +1,4 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
-import rateLimit from "express-rate-limit";
 import {
   loginAdmin,
   logoutAdmin,
@@ -9,6 +8,7 @@ import {
 } from "./auth";
 import {
   createEntry,
+  findRecentDuplicateClaim,
   getEntryByAngelName,
   getEntryById,
   getEntryByRealName,
@@ -22,7 +22,15 @@ import { z } from "zod";
 import { graphicCodeExists, listActiveGraphics } from "./db/graphics";
 import { logger } from "./logger";
 import {
+  loginLimiter,
+  readLimiter,
+  rejectHoneypot,
+  requireAutomationKeyIfConfigured,
+  submitLimiter,
+} from "./security";
+import {
   adminLoginSchema,
+  lookupQuerySchema,
   statusSchema,
   submitSchema,
   uuidSchema,
@@ -37,14 +45,6 @@ function asyncHandler(
     fn(req, res, next).catch(next);
   };
 }
-
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: "Too many login attempts, try again later" },
-});
 
 /** POST /admin/login */
 apiRouter.post(
@@ -108,6 +108,7 @@ apiRouter.patch(
   asyncHandler(async (req, res) => {
     const parsed = z
       .object({ angel_name: z.string().trim().min(1).max(120) })
+      .strict()
       .safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ success: false, error: "angel_name is required" });
@@ -126,9 +127,9 @@ apiRouter.patch(
 /** GET /graphics — active dropdown options (codes + labels from DB) */
 apiRouter.get(
   "/graphics",
+  readLimiter,
   asyncHandler(async (_req, res) => {
     const graphics = await listActiveGraphics();
-    logger.info("Graphics loaded for dropdown", { count: graphics.length });
     res.json({ success: true, count: graphics.length, graphics });
   })
 );
@@ -136,6 +137,8 @@ apiRouter.get(
 /** POST /submit — save request with email + chosen graphic */
 apiRouter.post(
   "/submit",
+  submitLimiter,
+  rejectHoneypot,
   asyncHandler(async (req, res) => {
     const parsed = submitSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -147,8 +150,7 @@ apiRouter.post(
       return;
     }
 
-    const { real_name, angel_name, email, graphic_code, metadata } =
-      parsed.data;
+    const { real_name, angel_name, email, graphic_code } = parsed.data;
 
     const validCode = await graphicCodeExists(graphic_code);
     if (!validCode) {
@@ -160,6 +162,28 @@ apiRouter.post(
       return;
     }
 
+    const cooldownHours = Number(process.env.SUBMIT_COOLDOWN_HOURS) || 24;
+    const recentSameClaim = await findRecentDuplicateClaim(
+      email,
+      angel_name,
+      cooldownHours
+    );
+    if (recentSameClaim) {
+      logger.info("Blocked rapid multi-submit", {
+        email,
+        angel_name,
+        existing_id: recentSameClaim.id,
+      });
+      res.status(200).json({
+        success: true,
+        duplicate: true,
+        message:
+          "You’re already on the list for that angel name. Please check your email for an update soon.",
+        entry: recentSameClaim,
+      });
+      return;
+    }
+
     const existing = await getEntryByAngelName(angel_name);
 
     const entry = await createEntry({
@@ -167,7 +191,6 @@ apiRouter.post(
       angel_name,
       email,
       graphic_code,
-      metadata,
     });
 
     logger.info("Entry created", {
@@ -199,11 +222,13 @@ apiRouter.post(
   })
 );
 
-/** GET /entries — list recent entries (monitoring / debug) */
+/** GET /entries — list recent entries (automation / debug; protect with API key) */
 apiRouter.get(
   "/entries",
+  readLimiter,
+  requireAutomationKeyIfConfigured,
   asyncHandler(async (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 100, 500);
+    const limit = Math.min(Number(req.query.limit) || 100, 200);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
     const entries = await listEntries(limit, offset);
     res.json({ success: true, count: entries.length, entries });
@@ -216,8 +241,10 @@ apiRouter.get(
  */
 apiRouter.get(
   "/pending",
+  readLimiter,
+  requireAutomationKeyIfConfigured,
   asyncHandler(async (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
     const entries = await listPending(limit);
     res.json({ success: true, count: entries.length, entries });
   })
@@ -226,6 +253,8 @@ apiRouter.get(
 /** GET /entry/:id — fetch by UUID */
 apiRouter.get(
   "/entry/:id",
+  readLimiter,
+  requireAutomationKeyIfConfigured,
   asyncHandler(async (req, res) => {
     const idCheck = uuidSchema.safeParse(req.params.id);
     if (!idCheck.success) {
@@ -245,17 +274,22 @@ apiRouter.get(
 
 /**
  * GET /lookup — query by angel_name or real_name
- * Examples: /lookup?angel_name=Gabriel  /lookup?real_name=Alex
  */
 apiRouter.get(
   "/lookup",
+  readLimiter,
+  requireAutomationKeyIfConfigured,
   asyncHandler(async (req, res) => {
-    const angelName =
-      typeof req.query.angel_name === "string" ? req.query.angel_name.trim() : "";
-    const realName =
-      typeof req.query.real_name === "string" ? req.query.real_name.trim() : "";
+    const parsed = lookupQuerySchema.safeParse({
+      angel_name:
+        typeof req.query.angel_name === "string"
+          ? req.query.angel_name
+          : undefined,
+      real_name:
+        typeof req.query.real_name === "string" ? req.query.real_name : undefined,
+    });
 
-    if (!angelName && !realName) {
+    if (!parsed.success) {
       res.status(400).json({
         success: false,
         error: "Provide angel_name or real_name query parameter",
@@ -263,9 +297,12 @@ apiRouter.get(
       return;
     }
 
+    const angelName = parsed.data.angel_name?.trim() || "";
+    const realName = parsed.data.real_name?.trim() || "";
+
     const entry = angelName
       ? await getEntryByAngelName(angelName)
-      : await getEntryByRealName(realName);
+      : await getEntryByRealName(realName!);
 
     if (!entry) {
       res.status(404).json({ success: false, error: "Entry not found" });
@@ -281,6 +318,8 @@ apiRouter.get(
  */
 apiRouter.patch(
   "/entry/:id/status",
+  readLimiter,
+  requireAutomationKeyIfConfigured,
   asyncHandler(async (req, res) => {
     const idCheck = uuidSchema.safeParse(req.params.id);
     if (!idCheck.success) {
