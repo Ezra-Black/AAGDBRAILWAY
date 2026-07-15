@@ -18,6 +18,12 @@
         background: #111827;
         color: #e5e7eb;
       }
+      .rule-ok {
+        color: #6ee7b7;
+      }
+      .rule-bad {
+        color: #9ca3af;
+      }
     </style>
   </head>
   <body class="flex min-h-screen items-center justify-center px-5 py-10">
@@ -56,24 +62,300 @@
         <p id="message" class="hidden text-sm" role="status"></p>
       </form>
 
+      <button
+        id="open-join"
+        type="button"
+        class="mt-4 w-full rounded-lg border border-gray-700 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800"
+      >
+        Join as new admin
+      </button>
+
       <p class="mt-8 text-center text-xs text-gray-500">
         <a href="/" class="underline hover:text-gray-300">Back to form</a>
       </p>
     </main>
 
+    <!-- Join modal -->
+    <div
+      id="join-modal"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 px-5"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="join-title"
+    >
+      <div class="w-full max-w-md rounded-2xl border border-gray-700 bg-gray-900 p-6 shadow-xl">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <h2 id="join-title" class="text-xl font-semibold text-white">Join as new admin</h2>
+            <p class="mt-1 text-sm text-gray-400">
+              Use an email that already submitted a request on the form.
+            </p>
+          </div>
+          <button
+            id="close-join"
+            type="button"
+            class="rounded-lg px-2 py-1 text-sm text-gray-400 hover:bg-gray-800 hover:text-white"
+          >
+            Close
+          </button>
+        </div>
+
+        <!-- Step 1: email -->
+        <div id="join-step-email" class="mt-6 space-y-4">
+          <div>
+            <label for="join-email" class="mb-1 block text-sm text-gray-300">Email</label>
+            <input
+              id="join-email"
+              type="email"
+              autocomplete="email"
+              class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2.5 text-sm text-white outline-none focus:border-gray-500"
+            />
+          </div>
+          <button
+            id="join-check-btn"
+            type="button"
+            class="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 hover:bg-gray-100 disabled:opacity-50"
+          >
+            Continue
+          </button>
+        </div>
+
+        <!-- Step 2: password -->
+        <div id="join-step-password" class="mt-6 hidden space-y-4">
+          <p class="text-sm text-gray-300">
+            Verified:
+            <span id="join-verified-email" class="font-medium text-white"></span>
+          </p>
+
+          <div class="rounded-lg border border-gray-800 bg-gray-950/80 p-3">
+            <p class="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+              Password must include
+            </p>
+            <ul id="password-rules" class="space-y-1 text-xs">
+              <li data-rule="length" class="rule-bad">At least 10 characters</li>
+              <li data-rule="lower" class="rule-bad">At least one lowercase letter (a–z)</li>
+              <li data-rule="upper" class="rule-bad">At least one uppercase letter (A–Z)</li>
+              <li data-rule="number" class="rule-bad">At least one number (0–9)</li>
+              <li data-rule="special" class="rule-bad">At least one special character (!@#$%^&* etc.)</li>
+            </ul>
+          </div>
+
+          <div>
+            <label for="join-password" class="mb-1 block text-sm text-gray-300">Password</label>
+            <input
+              id="join-password"
+              type="password"
+              autocomplete="new-password"
+              class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2.5 text-sm text-white outline-none focus:border-gray-500"
+            />
+          </div>
+          <div>
+            <label for="join-password-confirm" class="mb-1 block text-sm text-gray-300">
+              Confirm password
+            </label>
+            <input
+              id="join-password-confirm"
+              type="password"
+              autocomplete="new-password"
+              class="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2.5 text-sm text-white outline-none focus:border-gray-500"
+            />
+          </div>
+          <button
+            id="join-create-btn"
+            type="button"
+            class="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 hover:bg-gray-100 disabled:opacity-50"
+          >
+            Create account
+          </button>
+        </div>
+
+        <!-- Step 3: done -->
+        <div id="join-step-done" class="mt-6 hidden space-y-4">
+          <p id="join-done-text" class="text-sm text-emerald-300">
+            Account created. You can log in now.
+          </p>
+          <button
+            id="join-done-close"
+            type="button"
+            class="w-full rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 hover:bg-gray-100"
+          >
+            Back to login
+          </button>
+        </div>
+
+        <p id="join-message" class="mt-4 hidden text-sm" role="status"></p>
+      </div>
+    </div>
+
     <script>
       (async () => {
         try {
           const me = await fetch("/admin/me", { credentials: "include" });
-          if (me.ok) {
-            window.location.href = "/admin/";
-          }
+          if (me.ok) window.location.href = "/admin/";
         } catch {}
       })();
 
       const form = document.getElementById("login-form");
       const btn = document.getElementById("login-btn");
       const message = document.getElementById("message");
+
+      const modal = document.getElementById("join-modal");
+      const openJoin = document.getElementById("open-join");
+      const closeJoin = document.getElementById("close-join");
+      const joinDoneClose = document.getElementById("join-done-close");
+      const joinMessage = document.getElementById("join-message");
+      const stepEmail = document.getElementById("join-step-email");
+      const stepPassword = document.getElementById("join-step-password");
+      const stepDone = document.getElementById("join-step-done");
+      const joinCheckBtn = document.getElementById("join-check-btn");
+      const joinCreateBtn = document.getElementById("join-create-btn");
+      const joinPassword = document.getElementById("join-password");
+      const joinPasswordConfirm = document.getElementById("join-password-confirm");
+
+      let verifiedEmail = "";
+
+      function showJoinMessage(text, ok) {
+        joinMessage.textContent = text;
+        joinMessage.className = "mt-4 text-sm " + (ok ? "text-emerald-300" : "text-rose-400");
+      }
+
+      function hideJoinMessage() {
+        joinMessage.className = "mt-4 hidden text-sm";
+        joinMessage.textContent = "";
+      }
+
+      function resetJoinUi() {
+        verifiedEmail = "";
+        document.getElementById("join-email").value = "";
+        joinPassword.value = "";
+        joinPasswordConfirm.value = "";
+        stepEmail.classList.remove("hidden");
+        stepPassword.classList.add("hidden");
+        stepDone.classList.add("hidden");
+        hideJoinMessage();
+        updateRuleIndicators("");
+      }
+
+      function openModal() {
+        resetJoinUi();
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+        document.getElementById("join-email").focus();
+      }
+
+      function closeModal() {
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+        resetJoinUi();
+      }
+
+      openJoin.addEventListener("click", openModal);
+      closeJoin.addEventListener("click", closeModal);
+      joinDoneClose.addEventListener("click", closeModal);
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) closeModal();
+      });
+
+      function updateRuleIndicators(password) {
+        const checks = {
+          length: password.length >= 10,
+          lower: /[a-z]/.test(password),
+          upper: /[A-Z]/.test(password),
+          number: /[0-9]/.test(password),
+          special: /[^A-Za-z0-9]/.test(password),
+        };
+        Object.keys(checks).forEach((key) => {
+          const el = document.querySelector('[data-rule="' + key + '"]');
+          if (!el) return;
+          el.className = checks[key] ? "rule-ok" : "rule-bad";
+        });
+        return Object.values(checks).every(Boolean);
+      }
+
+      joinPassword.addEventListener("input", () => {
+        updateRuleIndicators(joinPassword.value);
+      });
+
+      joinCheckBtn.addEventListener("click", async () => {
+        hideJoinMessage();
+        const email = document.getElementById("join-email").value.trim();
+        if (!email) {
+          showJoinMessage("Enter your email.", false);
+          return;
+        }
+        joinCheckBtn.disabled = true;
+        joinCheckBtn.textContent = "Checking…";
+        try {
+          const res = await fetch("/admin/join/check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            showJoinMessage(data.error || "Could not verify email.", false);
+            return;
+          }
+          verifiedEmail = data.email;
+          document.getElementById("join-verified-email").textContent = verifiedEmail;
+          stepEmail.classList.add("hidden");
+          stepPassword.classList.remove("hidden");
+          hideJoinMessage();
+          joinPassword.focus();
+        } catch {
+          showJoinMessage("Network error.", false);
+        } finally {
+          joinCheckBtn.disabled = false;
+          joinCheckBtn.textContent = "Continue";
+        }
+      });
+
+      joinCreateBtn.addEventListener("click", async () => {
+        hideJoinMessage();
+        const password = joinPassword.value;
+        const password_confirm = joinPasswordConfirm.value;
+        if (!updateRuleIndicators(password)) {
+          showJoinMessage("Password does not meet all requirements yet.", false);
+          return;
+        }
+        if (password !== password_confirm) {
+          showJoinMessage("Passwords do not match.", false);
+          return;
+        }
+
+        joinCreateBtn.disabled = true;
+        joinCreateBtn.textContent = "Creating…";
+        try {
+          const res = await fetch("/admin/join", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: verifiedEmail,
+              password,
+              password_confirm,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            const detail = data.details
+              ? Object.values(data.details).flat().join(" ")
+              : data.error || "Could not create account.";
+            showJoinMessage(detail, false);
+            return;
+          }
+          document.getElementById("join-done-text").textContent =
+            data.message || "Account created. You can log in now.";
+          document.getElementById("email").value = verifiedEmail;
+          stepPassword.classList.add("hidden");
+          stepDone.classList.remove("hidden");
+          hideJoinMessage();
+        } catch {
+          showJoinMessage("Network error.", false);
+        } finally {
+          joinCreateBtn.disabled = false;
+          joinCreateBtn.textContent = "Create account";
+        }
+      });
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();

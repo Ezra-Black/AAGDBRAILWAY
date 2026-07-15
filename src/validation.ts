@@ -73,6 +73,41 @@ export const adminLoginSchema = z
   })
   .strict();
 
+const strongPasswordField = z
+  .string()
+  .min(10, "At least 10 characters")
+  .max(200, "Password is too long")
+  .refine((v) => /[a-z]/.test(v), "Include a lowercase letter")
+  .refine((v) => /[A-Z]/.test(v), "Include an uppercase letter")
+  .refine((v) => /[0-9]/.test(v), "Include a number")
+  .refine((v) => /[^A-Za-z0-9]/.test(v), "Include a special character");
+
+export const adminJoinCheckSchema = z
+  .object({
+    email: emailField,
+  })
+  .strict();
+
+export const adminJoinSchema = z
+  .object({
+    email: emailField,
+    password: strongPasswordField,
+    password_confirm: z.string().min(1, "Confirm your password"),
+  })
+  .strict()
+  .refine((data) => data.password === data.password_confirm, {
+    message: "Passwords do not match",
+    path: ["password_confirm"],
+  });
+
+export const PASSWORD_RULES = [
+  "At least 10 characters",
+  "At least one lowercase letter (a–z)",
+  "At least one uppercase letter (A–Z)",
+  "At least one number (0–9)",
+  "At least one special character (!@#$%^&* etc.)",
+];
+
 export const lookupQuerySchema = z
   .object({
     angel_name: z.string().trim().max(120).optional(),

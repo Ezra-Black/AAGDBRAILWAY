@@ -8,6 +8,7 @@ import {
 } from "./auth";
 import {
   createEntry,
+  emailExistsInEntries,
   findRecentDuplicateClaim,
   getEntryByAngelName,
   getEntryById,
@@ -18,7 +19,9 @@ import {
   markAngelNameComplete,
   updateEntryStatus,
 } from "./db/entries";
+import { createAdmin, getAdminByEmail } from "./db/admins";
 import { z } from "zod";
+import bcrypt from "bcryptjs";
 import { graphicCodeExists, listActiveGraphics, createGraphicOption, deleteGraphicOption, listAllGraphics } from "./db/graphics";
 import { logger } from "./logger";
 import {
@@ -30,8 +33,11 @@ import {
 } from "./security";
 import {
   adminGraphicCreateSchema,
+  adminJoinCheckSchema,
+  adminJoinSchema,
   adminLoginSchema,
   lookupQuerySchema,
+  PASSWORD_RULES,
   statusSchema,
   submitSchema,
   uuidSchema,
@@ -71,6 +77,102 @@ apiRouter.post(
     setSessionCookie(res, result.token);
     logger.info("Admin logged in", { email: result.admin.email });
     res.json({ success: true, admin: result.admin });
+  })
+);
+
+/**
+ * POST /admin/join/check — email must already exist in form submissions
+ * and must not already be an admin.
+ */
+apiRouter.post(
+  "/admin/join/check",
+  loginLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = adminJoinCheckSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Enter a valid email",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const email = parsed.data.email;
+    const alreadyAdmin = await getAdminByEmail(email);
+    if (alreadyAdmin) {
+      res.status(409).json({
+        success: false,
+        error: "That email already has an admin account. Please log in.",
+      });
+      return;
+    }
+
+    const known = await emailExistsInEntries(email);
+    if (!known) {
+      res.status(403).json({
+        success: false,
+        error:
+          "That email isn’t in our request database yet. Submit the form first, then join as admin.",
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      email,
+      password_rules: PASSWORD_RULES,
+      message: "Email verified. Create a strong password to finish joining.",
+    });
+  })
+);
+
+/** POST /admin/join — create admin account for a known submission email */
+apiRouter.post(
+  "/admin/join",
+  loginLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = adminJoinSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+        password_rules: PASSWORD_RULES,
+      });
+      return;
+    }
+
+    const { email, password } = parsed.data;
+
+    const alreadyAdmin = await getAdminByEmail(email);
+    if (alreadyAdmin) {
+      res.status(409).json({
+        success: false,
+        error: "That email already has an admin account. Please log in.",
+      });
+      return;
+    }
+
+    const known = await emailExistsInEntries(email);
+    if (!known) {
+      res.status(403).json({
+        success: false,
+        error:
+          "That email isn’t in our request database yet. Submit the form first, then join as admin.",
+      });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const admin = await createAdmin(email, passwordHash);
+
+    logger.info("New admin registered via join", { email: admin.email });
+    res.status(201).json({
+      success: true,
+      message: "Account created. You can log in now.",
+      admin: { id: admin.id, email: admin.email },
+    });
   })
 );
 

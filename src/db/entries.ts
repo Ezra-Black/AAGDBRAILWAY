@@ -249,6 +249,17 @@ export async function getEntryByRealName(
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }
 
+/** True if this email has submitted at least one form request. */
+export async function emailExistsInEntries(email: string): Promise<boolean> {
+  const result = await query(
+    `SELECT 1 FROM entries
+     WHERE lower(email) = lower($1)
+     LIMIT 1`,
+    [email]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function listPending(limit = 50): Promise<Entry[]> {
   const result = await query(
     `SELECT * FROM entries

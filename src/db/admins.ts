@@ -76,3 +76,19 @@ export async function deleteSessionByTokenHash(tokenHash: string): Promise<void>
 export async function deleteExpiredSessions(): Promise<void> {
   await query(`DELETE FROM admin_sessions WHERE expires_at <= NOW()`);
 }
+
+export async function createAdmin(
+  email: string,
+  passwordHash: string
+): Promise<{ id: string; email: string }> {
+  const result = await query(
+    `INSERT INTO admins (email, password_hash)
+     VALUES ($1, $2)
+     RETURNING id, email`,
+    [email, passwordHash]
+  );
+  return {
+    id: result.rows[0].id as string,
+    email: result.rows[0].email as string,
+  };
+}
