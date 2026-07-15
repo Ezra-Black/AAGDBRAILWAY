@@ -99,6 +99,39 @@ apiRouter.get(
   })
 );
 
+/** PATCH /admin/entries/:id/complete — mark pending/processing as processed */
+apiRouter.patch(
+  "/admin/entries/:id/complete",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid entry ID" });
+      return;
+    }
+
+    const existing = await getEntryById(idCheck.data);
+    if (!existing) {
+      res.status(404).json({ success: false, error: "Entry not found" });
+      return;
+    }
+
+    if (existing.status === "processed") {
+      res.json({ success: true, entry: existing });
+      return;
+    }
+
+    const entry = await updateEntryStatus(idCheck.data, "processed");
+    if (!entry) {
+      res.status(404).json({ success: false, error: "Entry not found" });
+      return;
+    }
+
+    logger.info("Admin marked entry complete", { id: entry.id });
+    res.json({ success: true, entry });
+  })
+);
+
 /** GET /graphics — active dropdown options (codes + labels from DB) */
 apiRouter.get(
   "/graphics",

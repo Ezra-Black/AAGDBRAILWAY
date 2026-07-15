@@ -18,6 +18,21 @@
         background: #111827;
         color: #e5e7eb;
       }
+      .status-pending {
+        color: #fbbf24;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      .status-pending:hover {
+        color: #fde68a;
+      }
+      .status-complete {
+        color: #6ee7b7;
+      }
+      .status-other {
+        color: #9ca3af;
+      }
     </style>
   </head>
   <body class="px-5 py-8 sm:px-8">
@@ -50,6 +65,9 @@
 
       <p id="empty" class="mt-6 hidden text-sm text-gray-500">No requests yet.</p>
       <p id="error" class="mt-6 hidden text-sm text-rose-400"></p>
+      <p class="mt-4 text-xs text-gray-500">
+        Tip: click <span class="text-amber-300">pending</span> to mark a request complete.
+      </p>
     </main>
 
     <script>
@@ -57,6 +75,7 @@
       const subtitle = document.getElementById("subtitle");
       const empty = document.getElementById("empty");
       const errorEl = document.getElementById("error");
+      let adminEmail = "";
 
       async function ensureAuth() {
         const res = await fetch("/admin/me", { credentials: "include" });
@@ -75,7 +94,76 @@
         return entry.graphic_label || entry.graphic_code || "—";
       }
 
+      function statusLabel(status) {
+        if (status === "processed") return "complete";
+        return status;
+      }
+
+      function statusClass(status) {
+        if (status === "pending" || status === "processing") return "status-pending";
+        if (status === "processed") return "status-complete";
+        return "status-other";
+      }
+
+      function canMarkComplete(status) {
+        return status === "pending" || status === "processing";
+      }
+
+      async function markComplete(id, buttonEls) {
+        for (const el of buttonEls) {
+          el.textContent = "…";
+          el.style.pointerEvents = "none";
+        }
+
+        try {
+          const res = await fetch("/admin/entries/" + id + "/complete", {
+            method: "PATCH",
+            credentials: "include",
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            errorEl.textContent = data.error || "Could not update status";
+            errorEl.classList.remove("hidden");
+            await loadEntries();
+            return;
+          }
+          await loadEntries();
+        } catch {
+          errorEl.textContent = "Network error updating status";
+          errorEl.classList.remove("hidden");
+          await loadEntries();
+        }
+      }
+
+      function renderStatusControl(entry) {
+        const label = statusLabel(entry.status);
+        const cls = statusClass(entry.status);
+        if (canMarkComplete(entry.status)) {
+          return (
+            '<button type="button" data-complete="' +
+            escapeHtml(entry.id) +
+            '" class="' +
+            cls +
+            ' text-sm capitalize bg-transparent p-0 border-0" title="Mark complete">' +
+            escapeHtml(label) +
+            "</button>"
+          );
+        }
+        return (
+          '<span class="' +
+          cls +
+          ' text-sm capitalize">' +
+          escapeHtml(label) +
+          "</span>"
+        );
+      }
+
       async function loadEntries() {
+        errorEl.classList.add("hidden");
         const res = await fetch("/admin/entries", { credentials: "include" });
         if (res.status === 401) {
           window.location.href = "/admin/login";
@@ -89,13 +177,13 @@
         }
 
         const entries = data.entries || [];
-        subtitle.textContent = entries.length + " total";
+        subtitle.textContent = adminEmail
+          ? adminEmail + " · " + entries.length + " total"
+          : entries.length + " total";
         rowsEl.innerHTML = "";
+        empty.classList.toggle("hidden", entries.length > 0);
 
-        if (!entries.length) {
-          empty.classList.remove("hidden");
-          return;
-        }
+        if (!entries.length) return;
 
         for (const entry of entries) {
           const row = document.createElement("div");
@@ -106,18 +194,29 @@
             '<p class="truncate font-medium text-white">' +
             escapeHtml(entry.angel_name) +
             "</p>" +
-            '<p class="truncate text-xs text-gray-500 sm:hidden">' +
-            escapeHtml(entry.status) +
-            "</p>" +
+            '<div class="mt-0.5 sm:hidden">' +
+            renderStatusControl(entry) +
+            "</div>" +
             "</div>" +
             '<div class="min-w-0 text-sm text-gray-300">' +
             escapeHtml(graphicText(entry)) +
             "</div>" +
-            '<div class="hidden text-sm capitalize text-gray-400 sm:block">' +
-            escapeHtml(entry.status) +
+            '<div class="hidden sm:block">' +
+            renderStatusControl(entry) +
             "</div>";
           rowsEl.appendChild(row);
         }
+
+        rowsEl.querySelectorAll("[data-complete]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const id = btn.getAttribute("data-complete");
+            if (!id) return;
+            const twins = rowsEl.querySelectorAll(
+              '[data-complete="' + id + '"]'
+            );
+            markComplete(id, twins);
+          });
+        });
       }
 
       function escapeHtml(str) {
@@ -139,6 +238,7 @@
       (async () => {
         const admin = await ensureAuth();
         if (!admin) return;
+        adminEmail = admin.email;
         subtitle.textContent = admin.email;
         await loadEntries();
       })();
