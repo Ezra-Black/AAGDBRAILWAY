@@ -252,7 +252,8 @@
           id="message"
           role="status"
           aria-live="polite"
-          class="hidden rounded-2xl px-4 py-3 text-sm animate-in"
+          hidden
+          class="rounded-2xl px-4 py-3.5 text-sm leading-relaxed animate-in"
         ></div>
       </form>
 
@@ -417,12 +418,14 @@
       const graphicSelect = document.getElementById("graphic_code");
 
       function showMessage(text, ok) {
+        message.hidden = false;
         message.textContent = text;
         message.className =
-          "rounded-2xl px-4 py-3 text-sm animate-in " +
+          "rounded-2xl px-4 py-3.5 text-sm leading-relaxed animate-in " +
           (ok
             ? "border border-emerald-400/40 bg-emerald-500/15 text-emerald-100"
             : "border border-rose-400/40 bg-rose-500/15 text-rose-100");
+        message.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
 
       function selectedGraphicCode() {
@@ -431,7 +434,8 @@
         return String(opt.value || "").trim();
       }
 
-      async function loadGraphics() {
+      async function loadGraphics(options = {}) {
+        const keepMessage = Boolean(options.keepMessage);
         try {
           const res = await fetch("/graphics", { cache: "no-store" });
           let data = null;
@@ -448,11 +452,13 @@
             opt.value = "";
             opt.textContent = "Couldn’t load graphics";
             graphicSelect.appendChild(opt);
-            showMessage(
-              (data && data.error) ||
-                "Couldn’t load graphics (HTTP " + res.status + "). Refresh and try again.",
-              false
-            );
+            if (!keepMessage) {
+              showMessage(
+                (data && data.error) ||
+                  "Couldn’t load graphics (HTTP " + res.status + "). Refresh and try again.",
+                false
+              );
+            }
             return;
           }
 
@@ -462,10 +468,12 @@
             opt.value = "";
             opt.textContent = "No graphics available yet";
             graphicSelect.appendChild(opt);
-            showMessage(
-              "No graphics available yet. In Postgres, check graphic_options has code, label, and active = true.",
-              false
-            );
+            if (!keepMessage) {
+              showMessage(
+                "No graphics available yet. In Postgres, check graphic_options has code, label, and active = true.",
+                false
+              );
+            }
             return;
           }
 
@@ -479,28 +487,29 @@
             if (!code) continue;
             const opt = document.createElement("option");
             opt.value = code;
-            opt.textContent = (g.label || code) + (g.code && g.code !== g.label ? "  ·  " + g.code : "");
+            opt.textContent =
+              (g.label || code) +
+              (g.code && g.code !== g.label ? "  ·  " + g.code : "");
             graphicSelect.appendChild(opt);
           }
 
           if (graphicSelect.options.length > 1) {
             graphicSelect.selectedIndex = 1;
-          } else {
+          } else if (!keepMessage) {
             showMessage(
               "Graphics rows were found but had empty code/label values.",
               false
             );
-            return;
           }
-
-          message.classList.add("hidden");
-        } catch (err) {
+        } catch {
           graphicSelect.innerHTML = "";
           const opt = document.createElement("option");
           opt.value = "";
           opt.textContent = "Couldn’t load graphics";
           graphicSelect.appendChild(opt);
-          showMessage("Couldn’t load graphics. Refresh and try again.", false);
+          if (!keepMessage) {
+            showMessage("Couldn’t load graphics. Refresh and try again.", false);
+          }
         }
       }
 
@@ -508,7 +517,7 @@
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        message.classList.add("hidden");
+        message.hidden = true;
 
         const real_name = document.getElementById("real_name").value.trim();
         const angel_name = document.getElementById("angel_name").value.trim();
@@ -554,13 +563,17 @@
             return;
           }
 
-          showMessage(
-            data.message ||
-              "You’re in — request saved as " + data.entry.status + ".",
-            true
-          );
-          form.reset();
-          await loadGraphics();
+          const successText = data.duplicate
+            ? data.message ||
+              "That angel name is already in our database. We’ll send you an update soon — please check your email."
+            : data.message ||
+              "Submitted! You’re on the list — keep an eye on your email for an update.";
+
+          document.getElementById("real_name").value = "";
+          document.getElementById("angel_name").value = "";
+          document.getElementById("email").value = "";
+          await loadGraphics({ keepMessage: true });
+          showMessage(successText, true);
         } catch {
           showMessage("Network glitch. Try again in a sec.", false);
         } finally {

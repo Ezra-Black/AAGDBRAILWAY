@@ -183,7 +183,7 @@ apiRouter.post(
         success: true,
         duplicate: true,
         message:
-          "That angel name is already in our database. We’ll send you an update soon — please check your email.",
+          "Submitted! That angel name is already in our database. We’ll send you an update soon — please check your email.",
         entry,
       });
       return;
@@ -192,7 +192,8 @@ apiRouter.post(
     res.status(201).json({
       success: true,
       duplicate: false,
-      message: "Request saved. You’re on the list.",
+      message:
+        "Submitted! You’re on the list — keep an eye on your email for an update.",
       entry,
     });
   })
