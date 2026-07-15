@@ -128,6 +128,7 @@ apiRouter.get(
   "/graphics",
   asyncHandler(async (_req, res) => {
     const graphics = await listActiveGraphics();
+    logger.info("Graphics loaded for dropdown", { count: graphics.length });
     res.json({ success: true, count: graphics.length, graphics });
   })
 );

@@ -90,6 +90,27 @@ export async function migrate(): Promise<void> {
       ON admin_sessions (expires_at);
   `);
 
+  // Repair common manual-insert issues so the dropdown can see rows
+  await query(`
+    UPDATE graphic_options
+    SET active = true
+    WHERE active IS NULL
+  `);
+
+  await query(`
+    UPDATE graphic_options AS g
+    SET code = trim(g.label)
+    WHERE (g.code IS NULL OR trim(g.code) = '')
+      AND g.label IS NOT NULL
+      AND trim(g.label) <> ''
+      AND NOT EXISTS (
+        SELECT 1
+        FROM graphic_options AS x
+        WHERE lower(trim(x.code)) = lower(trim(g.label))
+          AND x.id <> g.id
+      )
+  `);
+
   const passwordHash = await bcrypt.hash(SEED_ADMIN_PASSWORD, 12);
   await query(
     `INSERT INTO admins (email, password_hash)

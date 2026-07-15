@@ -433,17 +433,37 @@
 
       async function loadGraphics() {
         try {
-          const res = await fetch("/graphics");
-          const data = await res.json();
+          const res = await fetch("/graphics", { cache: "no-store" });
+          let data = null;
+          try {
+            data = await res.json();
+          } catch {
+            data = null;
+          }
+
           graphicSelect.innerHTML = "";
 
-          if (!data.success || !data.graphics?.length) {
+          if (!res.ok || !data?.success) {
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "Couldn’t load graphics";
+            graphicSelect.appendChild(opt);
+            showMessage(
+              (data && data.error) ||
+                "Couldn’t load graphics (HTTP " + res.status + "). Refresh and try again.",
+              false
+            );
+            return;
+          }
+
+          const graphics = Array.isArray(data.graphics) ? data.graphics : [];
+          if (!graphics.length) {
             const opt = document.createElement("option");
             opt.value = "";
             opt.textContent = "No graphics available yet";
             graphicSelect.appendChild(opt);
             showMessage(
-              "No graphics are available yet. Add options in the graphic_options database table, then refresh.",
+              "No graphics available yet. In Postgres, check graphic_options has code, label, and active = true.",
               false
             );
             return;
@@ -454,22 +474,27 @@
           placeholder.textContent = "Pick a graphic…";
           graphicSelect.appendChild(placeholder);
 
-          for (const g of data.graphics) {
-            const code = String(g.code || "").trim();
+          for (const g of graphics) {
+            const code = String(g.code || g.label || "").trim();
             if (!code) continue;
             const opt = document.createElement("option");
             opt.value = code;
-            opt.textContent = (g.label || code) + "  ·  " + code;
+            opt.textContent = (g.label || code) + (g.code && g.code !== g.label ? "  ·  " + g.code : "");
             graphicSelect.appendChild(opt);
           }
 
-          // Prefer a real option so submits aren't blocked by empty select.value
           if (graphicSelect.options.length > 1) {
             graphicSelect.selectedIndex = 1;
+          } else {
+            showMessage(
+              "Graphics rows were found but had empty code/label values.",
+              false
+            );
+            return;
           }
 
           message.classList.add("hidden");
-        } catch {
+        } catch (err) {
           graphicSelect.innerHTML = "";
           const opt = document.createElement("option");
           opt.value = "";
