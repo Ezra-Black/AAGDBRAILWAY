@@ -1,0 +1,176 @@
+import { Router, type Request, type Response, type NextFunction } from "express";
+import {
+  createEntry,
+  getEntryByAngelName,
+  getEntryById,
+  getEntryByRealName,
+  listEntries,
+  listPending,
+  updateEntryStatus,
+} from "./db/entries";
+import { logger } from "./logger";
+import { statusSchema, submitSchema, uuidSchema } from "./validation";
+
+export const apiRouter = Router();
+
+function asyncHandler(
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<void>
+) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    fn(req, res, next).catch(next);
+  };
+}
+
+/** POST /submit — save a real_name ↔ angel_name pair */
+apiRouter.post(
+  "/submit",
+  asyncHandler(async (req, res) => {
+    const parsed = submitSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const { real_name, angel_name, metadata } = parsed.data;
+    const entry = await createEntry({ real_name, angel_name, metadata });
+
+    logger.info("Entry created", {
+      id: entry.id,
+      angel_name: entry.angel_name,
+      status: entry.status,
+    });
+
+    res.status(201).json({
+      success: true,
+      entry,
+    });
+  })
+);
+
+/** GET /entries — list recent entries (monitoring / debug) */
+apiRouter.get(
+  "/entries",
+  asyncHandler(async (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 100, 500);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const entries = await listEntries(limit, offset);
+    res.json({ success: true, count: entries.length, entries });
+  })
+);
+
+/**
+ * GET /pending — automation poll endpoint
+ * Returns unprocessed entries oldest-first so photo generation can drain the queue.
+ */
+apiRouter.get(
+  "/pending",
+  asyncHandler(async (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const entries = await listPending(limit);
+    res.json({ success: true, count: entries.length, entries });
+  })
+);
+
+/** GET /entry/:id — fetch by UUID */
+apiRouter.get(
+  "/entry/:id",
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid entry ID" });
+      return;
+    }
+
+    const entry = await getEntryById(idCheck.data);
+    if (!entry) {
+      res.status(404).json({ success: false, error: "Entry not found" });
+      return;
+    }
+
+    res.json({ success: true, entry });
+  })
+);
+
+/**
+ * GET /lookup — query by angel_name or real_name
+ * Examples: /lookup?angel_name=Gabriel  /lookup?real_name=Alex
+ */
+apiRouter.get(
+  "/lookup",
+  asyncHandler(async (req, res) => {
+    const angelName =
+      typeof req.query.angel_name === "string" ? req.query.angel_name.trim() : "";
+    const realName =
+      typeof req.query.real_name === "string" ? req.query.real_name.trim() : "";
+
+    if (!angelName && !realName) {
+      res.status(400).json({
+        success: false,
+        error: "Provide angel_name or real_name query parameter",
+      });
+      return;
+    }
+
+    const entry = angelName
+      ? await getEntryByAngelName(angelName)
+      : await getEntryByRealName(realName);
+
+    if (!entry) {
+      res.status(404).json({ success: false, error: "Entry not found" });
+      return;
+    }
+
+    res.json({ success: true, entry });
+  })
+);
+
+/**
+ * PATCH /entry/:id/status — mark processed / failed (for automation scripts)
+ */
+apiRouter.patch(
+  "/entry/:id/status",
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid entry ID" });
+      return;
+    }
+
+    const parsed = statusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const entry = await updateEntryStatus(
+      idCheck.data,
+      parsed.data.status,
+      parsed.data.metadata
+    );
+
+    if (!entry) {
+      res.status(404).json({ success: false, error: "Entry not found" });
+      return;
+    }
+
+    logger.info("Entry status updated", {
+      id: entry.id,
+      status: entry.status,
+    });
+
+    res.json({ success: true, entry });
+  })
+);
+
+/** GET /health — liveness for Railway */
+apiRouter.get("/health", (_req, res) => {
+  res.json({ ok: true, time: new Date().toISOString() });
+});
