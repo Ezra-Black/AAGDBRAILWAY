@@ -15,6 +15,7 @@ import {
   listEntries,
   listEntriesForAdmin,
   listPending,
+  touchEntryEmail,
   updateEntryStatus,
 } from "./db/entries";
 import { graphicCodeExists, listActiveGraphics } from "./db/graphics";
@@ -168,6 +169,26 @@ apiRouter.post(
       return;
     }
 
+    const existing = await getEntryByAngelName(angel_name);
+    if (existing) {
+      const entry =
+        (await touchEntryEmail(existing.id, email)) ?? existing;
+
+      logger.info("Duplicate angel name submit", {
+        id: entry.id,
+        angel_name: entry.angel_name,
+      });
+
+      res.status(200).json({
+        success: true,
+        duplicate: true,
+        message:
+          "That angel name is already in our database. We'll send you an update soon — please check your email.",
+        entry,
+      });
+      return;
+    }
+
     const entry = await createEntry({
       real_name,
       angel_name,
@@ -185,6 +206,8 @@ apiRouter.post(
 
     res.status(201).json({
       success: true,
+      duplicate: false,
+      message: "Request saved. You’re on the list.",
       entry,
     });
   })

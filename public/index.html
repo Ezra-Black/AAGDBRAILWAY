@@ -495,7 +495,20 @@
             return;
           }
 
-          showMessage("You’re in — request saved as " + data.entry.status + ".", true);
+          if (data.duplicate) {
+            showMessage(
+              data.message ||
+                "That angel name is already in our database. We'll send you an update soon — please check your email.",
+              true
+            );
+            return;
+          }
+
+          showMessage(
+            data.message ||
+              "You’re in — request saved as " + data.entry.status + ".",
+            true
+          );
           form.reset();
           await loadGraphics();
         } catch {

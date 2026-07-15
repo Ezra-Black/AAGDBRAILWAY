@@ -124,6 +124,22 @@ export async function getEntryByAngelName(
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }
 
+/** Refresh contact email when a known angel name resubmits. */
+export async function touchEntryEmail(
+  id: string,
+  email: string
+): Promise<Entry | null> {
+  const result = await query(
+    `UPDATE entries
+     SET email = $2,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [id, email]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
 export async function getEntryByRealName(
   realName: string
 ): Promise<Entry | null> {
