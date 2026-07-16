@@ -26,6 +26,7 @@ import { graphicCodeExists, listActiveGraphics, createGraphicOption, deleteGraph
 import { logger } from "./logger";
 import {
   contactLimiter,
+  facebookAuthLimiter,
   loginLimiter,
   newsletterSubscribeLimiter,
   newsletterVisitLimiter,
@@ -40,12 +41,20 @@ import {
   subscribeNewsletter,
 } from "./db/stats";
 import { createContactMessage, listContactMessages } from "./db/contact";
+import { upsertFacebookUser } from "./db/facebook";
+import {
+  facebookAppId,
+  facebookConfigured,
+  verifyFacebookToken,
+} from "./facebook";
+import { sendContactEmail } from "./email";
 import {
   adminGraphicCreateSchema,
   adminJoinCheckSchema,
   adminJoinSchema,
   adminLoginSchema,
   contactSchema,
+  facebookAuthSchema,
   lookupQuerySchema,
   newsletterSubscribeSchema,
   PASSWORD_RULES,
@@ -629,12 +638,87 @@ apiRouter.post(
     }
 
     const saved = await createContactMessage(parsed.data);
-    logger.info("Contact message received", { id: saved.id });
+
+    // Forward to the studio ProtonMail inbox. The message is already stored,
+    // so an SMTP hiccup never loses it.
+    const emailed = await sendContactEmail(parsed.data);
+    logger.info("Contact message received", { id: saved.id, emailed });
 
     res.status(201).json({
       success: true,
       message:
         "Message sent! Thanks for reaching out — we’ll get back to you soon.",
+    });
+  })
+);
+
+/**
+ * GET /auth/facebook/config — tells the client whether Facebook login is
+ * enabled and which app id to initialize the SDK with.
+ */
+apiRouter.get(
+  "/auth/facebook/config",
+  readLimiter,
+  asyncHandler(async (_req, res) => {
+    if (!facebookConfigured()) {
+      res.json({ success: true, enabled: false });
+      return;
+    }
+    res.json({ success: true, enabled: true, app_id: facebookAppId() });
+  })
+);
+
+/**
+ * POST /auth/facebook — exchange a Facebook JS SDK access token.
+ * The token is verified server-side with Facebook before anything is stored.
+ * We keep the email securely in Postgres, strictly for business purposes.
+ */
+apiRouter.post(
+  "/auth/facebook",
+  facebookAuthLimiter,
+  asyncHandler(async (req, res) => {
+    if (!facebookConfigured()) {
+      res.status(503).json({
+        success: false,
+        error: "Facebook login is not enabled on this server",
+      });
+      return;
+    }
+
+    const parsed = facebookAuthSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: "Invalid token" });
+      return;
+    }
+
+    const profile = await verifyFacebookToken(parsed.data.access_token);
+    if (!profile) {
+      res.status(401).json({
+        success: false,
+        error: "Could not verify your Facebook session. Please try again.",
+      });
+      return;
+    }
+
+    if (!profile.email) {
+      // User connected but declined the email permission — ask again.
+      res.status(200).json({
+        success: true,
+        needs_email: true,
+        message:
+          "Almost there — please share your email so we can keep you updated.",
+      });
+      return;
+    }
+
+    const saved = await upsertFacebookUser(profile);
+    logger.info("Facebook visitor linked", { fb_user_id: saved.fb_user_id });
+
+    res.status(201).json({
+      success: true,
+      needs_email: false,
+      message:
+        "Thanks! Your email is stored securely and used for business purposes only.",
     });
   })
 );
