@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contact — Audrey’s Angel Graphics</title>
+    <meta
+      name="description"
+      content="Questions about your angel-name graphic? Send us a message — we’d love to hear from you."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              dusk: "#0a0806",
+              honey: "#f0c45c",
+              cream: "#fff6e4",
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/site.css" />
+  </head>
+  <body>
+    <div class="orb" style="width:300px;height:300px;background:#f0c45c;top:10%;left:6%;opacity:0.14"></div>
+    <div class="orb" style="width:320px;height:320px;background:#e8a838;bottom:10%;right:5%;opacity:0.1;animation-delay:1.3s"></div>
+
+    <!-- Navigation -->
+    <header class="fixed inset-x-0 top-0 z-40 px-4 pt-4">
+      <nav class="glass-nav mx-auto flex max-w-5xl items-center justify-between rounded-full px-5 py-3">
+        <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-wide" style="color:var(--cream);text-decoration:none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" fill="#f0c45c" />
+          </svg>
+          Audrey’s Angel Graphics
+        </a>
+        <div class="hidden items-center gap-7 text-sm sm:flex">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/contact" class="nav-link active">Contact</a>
+          <a href="/form" class="nav-cta">Request yours</a>
+        </div>
+        <button
+          id="menu-toggle"
+          type="button"
+          class="sm:hidden"
+          aria-label="Open menu"
+          aria-expanded="false"
+          style="background:none;border:0;color:var(--cream);cursor:pointer;padding:0.25rem"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+      </nav>
+      <div id="mobile-menu" class="mobile-menu glass-nav mx-auto mt-2 max-w-5xl rounded-3xl p-5 sm:hidden">
+        <div class="flex flex-col gap-4 text-sm">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/contact" class="nav-link active">Contact</a>
+          <a href="/form" class="nav-cta justify-center">Request yours</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="relative z-10 mx-auto max-w-4xl px-5 pb-20 pt-36 sm:pt-44">
+      <!-- Hero -->
+      <section class="reveal text-center">
+        <p class="eyebrow">Contact</p>
+        <h1 class="headline mt-5 text-4xl font-bold text-cream sm:text-6xl">
+          We’d love to <span class="gold-text">hear</span> from you.
+        </h1>
+        <p class="mx-auto mt-6 max-w-2xl text-base font-light leading-relaxed text-cream/60 sm:text-lg">
+          A question about your request, an idea for a new graphic style, or
+          just a hello — drop it below and we’ll get back to you.
+        </p>
+      </section>
+
+      <div class="mt-16 grid gap-6 md:grid-cols-[1fr_1.4fr]">
+        <!-- Side info -->
+        <div class="space-y-5">
+          <div class="reveal glass-card p-6" style="--reveal-delay:0.05s">
+            <div class="flex h-10 w-10 items-center justify-center rounded-2xl" style="background:rgba(240,196,92,0.12);border:1px solid rgba(240,196,92,0.25)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f0c45c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                <path d="M3.5 7l8.5 6 8.5-6" />
+              </svg>
+            </div>
+            <h2 class="mt-4 text-base font-semibold text-cream">Replies by email</h2>
+            <p class="mt-1.5 text-sm font-light leading-relaxed text-cream/55">
+              We answer every message personally, usually within a couple of days.
+            </p>
+          </div>
+          <div class="reveal glass-card p-6" style="--reveal-delay:0.15s">
+            <div class="flex h-10 w-10 items-center justify-center rounded-2xl" style="background:rgba(240,196,92,0.12);border:1px solid rgba(240,196,92,0.25)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f0c45c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            </div>
+            <h2 class="mt-4 text-base font-semibold text-cream">Waiting on a graphic?</h2>
+            <p class="mt-1.5 text-sm font-light leading-relaxed text-cream/55">
+              Include the angel name from your request so we can find it fast.
+            </p>
+          </div>
+          <div class="reveal glass-card p-6" style="--reveal-delay:0.25s">
+            <div class="flex h-10 w-10 items-center justify-center rounded-2xl" style="background:rgba(240,196,92,0.12);border:1px solid rgba(240,196,92,0.25)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f0c45c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.9 5.6L20 10l-6.1 1.4L12 17l-1.9-5.6L4 10l6.1-1.4L12 3z" />
+              </svg>
+            </div>
+            <h2 class="mt-4 text-base font-semibold text-cream">New here?</h2>
+            <p class="mt-1.5 text-sm font-light leading-relaxed text-cream/55">
+              The fastest way to get your own piece is the
+              <a href="/form" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">request form</a>.
+            </p>
+          </div>
+        </div>
+
+        <!-- Contact form -->
+        <form
+          id="contact-form"
+          class="glass-panel reveal space-y-5 self-start rounded-[1.75rem] p-6 sm:p-8"
+          style="--reveal-delay:0.1s"
+          novalidate
+        >
+          <!-- Honeypot: leave empty. Hidden from real users. -->
+          <div
+            aria-hidden="true"
+            style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden"
+          >
+            <label for="website">Website</label>
+            <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="contact_name">Your name</label>
+            <input
+              id="contact_name"
+              name="name"
+              type="text"
+              autocomplete="name"
+              maxlength="120"
+              required
+              placeholder="What should we call you?"
+            />
+          </div>
+
+          <div class="field">
+            <label for="contact_email">Email</label>
+            <input
+              id="contact_email"
+              name="email"
+              type="email"
+              autocomplete="email"
+              maxlength="254"
+              required
+              placeholder="you@email.com"
+            />
+          </div>
+
+          <div class="field">
+            <label for="contact_message">Message</label>
+            <textarea
+              id="contact_message"
+              name="message"
+              maxlength="2000"
+              required
+              placeholder="Tell us what’s on your mind…"
+            ></textarea>
+            <p class="mt-1.5 text-right text-xs text-cream/35">
+              <span id="char-count">0</span>/2000
+            </p>
+          </div>
+
+          <button type="submit" id="contact-btn" class="btn-primary w-full">
+            Send message
+          </button>
+
+          <div
+            id="contact-status"
+            role="status"
+            aria-live="polite"
+            hidden
+            class="rounded-2xl px-4 py-3.5 text-sm leading-relaxed"
+          ></div>
+        </form>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 mt-8 px-5 pb-10">
+      <div class="mx-auto max-w-5xl">
+        <hr class="divider-glow" />
+        <div class="mt-8 flex flex-wrap items-center justify-between gap-3 text-[11px] text-cream/30">
+          <p>© <span id="year"></span> Audrey’s Angel Graphics</p>
+          <div class="flex items-center gap-4">
+            <a href="/" class="footer-link" style="font-size:11px">Home</a>
+            <a href="/about" class="footer-link" style="font-size:11px">About</a>
+            <a href="/form" class="footer-link" style="font-size:11px">Request form</a>
+            <a href="/admin/login" class="footer-link" style="font-size:11px">Admin</a>
+          </div>
+          <p>
+            built by
+            <a href="https://buymeacoffee.com/ezrablack" target="_blank" rel="noopener noreferrer" class="underline decoration-honey/30 underline-offset-2 hover:text-cream/50">ezra black</a>
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <script src="/assets/site.js"></script>
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      const contactForm = document.getElementById("contact-form");
+      const contactBtn = document.getElementById("contact-btn");
+      const statusEl = document.getElementById("contact-status");
+      const messageInput = document.getElementById("contact_message");
+      const charCount = document.getElementById("char-count");
+
+      messageInput.addEventListener("input", () => {
+        charCount.textContent = String(messageInput.value.length);
+      });
+
+      function showStatus(text, ok) {
+        statusEl.hidden = false;
+        statusEl.textContent = text;
+        statusEl.className =
+          "rounded-2xl px-4 py-3.5 text-sm leading-relaxed " +
+          (ok
+            ? "border border-emerald-400/40 bg-emerald-500/15 text-emerald-100"
+            : "border border-rose-400/40 bg-rose-500/15 text-rose-100");
+        statusEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+
+      contactForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        statusEl.hidden = true;
+
+        const name = document.getElementById("contact_name").value.trim();
+        const email = document.getElementById("contact_email").value.trim();
+        const message = messageInput.value.trim();
+
+        if (!name) {
+          showStatus("Please tell us your name.", false);
+          return;
+        }
+        if (!email) {
+          showStatus("Please enter your email so we can reply.", false);
+          return;
+        }
+        if (!message) {
+          showStatus("Please write a message first.", false);
+          return;
+        }
+
+        contactBtn.disabled = true;
+        contactBtn.textContent = "Sending…";
+
+        try {
+          const website = document.getElementById("website").value;
+          const res = await fetch("/contact", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email, message, website }),
+          });
+          const data = await res.json();
+
+          if (!res.ok || !data.success) {
+            const detail = data.details
+              ? Object.values(data.details).flat().join(" ")
+              : data.error || "Something went wrong. Try again in a moment.";
+            showStatus(detail, false);
+            return;
+          }
+
+          contactForm.reset();
+          charCount.textContent = "0";
+          showStatus(
+            data.message || "Message sent! We’ll get back to you soon.",
+            true
+          );
+        } catch {
+          showStatus("Network glitch. Try again in a sec.", false);
+        } finally {
+          contactBtn.disabled = false;
+          contactBtn.textContent = "Send message";
+        }
+      });
+    </script>
+  </body>
+</html>
