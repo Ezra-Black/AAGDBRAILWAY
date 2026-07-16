@@ -94,6 +94,26 @@ export async function migrate(): Promise<void> {
       value       BIGINT NOT NULL DEFAULT 0,
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email       TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_newsletter_subscribers_email
+      ON newsletter_subscribers (lower(email));
+
+    CREATE TABLE IF NOT EXISTS contact_messages (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name        TEXT NOT NULL,
+      email       TEXT NOT NULL,
+      message     TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_contact_messages_created_at
+      ON contact_messages (created_at DESC);
   `);
 
   await query(

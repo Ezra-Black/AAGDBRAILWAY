@@ -25,20 +25,29 @@ import bcrypt from "bcryptjs";
 import { graphicCodeExists, listActiveGraphics, createGraphicOption, deleteGraphicOption, listAllGraphics } from "./db/graphics";
 import { logger } from "./logger";
 import {
+  contactLimiter,
   loginLimiter,
+  newsletterSubscribeLimiter,
   newsletterVisitLimiter,
   readLimiter,
   rejectHoneypot,
   requireAutomationKeyIfConfigured,
   submitLimiter,
 } from "./security";
-import { bumpNewsletterCount, getNewsletterCount } from "./db/stats";
+import {
+  bumpNewsletterCount,
+  getNewsletterCount,
+  subscribeNewsletter,
+} from "./db/stats";
+import { createContactMessage, listContactMessages } from "./db/contact";
 import {
   adminGraphicCreateSchema,
   adminJoinCheckSchema,
   adminJoinSchema,
   adminLoginSchema,
+  contactSchema,
   lookupQuerySchema,
+  newsletterSubscribeSchema,
   PASSWORD_RULES,
   statusSchema,
   submitSchema,
@@ -570,5 +579,72 @@ apiRouter.post(
   asyncHandler(async (_req, res) => {
     const { value, added } = await bumpNewsletterCount();
     res.json({ success: true, count: value, added });
+  })
+);
+
+/** POST /newsletter/subscribe — real mailing-list opt-in from the popup. */
+apiRouter.post(
+  "/newsletter/subscribe",
+  newsletterSubscribeLimiter,
+  rejectHoneypot,
+  asyncHandler(async (req, res) => {
+    const parsed = newsletterSubscribeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Enter a valid email",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const { created, count } = await subscribeNewsletter(parsed.data.email);
+    logger.info("Newsletter opt-in", { created });
+
+    res.status(created ? 201 : 200).json({
+      success: true,
+      already_subscribed: !created,
+      count,
+      message: created
+        ? "You’re in! Welcome to the list — good things are coming your way."
+        : "You’re already on the list — we’ve got you covered.",
+    });
+  })
+);
+
+/** POST /contact — message from the contact page. */
+apiRouter.post(
+  "/contact",
+  contactLimiter,
+  rejectHoneypot,
+  asyncHandler(async (req, res) => {
+    const parsed = contactSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const saved = await createContactMessage(parsed.data);
+    logger.info("Contact message received", { id: saved.id });
+
+    res.status(201).json({
+      success: true,
+      message:
+        "Message sent! Thanks for reaching out — we’ll get back to you soon.",
+    });
+  })
+);
+
+/** GET /admin/contact-messages — inbox for the admin portal. */
+apiRouter.get(
+  "/admin/contact-messages",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const messages = await listContactMessages(200);
+    res.json({ success: true, count: messages.length, messages });
   })
 );

@@ -108,6 +108,39 @@ export const PASSWORD_RULES = [
   "At least one special character (!@#$%^&* etc.)",
 ];
 
+/** Mailing-list opt-in from the popup / footer. */
+export const newsletterSubscribeSchema = z
+  .object({
+    email: emailField,
+    // Honeypot — must be empty/omitted.
+    website: z.string().max(0).optional(),
+  })
+  .strict();
+
+/** Contact page message. */
+export const contactSchema = z
+  .object({
+    name: nameField,
+    email: emailField,
+    message: z
+      .string()
+      .transform((value) =>
+        value
+          .normalize("NFKC")
+          .replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g, "")
+          .trim()
+      )
+      .pipe(
+        z
+          .string()
+          .min(1, "Please write a message")
+          .max(2000, "Message is too long (2000 characters max)")
+      ),
+    // Honeypot — must be empty/omitted.
+    website: z.string().max(0).optional(),
+  })
+  .strict();
+
 export const lookupQuerySchema = z
   .object({
     angel_name: z.string().trim().max(120).optional(),

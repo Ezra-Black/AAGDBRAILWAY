@@ -96,6 +96,14 @@ app.get("/form", (_req, res) => {
   res.sendFile(path.join(publicDir, "form.html"));
 });
 
+app.get("/about", (_req, res) => {
+  res.sendFile(path.join(publicDir, "about.html"));
+});
+
+app.get("/contact", (_req, res) => {
+  res.sendFile(path.join(publicDir, "contact.html"));
+});
+
 app.get("/admin", (_req, res) => {
   res.redirect(302, "/admin/");
 });

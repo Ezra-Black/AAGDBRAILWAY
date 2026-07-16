@@ -36,6 +36,9 @@ Migrations run automatically on app boot.
 |--------|------|---------|
 | `GET` | `/graphics` | Active graphic dropdown options from DB |
 | `POST` | `/submit` | `{ "real_name", "angel_name", "email", "graphic_code" }` → create entry (`status: pending`) |
+| `POST` | `/newsletter/subscribe` | `{ "email" }` → mailing-list opt-in (popup / footer forms) |
+| `POST` | `/contact` | `{ "name", "email", "message" }` → save a contact-page message |
+| `GET` | `/admin/contact-messages` | Contact inbox (admin session required) |
 | `GET` | `/entries` | List entries (`?limit=&offset=`) |
 | `GET` | `/pending` | Unprocessed entries (oldest first) — **for automation** |
 | `GET` | `/entry/:id` | Fetch by UUID |
@@ -173,7 +176,13 @@ LIMIT 50;
 ## Project layout
 
 ```
-├── public/index.html      # Form (Tailwind CDN)
+├── public/
+│   ├── index.html         # Home (hero, counter, mailing list)
+│   ├── about.html         # About us
+│   ├── contact.html       # Contact form
+│   ├── form.html          # Request form
+│   ├── admin/             # Admin login + portal
+│   └── assets/            # Shared design system (site.css, site.js + opt-in popup)
 ├── src/
 │   ├── index.ts           # Express app
 │   ├── routes.ts          # REST endpoints
@@ -182,7 +191,9 @@ LIMIT 50;
 │   └── db/
 │       ├── pool.ts
 │       ├── migrate.ts
-│       └── entries.ts
+│       ├── entries.ts
+│       ├── contact.ts
+│       └── stats.ts
 ├── scripts/poll_pending.py
 ├── railway.json
 ├── Procfile

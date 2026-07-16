@@ -31,3 +31,35 @@ export async function bumpNewsletterCount(): Promise<{
     added,
   };
 }
+
+/**
+ * Save a real mailing-list opt-in. Returns whether the email was newly added,
+ * and bumps the public counter by 1 for genuine signups only.
+ */
+export async function subscribeNewsletter(
+  email: string
+): Promise<{ created: boolean; count: number }> {
+  const insert = await query(
+    `INSERT INTO newsletter_subscribers (email)
+     VALUES ($1)
+     ON CONFLICT ((lower(email))) DO NOTHING
+     RETURNING id`,
+    [email]
+  );
+  const created = (insert.rowCount ?? 0) > 0;
+
+  if (created) {
+    const bump = await query(
+      `INSERT INTO site_stats (key, value, updated_at)
+       VALUES ($1, 56, NOW())
+       ON CONFLICT (key) DO UPDATE
+         SET value = site_stats.value + 1,
+             updated_at = NOW()
+       RETURNING value`,
+      [NEWSLETTER_KEY]
+    );
+    return { created, count: Number(bump.rows[0].value) };
+  }
+
+  return { created, count: await getNewsletterCount() };
+}
