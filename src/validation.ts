@@ -141,6 +141,18 @@ export const contactSchema = z
   })
   .strict();
 
+/** Facebook client access token from the JS SDK. */
+export const facebookAuthSchema = z
+  .object({
+    access_token: z
+      .string()
+      .trim()
+      .min(20, "Invalid token")
+      .max(1024, "Invalid token")
+      .refine((v) => /^[A-Za-z0-9._-]+$/.test(v), "Invalid token"),
+  })
+  .strict();
+
 export const lookupQuerySchema = z
   .object({
     angel_name: z.string().trim().max(120).optional(),

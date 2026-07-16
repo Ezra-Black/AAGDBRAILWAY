@@ -114,6 +114,18 @@ export async function migrate(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_contact_messages_created_at
       ON contact_messages (created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS facebook_users (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      fb_user_id    TEXT NOT NULL UNIQUE,
+      name          TEXT,
+      email         TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_facebook_users_email
+      ON facebook_users (lower(email));
   `);
 
   await query(

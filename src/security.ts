@@ -70,6 +70,18 @@ export const newsletterSubscribeLimiter = rateLimit({
   },
 });
 
+/** Facebook auth exchanges — bounded per IP. */
+export const facebookAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: envInt("FACEBOOK_RATE_MAX", 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many attempts, please try again later",
+  },
+});
+
 /** Contact form — a few messages per IP per window. */
 export const contactLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

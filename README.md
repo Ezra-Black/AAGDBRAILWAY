@@ -37,8 +37,30 @@ Migrations run automatically on app boot.
 | `GET` | `/graphics` | Active graphic dropdown options from DB |
 | `POST` | `/submit` | `{ "real_name", "angel_name", "email", "graphic_code" }` → create entry (`status: pending`) |
 | `POST` | `/newsletter/subscribe` | `{ "email" }` → mailing-list opt-in (popup / footer forms) |
-| `POST` | `/contact` | `{ "name", "email", "message" }` → save a contact-page message |
+| `POST` | `/contact` | `{ "name", "email", "message" }` → save message + forward to the ProtonMail inbox |
 | `GET` | `/admin/contact-messages` | Contact inbox (admin session required) |
+| `GET` | `/auth/facebook/config` | Whether Facebook quick sign-in is enabled (+ app id) |
+| `POST` | `/auth/facebook` | `{ "access_token" }` → verify with Facebook, store email securely |
+
+### Facebook quick sign-in
+
+Set `FB_APP_ID` and `FB_APP_SECRET` to enable it. When a visitor lands on the
+site with an active Facebook session in their browser, they get a one-tap
+"Continue with Facebook" prompt that requests their **email** permission. The
+popup tells them plainly: the email is stored securely in our database and
+used for business purposes only. Tokens are verified server-side with the
+Graph API (`debug_token`) before anything is saved to `facebook_users`.
+Without the env vars the feature is fully disabled — no SDK is loaded.
+
+### Contact → ProtonMail
+
+Contact-page messages are always stored in `contact_messages`. When SMTP is
+configured (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, optional `SMTP_PORT` /
+`SMTP_FROM`), each message is also emailed to `CONTACT_EMAIL_TO`
+(default **aaggraphics@protonmail.com**) with the sender set as reply-to.
+ProtonMail doesn't accept direct SMTP logins on free plans — point the SMTP
+vars at Proton Mail Bridge, a Proton SMTP token (paid plans), or any
+transactional relay (Resend, Mailgun, SendGrid, …).
 | `GET` | `/entries` | List entries (`?limit=&offset=`) |
 | `GET` | `/pending` | Unprocessed entries (oldest first) — **for automation** |
 | `GET` | `/entry/:id` | Fetch by UUID |
