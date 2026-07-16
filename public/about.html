@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About Us — Audrey’s Angel Graphics</title>
+    <meta
+      name="description"
+      content="The story behind Audrey’s Angel Graphics — why we make custom angel-name art, and what we believe in."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              dusk: "#0a0806",
+              honey: "#f0c45c",
+              cream: "#fff6e4",
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/site.css" />
+  </head>
+  <body>
+    <div class="orb" style="width:300px;height:300px;background:#f0c45c;top:12%;right:6%;opacity:0.14"></div>
+    <div class="orb" style="width:320px;height:320px;background:#e8a838;bottom:12%;left:4%;opacity:0.1;animation-delay:1.4s"></div>
+
+    <!-- Navigation -->
+    <header class="fixed inset-x-0 top-0 z-40 px-4 pt-4">
+      <nav class="glass-nav mx-auto flex max-w-5xl items-center justify-between rounded-full px-5 py-3">
+        <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-wide" style="color:var(--cream);text-decoration:none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" fill="#f0c45c" />
+          </svg>
+          Audrey’s Angel Graphics
+        </a>
+        <div class="hidden items-center gap-7 text-sm sm:flex">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link active">About</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta">Request yours</a>
+        </div>
+        <button
+          id="menu-toggle"
+          type="button"
+          class="sm:hidden"
+          aria-label="Open menu"
+          aria-expanded="false"
+          style="background:none;border:0;color:var(--cream);cursor:pointer;padding:0.25rem"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+      </nav>
+      <div id="mobile-menu" class="mobile-menu glass-nav mx-auto mt-2 max-w-5xl rounded-3xl p-5 sm:hidden">
+        <div class="flex flex-col gap-4 text-sm">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link active">About</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta justify-center">Request yours</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="relative z-10 mx-auto max-w-4xl px-5 pb-20 pt-36 sm:pt-44">
+      <!-- Hero -->
+      <section class="reveal text-center">
+        <p class="eyebrow">About us</p>
+        <h1 class="headline mt-5 text-4xl font-bold text-cream sm:text-6xl">
+          Every angel name<br />
+          has a <span class="gold-text">story</span>.
+        </h1>
+        <p class="mx-auto mt-6 max-w-2xl text-base font-light leading-relaxed text-cream/60 sm:text-lg">
+          Audrey’s Angel Graphics began with a simple idea: the names we carry
+          in our hearts deserve to be seen — beautifully, warmly, and in a way
+          that feels unmistakably ours.
+        </p>
+      </section>
+
+      <!-- Story -->
+      <section class="reveal mt-20" style="--reveal-delay:0.1s">
+        <div class="glass-panel rounded-[2rem] px-6 py-12 sm:px-12">
+          <p class="eyebrow">Our story</p>
+          <div class="mt-6 space-y-5 text-[15px] font-light leading-relaxed text-cream/65">
+            <p>
+              What started as a few pieces made for friends grew into something
+              bigger the moment we saw what a name rendered in light could mean
+              to someone. An angel name isn’t just a nickname — it’s an
+              identity, a memory, sometimes a tribute.
+            </p>
+            <p>
+              So we built a little studio around that feeling. You tell us your
+              real name and your angel name, choose a graphic style from our
+              collection, and we take it from there — composing soft gold
+              light, winged silhouettes, and celestial details around the name
+              that matters to you.
+            </p>
+            <p>
+              Every request is reviewed and crafted personally. No bulk
+              exports, no cookie-cutter templates — just care, one name at a
+              time.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Values -->
+      <section class="mt-20">
+        <div class="reveal text-center">
+          <p class="eyebrow">What we believe</p>
+          <h2 class="headline mt-4 text-3xl font-semibold text-cream sm:text-4xl">
+            Small studio. Big care.
+          </h2>
+        </div>
+        <div class="mt-12 grid gap-5 sm:grid-cols-3">
+          <div class="reveal glass-card p-7" style="--reveal-delay:0.05s">
+            <div class="flex h-11 w-11 items-center justify-center rounded-2xl" style="background:rgba(240,196,92,0.12);border:1px solid rgba(240,196,92,0.25)">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f0c45c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 21s-7-4.6-9.5-9A5.5 5.5 0 0 1 12 6.7 5.5 5.5 0 0 1 21.5 12C19 16.4 12 21 12 21z" />
+              </svg>
+            </div>
+            <h3 class="mt-5 text-lg font-semibold text-cream">Personal, always</h3>
+            <p class="mt-2 text-sm font-light leading-relaxed text-cream/55">
+              A human reads every request. Your name is treated like it belongs
+              to someone — because it does.
+            </p>
+          </div>
+          <div class="reveal glass-card p-7" style="--reveal-delay:0.15s">
+            <div class="flex h-11 w-11 items-center justify-center rounded-2xl" style="background:rgba(240,196,92,0.12);border:1px solid rgba(240,196,92,0.25)">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f0c45c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.9 5.6L20 10l-6.1 1.4L12 17l-1.9-5.6L4 10l6.1-1.4L12 3z" />
+              </svg>
+            </div>
+            <h3 class="mt-5 text-lg font-semibold text-cream">Craft over volume</h3>
+            <p class="mt-2 text-sm font-light leading-relaxed text-cream/55">
+              We’d rather make fewer pieces beautifully than many pieces
+              quickly. The glow is in the details.
+            </p>
+          </div>
+          <div class="reveal glass-card p-7" style="--reveal-delay:0.25s">
+            <div class="flex h-11 w-11 items-center justify-center rounded-2xl" style="background:rgba(240,196,92,0.12);border:1px solid rgba(240,196,92,0.25)">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f0c45c" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                <path d="M3.5 7l8.5 6 8.5-6" />
+              </svg>
+            </div>
+            <h3 class="mt-5 text-lg font-semibold text-cream">Straight to you</h3>
+            <p class="mt-2 text-sm font-light leading-relaxed text-cream/55">
+              When your piece is ready, it arrives in your inbox — no accounts,
+              no hoops, no fuss.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA -->
+      <section class="reveal mt-20">
+        <div class="glass-panel rounded-[2rem] px-6 py-14 text-center sm:px-12">
+          <h2 class="headline text-3xl font-semibold text-cream sm:text-4xl">
+            Want to see your name in gold?
+          </h2>
+          <p class="mx-auto mt-4 max-w-xl text-sm font-light leading-relaxed text-cream/55 sm:text-base">
+            It takes about a minute to request yours. We’ll handle the rest.
+          </p>
+          <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <a href="/form" class="btn-primary">Request your graphic</a>
+            <a href="/contact" class="btn-secondary">Say hello first</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 mt-8 px-5 pb-10">
+      <div class="mx-auto max-w-5xl">
+        <hr class="divider-glow" />
+        <div class="mt-8 flex flex-wrap items-center justify-between gap-3 text-[11px] text-cream/30">
+          <p>© <span id="year"></span> Audrey’s Angel Graphics</p>
+          <div class="flex items-center gap-4">
+            <a href="/" class="footer-link" style="font-size:11px">Home</a>
+            <a href="/form" class="footer-link" style="font-size:11px">Request form</a>
+            <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
+            <a href="/admin/login" class="footer-link" style="font-size:11px">Admin</a>
+          </div>
+          <p>
+            built by
+            <a href="https://buymeacoffee.com/ezrablack" target="_blank" rel="noopener noreferrer" class="underline decoration-honey/30 underline-offset-2 hover:text-cream/50">ezra black</a>
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <script src="/assets/site.js"></script>
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+    </script>
+  </body>
+</html>

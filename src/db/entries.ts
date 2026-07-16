@@ -79,6 +79,9 @@ export interface AdminAngelGroup {
   emails: string[];
   entry_ids: string[];
   has_pending: boolean;
+  /** True when this angel name has more than one submission on file. */
+  duplicate: boolean;
+  submission_count: number;
   latest_at: Date;
 }
 
@@ -142,12 +145,16 @@ export async function listAngelGroupsForAdmin(
         emails: [],
         entry_ids: [],
         has_pending: false,
+        duplicate: false,
+        submission_count: 0,
         latest_at: row.created_at,
       };
       groups.set(key, group);
     }
 
     group.entry_ids.push(row.id);
+    group.submission_count = group.entry_ids.length;
+    group.duplicate = group.submission_count > 1;
     if (row.status === "pending" || row.status === "processing") {
       group.has_pending = true;
     }

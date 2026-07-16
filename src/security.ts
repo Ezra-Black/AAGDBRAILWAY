@@ -58,6 +58,30 @@ export const newsletterVisitLimiter = rateLimit({
   },
 });
 
+/** Mailing-list opt-ins — generous but bounded per IP. */
+export const newsletterSubscribeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: envInt("NEWSLETTER_RATE_MAX", 6),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many signup attempts. Please try again in a little while.",
+  },
+});
+
+/** Contact form — a few messages per IP per window. */
+export const contactLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: envInt("CONTACT_RATE_MAX", 5),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many messages from this device. Please wait and try again.",
+  },
+});
+
 /** Read/automation endpoints — keep enumeration expensive. */
 export const readLimiter = rateLimit({
   windowMs: 60 * 1000,

@@ -4,21 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Request Form — Audrey’s Angel Graphics</title>
+    <meta
+      name="description"
+      content="Request your custom angel-name graphic. Share your names, pick a style, and we’ll take it from there."
+    />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             colors: {
-              dusk: "#1a1208",
+              dusk: "#0a0806",
               honey: "#f0c45c",
-              amberglow: "#e8a838",
-              golddeep: "#9a6b1f",
-              cream: "#fff4d6",
-            },
-            fontFamily: {
-              display: ['"Playfair Display"', "Georgia", "serif"],
-              body: ['"Outfit"', "system-ui", "sans-serif"],
+              cream: "#fff6e4",
             },
           },
         },
@@ -27,181 +25,69 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,700;1,500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <style>
-      html,
-      body {
-        min-height: 100%;
-      }
-      body {
-        margin: 0;
-        background: #120c06;
-        color: #fff4d6;
-        overflow-x: hidden;
-      }
-      #webgl {
-        position: fixed;
-        inset: 0;
-        z-index: 0;
-        pointer-events: none;
-      }
-      .page {
-        position: relative;
-        z-index: 1;
-      }
-      .glass {
-        background: linear-gradient(
-          145deg,
-          rgba(255, 214, 120, 0.14),
-          rgba(40, 24, 8, 0.55) 45%,
-          rgba(20, 12, 4, 0.72)
-        );
-        border: 1px solid rgba(240, 196, 92, 0.35);
-        box-shadow:
-          0 0 0 1px rgba(255, 220, 140, 0.08) inset,
-          0 25px 60px rgba(0, 0, 0, 0.45),
-          0 0 80px rgba(232, 168, 56, 0.12);
-        backdrop-filter: blur(18px);
-      }
-      .field input,
-      .field select {
-        background: rgba(18, 10, 4, 0.55);
-        border: 1px solid rgba(240, 196, 92, 0.28);
-        color: #fff4d6;
-        transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
-      }
-      .field input::placeholder {
-        color: rgba(255, 244, 214, 0.35);
-      }
-      .field input:focus,
-      .field select:focus {
-        outline: none;
-        border-color: rgba(240, 196, 92, 0.75);
-        box-shadow: 0 0 0 3px rgba(232, 168, 56, 0.2);
-      }
-      .field select option {
-        background: #1a1208;
-        color: #fff4d6;
-      }
-      .gold-btn {
-        background: linear-gradient(120deg, #f6d56a, #e8a838 45%, #c4841f);
-        color: #1a1208;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        box-shadow: 0 10px 30px rgba(232, 168, 56, 0.35);
-        transition: transform 0.15s, filter 0.15s, box-shadow 0.15s;
-      }
-      .gold-btn:hover:not(:disabled) {
-        filter: brightness(1.06);
-        transform: translateY(-1px);
-        box-shadow: 0 14px 36px rgba(232, 168, 56, 0.45);
-      }
-      .gold-btn:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
-      }
-      @keyframes driftIn {
-        from {
-          opacity: 0;
-          transform: translateY(18px) rotate(-0.4deg);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0) rotate(0);
-        }
-      }
-      @keyframes shimmer {
-        0%,
-        100% {
-          background-position: 0% 50%;
-        }
-        50% {
-          background-position: 100% 50%;
-        }
-      }
-      .title-shine {
-        background: linear-gradient(
-          100deg,
-          #9a6b1f 0%,
-          #f6d56a 28%,
-          #fff4d6 50%,
-          #f0c45c 72%,
-          #c4841f 100%
-        );
-        background-size: 200% auto;
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        animation: shimmer 7s ease-in-out infinite;
-      }
-      .animate-in {
-        animation: driftIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
-      }
-      .stagger-2 {
-        animation-delay: 0.12s;
-      }
-      .stagger-3 {
-        animation-delay: 0.22s;
-      }
-      .vignette {
-        pointer-events: none;
-        position: fixed;
-        inset: 0;
-        z-index: 0;
-        background:
-          radial-gradient(ellipse 70% 55% at 50% 20%, rgba(240, 196, 92, 0.12), transparent 55%),
-          radial-gradient(ellipse 90% 70% at 50% 100%, rgba(0, 0, 0, 0.55), transparent 60%);
-      }
-      .glass-nav {
-        background: rgba(18, 14, 10, 0.45);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        backdrop-filter: saturate(160%) blur(22px);
-        -webkit-backdrop-filter: saturate(160%) blur(22px);
-      }
-      .nav-link {
-        color: rgba(255, 244, 214, 0.55);
-        transition: color 0.3s ease;
-      }
-      .nav-link:hover { color: rgba(255, 244, 214, 0.95); }
-      .nav-link.active { color: #fff4d6; }
-    </style>
+    <link rel="stylesheet" href="/assets/site.css" />
   </head>
-  <body class="font-body antialiased">
-    <canvas id="webgl" aria-hidden="true"></canvas>
-    <div class="vignette" aria-hidden="true"></div>
+  <body>
+    <div class="orb" style="width:300px;height:300px;background:#f0c45c;top:8%;left:8%;opacity:0.15"></div>
+    <div class="orb" style="width:340px;height:340px;background:#e8a838;bottom:10%;right:4%;opacity:0.1;animation-delay:1.2s"></div>
 
-    <header class="page fixed inset-x-0 top-0 z-40 px-4 pt-4">
-      <nav class="glass-nav mx-auto flex max-w-xl items-center justify-between rounded-full px-5 py-3">
-        <a href="/" class="text-sm font-medium tracking-wide text-cream/90">
+    <!-- Navigation -->
+    <header class="fixed inset-x-0 top-0 z-40 px-4 pt-4">
+      <nav class="glass-nav mx-auto flex max-w-5xl items-center justify-between rounded-full px-5 py-3">
+        <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-wide" style="color:var(--cream);text-decoration:none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" fill="#f0c45c" />
+          </svg>
           Audrey’s Angel Graphics
         </a>
-        <div class="flex items-center gap-6 text-sm">
+        <div class="hidden items-center gap-7 text-sm sm:flex">
           <a href="/" class="nav-link">Home</a>
-          <a href="/form" class="nav-link active">Form</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta">Request yours</a>
         </div>
+        <button
+          id="menu-toggle"
+          type="button"
+          class="sm:hidden"
+          aria-label="Open menu"
+          aria-expanded="false"
+          style="background:none;border:0;color:var(--cream);cursor:pointer;padding:0.25rem"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
       </nav>
+      <div id="mobile-menu" class="mobile-menu glass-nav mx-auto mt-2 max-w-5xl rounded-3xl p-5 sm:hidden">
+        <div class="flex flex-col gap-4 text-sm">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta justify-center">Request yours</a>
+        </div>
+      </div>
     </header>
 
-    <main class="page mx-auto flex min-h-screen max-w-xl flex-col justify-center px-5 pb-14 pt-28 sm:px-6">
-      <header class="mb-9 animate-in text-left sm:mb-11">
-        <p class="mb-3 text-xs font-medium uppercase tracking-[0.28em] text-honey/70">
-          Audrey’s Angel Graphics
-        </p>
-        <h1 class="font-display title-shine text-4xl font-bold leading-[1.1] sm:text-5xl">
-          Audreys Angel Graphics<br class="hidden sm:block" />
-          Request Form
+    <main class="relative z-10 mx-auto max-w-xl px-5 pb-20 pt-36 sm:pt-44">
+      <header class="reveal mb-10 text-center">
+        <p class="eyebrow">Request form</p>
+        <h1 class="headline mt-4 text-4xl font-bold text-cream sm:text-5xl">
+          Let’s make yours.
         </h1>
-        <p class="mt-4 max-w-md text-base font-light leading-relaxed text-cream/70">
-          Drop your names, email, and which graphic you want worked on.
+        <p class="mx-auto mt-4 max-w-md text-base font-light leading-relaxed text-cream/60">
+          Drop your names, your email, and the graphic you’d like worked on.
           We’ll pick it up from there.
         </p>
       </header>
 
       <form
         id="submit-form"
-        class="glass animate-in stagger-2 space-y-5 rounded-[1.75rem] p-6 sm:p-8"
+        class="glass-panel reveal space-y-5 rounded-[1.75rem] p-6 sm:p-8"
+        style="--reveal-delay:0.1s"
         novalidate
       >
         <!-- Honeypot: leave empty. Hidden from real users. -->
@@ -210,19 +96,11 @@
           style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden"
         >
           <label for="website">Website</label>
-          <input
-            id="website"
-            name="website"
-            type="text"
-            tabindex="-1"
-            autocomplete="off"
-          />
+          <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
         </div>
 
         <div class="field">
-          <label for="real_name" class="mb-1.5 block text-sm text-cream/80">
-            Real Name
-          </label>
+          <label for="real_name">Real name</label>
           <input
             id="real_name"
             name="real_name"
@@ -231,14 +109,11 @@
             maxlength="120"
             required
             placeholder="Who you are IRL"
-            class="w-full rounded-2xl px-4 py-3 text-[15px]"
           />
         </div>
 
         <div class="field">
-          <label for="angel_name" class="mb-1.5 block text-sm text-cream/80">
-            Angel Name
-          </label>
+          <label for="angel_name">Angel name</label>
           <input
             id="angel_name"
             name="angel_name"
@@ -246,14 +121,11 @@
             maxlength="120"
             required
             placeholder="Your angel name"
-            class="w-full rounded-2xl px-4 py-3 text-[15px]"
           />
         </div>
 
         <div class="field">
-          <label for="email" class="mb-1.5 block text-sm text-cream/80">
-            Email
-          </label>
+          <label for="email">Email</label>
           <input
             id="email"
             name="email"
@@ -262,29 +134,21 @@
             maxlength="254"
             required
             placeholder="you@email.com"
-            class="w-full rounded-2xl px-4 py-3 text-[15px]"
           />
         </div>
 
         <div class="field">
-          <label for="graphic_code" class="mb-1.5 block text-sm text-cream/80">
-            Which graphic?
-          </label>
-          <select
-            id="graphic_code"
-            name="graphic_code"
-            required
-            class="w-full rounded-2xl px-4 py-3 text-[15px]"
-          >
+          <label for="graphic_code">Which graphic?</label>
+          <select id="graphic_code" name="graphic_code" required>
             <option value="">Loading options…</option>
           </select>
           <p class="mt-1.5 text-xs text-cream/45">
-            Codes come from the live database — add more anytime.
+            Styles come straight from our live collection — new ones appear as they’re added.
           </p>
         </div>
 
-        <button type="submit" id="submit-btn" class="gold-btn mt-2 w-full rounded-2xl px-4 py-3.5 text-sm uppercase">
-          Send Request
+        <button type="submit" id="submit-btn" class="btn-primary mt-2 w-full">
+          Send request
         </button>
 
         <div
@@ -292,177 +156,39 @@
           role="status"
           aria-live="polite"
           hidden
-          class="rounded-2xl px-4 py-3.5 text-sm leading-relaxed animate-in"
+          class="rounded-2xl px-4 py-3.5 text-sm leading-relaxed"
         ></div>
       </form>
 
-      <p class="animate-in stagger-3 mt-8 text-center text-xs text-cream/40">
-        Requests land as pending for the graphics pipeline.
-      </p>
-
-      <div class="mt-6 text-center animate-in stagger-3">
-        <a
-          href="/admin/login"
-          class="inline-block rounded-full border border-honey/25 px-4 py-1.5 text-xs tracking-wide text-cream/50 transition hover:border-honey/50 hover:text-cream/80"
-        >
-          Admin
-        </a>
-      </div>
-
-      <p class="mt-8 text-center text-xs text-cream/35 animate-in stagger-3">
-        built by
-        <a
-          href="https://buymeacoffee.com/ezrablack"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="text-cream/55 underline decoration-honey/40 underline-offset-2 transition hover:text-honey"
-        >
-          ezra black
-        </a>
+      <p class="reveal mt-8 text-center text-xs text-cream/40" style="--reveal-delay:0.2s">
+        Requests land as pending and are handled personally, in order.
       </p>
     </main>
 
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
-        }
-      }
-    </script>
-    <script type="module">
-      import * as THREE from "three";
+    <!-- Footer -->
+    <footer class="relative z-10 mt-8 px-5 pb-10">
+      <div class="mx-auto max-w-5xl">
+        <hr class="divider-glow" />
+        <div class="mt-8 flex flex-wrap items-center justify-between gap-3 text-[11px] text-cream/30">
+          <p>© <span id="year"></span> Audrey’s Angel Graphics</p>
+          <div class="flex items-center gap-4">
+            <a href="/" class="footer-link" style="font-size:11px">Home</a>
+            <a href="/about" class="footer-link" style="font-size:11px">About</a>
+            <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
+            <a href="/admin/login" class="footer-link" style="font-size:11px">Admin</a>
+          </div>
+          <p>
+            built by
+            <a href="https://buymeacoffee.com/ezrablack" target="_blank" rel="noopener noreferrer" class="underline decoration-honey/30 underline-offset-2 hover:text-cream/50">ezra black</a>
+          </p>
+        </div>
+      </div>
+    </footer>
 
-      const canvas = document.getElementById("webgl");
-      const renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: true,
-        alpha: true,
-        powerPreference: "high-performance",
-      });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setClearColor(0x000000, 0);
-
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(
-        55,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        100
-      );
-      camera.position.z = 8;
-
-      const rays = new THREE.Group();
-      scene.add(rays);
-
-      function makeRay(length, width, color, opacity) {
-        const geo = new THREE.PlaneGeometry(width, length);
-        const mat = new THREE.MeshBasicMaterial({
-          color,
-          transparent: true,
-          opacity,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-        });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.y = length * 0.35;
-        return mesh;
-      }
-
-      const rayConfigs = [
-        { len: 9, w: 0.08, color: 0xffe7a0, opacity: 0.35, angle: -0.55, drift: 0.12 },
-        { len: 11, w: 0.12, color: 0xf0c45c, opacity: 0.28, angle: -0.22, drift: 0.08 },
-        { len: 10, w: 0.06, color: 0xfff4d6, opacity: 0.4, angle: 0.05, drift: 0.15 },
-        { len: 12, w: 0.1, color: 0xe8a838, opacity: 0.22, angle: 0.32, drift: 0.1 },
-        { len: 8.5, w: 0.05, color: 0xffd978, opacity: 0.45, angle: 0.58, drift: 0.18 },
-        { len: 10.5, w: 0.09, color: 0xd4a017, opacity: 0.2, angle: -0.78, drift: 0.09 },
-        { len: 7.5, w: 0.04, color: 0xfff0c0, opacity: 0.38, angle: 0.85, drift: 0.14 },
-        { len: 9.5, w: 0.07, color: 0xf6d56a, opacity: 0.26, angle: -1.05, drift: 0.11 },
-      ];
-
-      const rayMeshes = rayConfigs.map((cfg) => {
-        const wrap = new THREE.Group();
-        wrap.rotation.z = cfg.angle;
-        const mesh = makeRay(cfg.len, cfg.w, cfg.color, cfg.opacity);
-        wrap.add(mesh);
-        rays.add(wrap);
-        return { wrap, mesh, cfg, phase: Math.random() * Math.PI * 2 };
-      });
-
-      // Soft gold bloom orb near top
-      const orbGeo = new THREE.CircleGeometry(2.2, 48);
-      const orbMat = new THREE.MeshBasicMaterial({
-        color: 0xf0c45c,
-        transparent: true,
-        opacity: 0.12,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const orb = new THREE.Mesh(orbGeo, orbMat);
-      orb.position.set(0, 3.2, -1);
-      scene.add(orb);
-
-      // Floating light motes
-      const moteCount = 60;
-      const motePositions = new Float32Array(moteCount * 3);
-      const motePhases = [];
-      for (let i = 0; i < moteCount; i++) {
-        motePositions[i * 3] = (Math.random() - 0.5) * 14;
-        motePositions[i * 3 + 1] = (Math.random() - 0.5) * 10;
-        motePositions[i * 3 + 2] = (Math.random() - 0.5) * 4;
-        motePhases.push(Math.random() * Math.PI * 2);
-      }
-      const moteGeo = new THREE.BufferGeometry();
-      moteGeo.setAttribute("position", new THREE.BufferAttribute(motePositions, 3));
-      const moteMat = new THREE.PointsMaterial({
-        color: 0xffe7a0,
-        size: 0.06,
-        transparent: true,
-        opacity: 0.55,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        sizeAttenuation: true,
-      });
-      const motes = new THREE.Points(moteGeo, moteMat);
-      scene.add(motes);
-
-      function onResize() {
-        const w = window.innerWidth;
-        const h = window.innerHeight;
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-        renderer.setSize(w, h);
-      }
-      window.addEventListener("resize", onResize);
-
-      const clock = new THREE.Clock();
-      function animate() {
-        const t = clock.getElapsedTime();
-        rayMeshes.forEach(({ wrap, mesh, cfg, phase }, i) => {
-          wrap.rotation.z = cfg.angle + Math.sin(t * cfg.drift + phase) * 0.06;
-          mesh.material.opacity =
-            cfg.opacity * (0.7 + 0.3 * Math.sin(t * 0.7 + phase + i));
-          mesh.scale.x = 0.85 + 0.2 * Math.sin(t * 0.5 + phase);
-        });
-        orb.material.opacity = 0.08 + 0.05 * Math.sin(t * 0.6);
-        orb.scale.setScalar(1 + 0.08 * Math.sin(t * 0.4));
-
-        const pos = moteGeo.attributes.position.array;
-        for (let i = 0; i < moteCount; i++) {
-          pos[i * 3 + 1] += Math.sin(t * 0.35 + motePhases[i]) * 0.002;
-          pos[i * 3] += Math.cos(t * 0.2 + motePhases[i]) * 0.0015;
-        }
-        moteGeo.attributes.position.needsUpdate = true;
-
-        rays.rotation.z = Math.sin(t * 0.05) * 0.04;
-        renderer.render(scene, camera);
-        requestAnimationFrame(animate);
-      }
-      animate();
-    </script>
-
+    <script src="/assets/site.js"></script>
     <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+
       const form = document.getElementById("submit-form");
       const btn = document.getElementById("submit-btn");
       const message = document.getElementById("message");
@@ -472,7 +198,7 @@
         message.hidden = false;
         message.textContent = text;
         message.className =
-          "rounded-2xl px-4 py-3.5 text-sm leading-relaxed animate-in " +
+          "rounded-2xl px-4 py-3.5 text-sm leading-relaxed " +
           (ok
             ? "border border-emerald-400/40 bg-emerald-500/15 text-emerald-100"
             : "border border-rose-400/40 bg-rose-500/15 text-rose-100");
@@ -521,7 +247,7 @@
             graphicSelect.appendChild(opt);
             if (!keepMessage) {
               showMessage(
-                "No graphics available yet. In Postgres, check graphic_options has code, label, and active = true.",
+                "No graphics available yet — please check back soon.",
                 false
               );
             }
@@ -636,7 +362,7 @@
           showMessage("Network glitch. Try again in a sec.", false);
         } finally {
           btn.disabled = false;
-          btn.textContent = "Send Request";
+          btn.textContent = "Send request";
         }
       });
     </script>
