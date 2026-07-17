@@ -70,6 +70,18 @@ export const newsletterSubscribeLimiter = rateLimit({
   },
 });
 
+/** Shop checkout — creating payment intents costs money-adjacent resources. */
+export const checkoutLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: envInt("CHECKOUT_RATE_MAX", 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many checkout attempts. Please wait a moment and try again.",
+  },
+});
+
 /** Page-view beacons — cheap writes, but keep abuse bounded per IP. */
 export const trackLimiter = rateLimit({
   windowMs: 60 * 1000,

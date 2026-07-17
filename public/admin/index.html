@@ -205,6 +205,7 @@
       <nav class="mb-8 inline-flex items-center gap-1 rounded-full border border-white/10 p-1" style="background:rgba(255,255,255,0.03)">
         <button type="button" id="tab-dashboard" class="tab-btn active">Dashboard</button>
         <button type="button" id="tab-requests" class="tab-btn">Requests</button>
+        <button type="button" id="tab-orders" class="tab-btn">Orders</button>
       </nav>
 
       <!-- ═══════════ Dashboard view ═══════════ -->
@@ -453,6 +454,50 @@
         Tip: click <span class="text-amber-300">pending</span> to mark every claim for that angel name complete.
       </p>
       </div><!-- /view-requests -->
+
+      <!-- ═══════════ Orders view ═══════════ -->
+      <div id="view-orders" class="hidden">
+        <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-cream">Archive shop orders</h2>
+            <p class="mt-1 text-xs text-cream/45">
+              $5 archive graphic purchases — paid orders are ready to be worked on.
+            </p>
+          </div>
+        </div>
+
+        <section class="mb-6 grid grid-cols-3 gap-3">
+          <div class="stat-card">
+            <p class="col-header">Paid orders</p>
+            <p id="o-paid" class="mt-1.5 text-2xl font-bold text-emerald-300" style="letter-spacing:-0.03em">—</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">Revenue</p>
+            <p id="o-revenue" class="gold-text mt-1.5 text-2xl font-bold" style="letter-spacing:-0.03em">—</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">Incomplete</p>
+            <p id="o-pending" class="mt-1.5 text-2xl font-bold text-amber-300" style="letter-spacing:-0.03em">—</p>
+          </div>
+        </section>
+
+        <div class="glass-panel rounded-[1.5rem]">
+          <div class="hidden gap-4 border-b border-white/5 px-5 py-3.5 sm:grid sm:grid-cols-[0.9fr_1fr_1fr_1.3fr_0.6fr_0.6fr]">
+            <span class="col-header">Date</span>
+            <span class="col-header">Angel name</span>
+            <span class="col-header">Graphic</span>
+            <span class="col-header">Email</span>
+            <span class="col-header">Amount</span>
+            <span class="col-header">Status</span>
+          </div>
+          <div id="order-rows" class="divide-y divide-white/5"></div>
+        </div>
+
+        <p id="orders-empty" class="mt-6 hidden text-sm text-cream/40">
+          No orders yet — they’ll appear here the moment someone buys from the archive shop.
+        </p>
+        <p id="orders-error" class="mt-6 hidden text-sm text-rose-400"></p>
+      </div><!-- /view-orders -->
     </main>
 
     <script>
@@ -812,25 +857,113 @@
       const dashEmpty = document.getElementById("dash-empty");
       const viewDashboard = document.getElementById("view-dashboard");
       const viewRequests = document.getElementById("view-requests");
+      const viewOrders = document.getElementById("view-orders");
       const tabDashboard = document.getElementById("tab-dashboard");
       const tabRequests = document.getElementById("tab-requests");
+      const tabOrders = document.getElementById("tab-orders");
 
       let currentRange = 30;
       const charts = {};
+      let ordersLoaded = false;
+
+      const VIEW_TITLES = {
+        dashboard: "Dashboard",
+        requests: "Requests",
+        orders: "Orders",
+      };
 
       function switchView(view) {
-        const dash = view === "dashboard";
-        viewDashboard.classList.toggle("hidden", !dash);
-        viewRequests.classList.toggle("hidden", dash);
-        tabDashboard.classList.toggle("active", dash);
-        tabRequests.classList.toggle("active", !dash);
-        document.getElementById("page-title").textContent = dash
-          ? "Dashboard"
-          : "Requests";
+        viewDashboard.classList.toggle("hidden", view !== "dashboard");
+        viewRequests.classList.toggle("hidden", view !== "requests");
+        viewOrders.classList.toggle("hidden", view !== "orders");
+        tabDashboard.classList.toggle("active", view === "dashboard");
+        tabRequests.classList.toggle("active", view === "requests");
+        tabOrders.classList.toggle("active", view === "orders");
+        document.getElementById("page-title").textContent = VIEW_TITLES[view];
+        if (view === "orders" && !ordersLoaded) loadOrders();
       }
 
       tabDashboard.addEventListener("click", () => switchView("dashboard"));
       tabRequests.addEventListener("click", () => switchView("requests"));
+      tabOrders.addEventListener("click", () => switchView("orders"));
+
+      async function loadOrders() {
+        const rows = document.getElementById("order-rows");
+        const emptyEl = document.getElementById("orders-empty");
+        const errEl = document.getElementById("orders-error");
+        errEl.classList.add("hidden");
+        try {
+          const res = await fetch("/admin/purchases", { credentials: "include" });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            errEl.textContent = data.error || "Could not load orders";
+            errEl.classList.remove("hidden");
+            return;
+          }
+          ordersLoaded = true;
+          const purchases = data.purchases || [];
+
+          const paid = purchases.filter((p) => p.status === "paid");
+          const revenueCents = paid.reduce((s, p) => s + (p.amount_cents || 0), 0);
+          document.getElementById("o-paid").textContent = paid.length;
+          document.getElementById("o-revenue").textContent =
+            "$" + (revenueCents / 100).toLocaleString();
+          document.getElementById("o-pending").textContent =
+            purchases.length - paid.length;
+
+          rows.innerHTML = "";
+          emptyEl.classList.toggle("hidden", purchases.length > 0);
+
+          for (const p of purchases) {
+            const when = new Date(p.created_at);
+            const statusClass =
+              p.status === "paid"
+                ? "status-complete"
+                : p.status === "failed"
+                ? "dup-yes"
+                : "status-pending";
+            const row = document.createElement("div");
+            row.className =
+              "grid gap-2 px-5 py-4 text-sm sm:grid-cols-[0.9fr_1fr_1fr_1.3fr_0.6fr_0.6fr] sm:items-center";
+            row.innerHTML =
+              '<span class="text-cream/50">' +
+              when.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
+              " · " +
+              when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) +
+              "</span>" +
+              '<span class="font-medium text-cream">' +
+              escapeHtml(p.angel_name) +
+              "</span>" +
+              '<span class="text-cream/70">' +
+              escapeHtml(p.graphic_label || p.graphic_code) +
+              "</span>" +
+              '<span class="break-all text-cream/70">' +
+              escapeHtml(p.email) +
+              "</span>" +
+              '<span class="text-cream/70">$' +
+              (p.amount_cents / 100).toFixed(2).replace(/\.00$/, "") +
+              "</span>" +
+              '<span><span class="' +
+              statusClass +
+              '" style="pointer-events:none">' +
+              escapeHtml(p.status) +
+              "</span></span>" +
+              (p.note
+                ? '<p class="text-xs text-cream/45 sm:col-span-6" style="margin-top:0.2rem">Note: ' +
+                  escapeHtml(p.note) +
+                  "</p>"
+                : "");
+            rows.appendChild(row);
+          }
+        } catch {
+          errEl.textContent = "Network error loading orders";
+          errEl.classList.remove("hidden");
+        }
+      }
 
       document.querySelectorAll(".range-btn").forEach((btn) => {
         btn.addEventListener("click", () => {

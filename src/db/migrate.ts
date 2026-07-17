@@ -146,6 +146,54 @@ export async function migrate(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_page_views_path
       ON page_views (path);
+
+    -- The Archive: every graphic option ever offered (past and present).
+    -- Options removed from the request-form dropdown live on here, so the
+    -- shop can sell them as $5 archive graphics.
+    CREATE TABLE IF NOT EXISTS archive_graphics (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      code        TEXT NOT NULL UNIQUE,
+      label       TEXT NOT NULL,
+      active      BOOLEAN NOT NULL DEFAULT true,
+      sort_order  INT NOT NULL DEFAULT 0,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_archive_graphics_active
+      ON archive_graphics (active, sort_order);
+
+    CREATE TABLE IF NOT EXISTS purchases (
+      id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      angel_name                TEXT NOT NULL,
+      real_name                 TEXT NOT NULL,
+      email                     TEXT NOT NULL,
+      graphic_code              TEXT NOT NULL,
+      note                      TEXT,
+      amount_cents              INT NOT NULL,
+      currency                  TEXT NOT NULL DEFAULT 'usd',
+      stripe_payment_intent_id  TEXT UNIQUE,
+      status                    TEXT NOT NULL DEFAULT 'pending'
+                                CHECK (status IN ('pending', 'paid', 'failed')),
+      created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      metadata                  JSONB NOT NULL DEFAULT '{}'::jsonb
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_purchases_created_at
+      ON purchases (created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_purchases_status
+      ON purchases (status);
+  `);
+
+  // Keep the archive in sync: any option currently offered (or offered at any
+  // boot since this feature shipped) is recorded forever.
+  await query(`
+    INSERT INTO archive_graphics (code, label, sort_order)
+    SELECT code, label, COALESCE(sort_order, 0)
+    FROM graphic_options
+    WHERE code IS NOT NULL AND trim(code) <> ''
+    ON CONFLICT (code) DO NOTHING
   `);
 
   await query(

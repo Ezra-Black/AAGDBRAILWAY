@@ -141,6 +141,35 @@ export const contactSchema = z
   })
   .strict();
 
+/** Shop checkout — the $5 AAG Archive Graphic purchase. */
+export const shopCheckoutSchema = z
+  .object({
+    graphic_code: graphicCodeField,
+    angel_name: nameField,
+    real_name: nameField,
+    email: emailField,
+    note: z
+      .string()
+      .transform(sanitizeText)
+      .pipe(z.string().max(500, "Note is too long (500 characters max)"))
+      .optional(),
+    // Honeypot — must be empty/omitted.
+    website: z.string().max(0).optional(),
+  })
+  .strict();
+
+/** Server-side payment verification after Stripe confirms in the browser. */
+export const shopConfirmSchema = z
+  .object({
+    payment_intent_id: z
+      .string()
+      .trim()
+      .min(5)
+      .max(255)
+      .refine((v) => /^pi_[A-Za-z0-9_]+$/.test(v), "Invalid payment id"),
+  })
+  .strict();
+
 /** Anonymous page-view beacon — no PII, visitor_id is a random client UUID. */
 export const pageViewSchema = z
   .object({

@@ -25,6 +25,7 @@ import bcrypt from "bcryptjs";
 import { graphicCodeExists, listActiveGraphics, createGraphicOption, deleteGraphicOption, listAllGraphics } from "./db/graphics";
 import { logger } from "./logger";
 import {
+  checkoutLimiter,
   contactLimiter,
   facebookAuthLimiter,
   loginLimiter,
@@ -43,6 +44,23 @@ import {
 } from "./db/stats";
 import { createContactMessage, listContactMessages } from "./db/contact";
 import { getAnalyticsSummary, recordPageView } from "./db/analytics";
+import {
+  archiveGraphicOption,
+  createPurchase,
+  getArchiveGraphicByCode,
+  getPurchaseByIntent,
+  listArchiveGraphics,
+  listPurchasesForAdmin,
+  markPurchaseStatusByIntent,
+} from "./db/shop";
+import {
+  getStripe,
+  SHOP_CURRENCY,
+  SHOP_PRODUCT_NAME,
+  shopPriceCents,
+  stripeConfigured,
+  stripePublishableKey,
+} from "./stripe";
 import { upsertFacebookUser } from "./db/facebook";
 import {
   facebookAppId,
@@ -61,6 +79,8 @@ import {
   newsletterSubscribeSchema,
   pageViewSchema,
   PASSWORD_RULES,
+  shopCheckoutSchema,
+  shopConfirmSchema,
   statusSchema,
   submitSchema,
   uuidSchema,
@@ -266,6 +286,8 @@ apiRouter.post(
 
     try {
       const graphic = await createGraphicOption(parsed.data);
+      // Every option ever offered is tracked in the archive for the shop.
+      await archiveGraphicOption(graphic);
       logger.info("Admin created graphic option", {
         id: graphic.id,
         code: graphic.code,
@@ -652,6 +674,181 @@ apiRouter.post(
       message:
         "Message sent! Thanks for reaching out — we’ll get back to you soon.",
     });
+  })
+);
+
+/* ═══════════ Shop — the $5 AAG Archive Graphic ═══════════ */
+
+/** GET /shop/config — publishable key + price for the checkout page. */
+apiRouter.get(
+  "/shop/config",
+  readLimiter,
+  asyncHandler(async (_req, res) => {
+    if (!stripeConfigured()) {
+      res.json({ success: true, enabled: false });
+      return;
+    }
+    res.json({
+      success: true,
+      enabled: true,
+      publishable_key: stripePublishableKey(),
+      price_cents: shopPriceCents(),
+      currency: SHOP_CURRENCY,
+      product_name: SHOP_PRODUCT_NAME,
+    });
+  })
+);
+
+/** GET /shop/graphics — the archive dropdown (every option ever offered). */
+apiRouter.get(
+  "/shop/graphics",
+  readLimiter,
+  asyncHandler(async (_req, res) => {
+    const graphics = await listArchiveGraphics();
+    res.json({ success: true, count: graphics.length, graphics });
+  })
+);
+
+/**
+ * POST /shop/checkout — start a purchase.
+ * Validates the order, creates a Stripe PaymentIntent for the fixed price
+ * (amount is always set server-side), and records a pending purchase.
+ */
+apiRouter.post(
+  "/shop/checkout",
+  checkoutLimiter,
+  rejectHoneypot,
+  asyncHandler(async (req, res) => {
+    if (!stripeConfigured()) {
+      res.status(503).json({
+        success: false,
+        error: "The shop isn’t available right now. Please try again later.",
+      });
+      return;
+    }
+
+    const parsed = shopCheckoutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const graphic = await getArchiveGraphicByCode(parsed.data.graphic_code);
+    if (!graphic) {
+      res.status(400).json({
+        success: false,
+        error: "Please pick a graphic from the list.",
+        details: { graphic_code: ["Unknown archive graphic"] },
+      });
+      return;
+    }
+
+    const amount = shopPriceCents();
+    const intent = await getStripe().paymentIntents.create({
+      amount,
+      currency: SHOP_CURRENCY,
+      automatic_payment_methods: { enabled: true },
+      receipt_email: parsed.data.email,
+      description: `${SHOP_PRODUCT_NAME} — ${graphic.label} for “${parsed.data.angel_name}”`,
+      metadata: {
+        product: SHOP_PRODUCT_NAME,
+        graphic_code: graphic.code,
+        graphic_label: graphic.label,
+        angel_name: parsed.data.angel_name,
+        real_name: parsed.data.real_name,
+      },
+    });
+
+    const purchase = await createPurchase({
+      angel_name: parsed.data.angel_name,
+      real_name: parsed.data.real_name,
+      email: parsed.data.email,
+      graphic_code: graphic.code,
+      note: parsed.data.note?.trim() || null,
+      amount_cents: amount,
+      currency: SHOP_CURRENCY,
+      stripe_payment_intent_id: intent.id,
+    });
+
+    logger.info("Shop checkout started", {
+      purchase_id: purchase.id,
+      graphic_code: graphic.code,
+    });
+
+    res.status(201).json({
+      success: true,
+      client_secret: intent.client_secret,
+      purchase_id: purchase.id,
+      amount_cents: amount,
+      currency: SHOP_CURRENCY,
+    });
+  })
+);
+
+/**
+ * POST /shop/confirm — after the browser finishes payment, verify the result
+ * directly with Stripe (never trusting the client) and update the purchase.
+ */
+apiRouter.post(
+  "/shop/confirm",
+  checkoutLimiter,
+  asyncHandler(async (req, res) => {
+    if (!stripeConfigured()) {
+      res.status(503).json({ success: false, error: "Shop unavailable" });
+      return;
+    }
+
+    const parsed = shopConfirmSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: "Invalid payment id" });
+      return;
+    }
+
+    const purchase = await getPurchaseByIntent(parsed.data.payment_intent_id);
+    if (!purchase) {
+      res.status(404).json({ success: false, error: "Purchase not found" });
+      return;
+    }
+
+    const intent = await getStripe().paymentIntents.retrieve(
+      parsed.data.payment_intent_id
+    );
+
+    let status = purchase.status;
+    if (intent.status === "succeeded") {
+      status = "paid";
+    } else if (intent.status === "canceled") {
+      status = "failed";
+    }
+
+    if (status !== purchase.status) {
+      await markPurchaseStatusByIntent(intent.id, status);
+      logger.info("Purchase status updated", { purchase_id: purchase.id, status });
+    }
+
+    res.json({
+      success: true,
+      status,
+      paid: status === "paid",
+      message:
+        status === "paid"
+          ? "Payment received! Your archive graphic is officially in the queue."
+          : "Payment not completed yet.",
+    });
+  })
+);
+
+/** GET /admin/purchases — order list for the admin portal. */
+apiRouter.get(
+  "/admin/purchases",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const purchases = await listPurchasesForAdmin(200);
+    res.json({ success: true, count: purchases.length, purchases });
   })
 );
 
