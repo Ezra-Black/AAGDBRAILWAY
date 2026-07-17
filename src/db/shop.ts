@@ -4,6 +4,7 @@ export interface ArchiveGraphic {
   id: string;
   code: string;
   label: string;
+  image_url: string | null;
   active: boolean;
   sort_order: number;
 }
@@ -43,7 +44,7 @@ function mapPurchase(row: Record<string, unknown>): Purchase {
 /** Active archive graphics for the shop dropdown. */
 export async function listArchiveGraphics(): Promise<ArchiveGraphic[]> {
   const result = await query(
-    `SELECT id, code, label, active, sort_order
+    `SELECT id, code, label, image_url, active, sort_order
      FROM archive_graphics
      WHERE COALESCE(active, true) = true
      ORDER BY sort_order ASC NULLS LAST, label ASC`
@@ -52,6 +53,7 @@ export async function listArchiveGraphics(): Promise<ArchiveGraphic[]> {
     id: String(row.id),
     code: String(row.code),
     label: String(row.label),
+    image_url: (row.image_url as string) ?? null,
     active: row.active !== false,
     sort_order: Number(row.sort_order ?? 0),
   }));
@@ -61,7 +63,7 @@ export async function getArchiveGraphicByCode(
   code: string
 ): Promise<ArchiveGraphic | null> {
   const result = await query(
-    `SELECT id, code, label, active, sort_order
+    `SELECT id, code, label, image_url, active, sort_order
      FROM archive_graphics
      WHERE COALESCE(active, true) = true
        AND lower(trim(code)) = lower(trim($1))
@@ -74,6 +76,7 @@ export async function getArchiveGraphicByCode(
     id: String(row.id),
     code: String(row.code),
     label: String(row.label),
+    image_url: (row.image_url as string) ?? null,
     active: row.active !== false,
     sort_order: Number(row.sort_order ?? 0),
   };

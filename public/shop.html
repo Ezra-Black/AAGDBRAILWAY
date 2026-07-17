@@ -120,6 +120,33 @@
         border: 1px solid rgba(110, 231, 183, 0.45);
         animation: stepIn 0.6s ease both;
       }
+      .graphic-preview {
+        display: none;
+        position: relative;
+        overflow: hidden;
+        aspect-ratio: 3 / 2;
+        border-radius: 1.35rem;
+        border: 1px solid rgba(240, 196, 92, 0.24);
+        background: rgba(12, 9, 5, 0.55);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+      }
+      .graphic-preview.visible {
+        display: block;
+        animation: stepIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+      .graphic-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .graphic-preview-label {
+        position: absolute;
+        inset: auto 0 0;
+        padding: 2.5rem 1.1rem 1rem;
+        background: linear-gradient(transparent, rgba(7, 5, 3, 0.92));
+        color: var(--cream);
+        font-weight: 650;
+      }
     </style>
   </head>
   <body data-no-popup>
@@ -211,6 +238,10 @@
             These are designs from our past collections. Take your time — you
             can always come back to this step.
           </p>
+          <div id="graphic-preview" class="graphic-preview mt-6">
+            <img id="graphic-preview-image" src="" alt="" />
+            <p id="graphic-preview-label" class="graphic-preview-label"></p>
+          </div>
           <div class="field mt-6">
             <label for="shop_graphic">Graphic from the archive</label>
             <select id="shop_graphic">
@@ -374,6 +405,9 @@
       const wizardNav = document.getElementById("wizard-nav");
       const progressWrap = document.getElementById("progress-wrap");
       const graphicSelect = document.getElementById("shop_graphic");
+      const graphicPreview = document.getElementById("graphic-preview");
+      const graphicPreviewImage = document.getElementById("graphic-preview-image");
+      const graphicPreviewLabel = document.getElementById("graphic-preview-label");
 
       function fmtPrice(cents, currency) {
         return new Intl.NumberFormat("en-US", {
@@ -389,6 +423,26 @@
         el.textContent = text || "";
         el.classList.toggle("hidden", !text);
       }
+
+      function updateGraphicPreview() {
+        const graphic = graphicsCache.find(
+          (item) => item.code === graphicSelect.value
+        );
+        if (!graphic || !graphic.image_url) {
+          graphicPreview.classList.remove("visible");
+          graphicPreviewImage.removeAttribute("src");
+          graphicPreviewImage.alt = "";
+          graphicPreviewLabel.textContent = "";
+          return;
+        }
+
+        graphicPreviewImage.src = graphic.image_url;
+        graphicPreviewImage.alt = graphic.label + " graphic preview";
+        graphicPreviewLabel.textContent = graphic.label;
+        graphicPreview.classList.add("visible");
+      }
+
+      graphicSelect.addEventListener("change", updateGraphicPreview);
 
       function setStep(next) {
         const current = document.querySelector(".wizard-step.active");
@@ -509,6 +563,15 @@
             opt.value = item.code;
             opt.textContent = item.label;
             graphicSelect.appendChild(opt);
+          }
+
+          // Fairy Ring is the first purchasable visual product when available.
+          const fairyRing = graphicsCache.find(
+            (item) => item.code === "fairy-ring" && item.image_url
+          );
+          if (fairyRing) {
+            graphicSelect.value = fairyRing.code;
+            updateGraphicPreview();
           }
         } catch {
           disableShop();
