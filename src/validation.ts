@@ -141,6 +141,22 @@ export const contactSchema = z
   })
   .strict();
 
+/** Anonymous page-view beacon — no PII, visitor_id is a random client UUID. */
+export const pageViewSchema = z
+  .object({
+    visitor_id: z.string().uuid("Invalid visitor id"),
+    path: z
+      .string()
+      .trim()
+      .min(1)
+      .max(200)
+      .refine((v) => v.startsWith("/"), "Invalid path")
+      .refine((v) => !/[<>{};`\\]/.test(v), "Invalid path"),
+    referrer: z.string().trim().max(500).optional(),
+    device: z.enum(["mobile", "tablet", "desktop"]).optional(),
+  })
+  .strict();
+
 /** Facebook client access token from the JS SDK. */
 export const facebookAuthSchema = z
   .object({

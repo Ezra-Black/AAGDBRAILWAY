@@ -70,6 +70,15 @@ export const newsletterSubscribeLimiter = rateLimit({
   },
 });
 
+/** Page-view beacons — cheap writes, but keep abuse bounded per IP. */
+export const trackLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: envInt("TRACK_RATE_MAX", 30),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: jsonLimitMessage,
+});
+
 /** Facebook auth exchanges — bounded per IP. */
 export const facebookAuthLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

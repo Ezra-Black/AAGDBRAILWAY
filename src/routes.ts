@@ -34,6 +34,7 @@ import {
   rejectHoneypot,
   requireAutomationKeyIfConfigured,
   submitLimiter,
+  trackLimiter,
 } from "./security";
 import {
   bumpNewsletterCount,
@@ -41,6 +42,7 @@ import {
   subscribeNewsletter,
 } from "./db/stats";
 import { createContactMessage, listContactMessages } from "./db/contact";
+import { getAnalyticsSummary, recordPageView } from "./db/analytics";
 import { upsertFacebookUser } from "./db/facebook";
 import {
   facebookAppId,
@@ -57,6 +59,7 @@ import {
   facebookAuthSchema,
   lookupQuerySchema,
   newsletterSubscribeSchema,
+  pageViewSchema,
   PASSWORD_RULES,
   statusSchema,
   submitSchema,
@@ -649,6 +652,57 @@ apiRouter.post(
       message:
         "Message sent! Thanks for reaching out — we’ll get back to you soon.",
     });
+  })
+);
+
+/**
+ * POST /track/pageview — privacy-friendly first-party analytics beacon.
+ * Stores no IPs and no personal data: only a salted hash of a random
+ * client-generated id, the path, referrer hostname, and device bucket.
+ */
+apiRouter.post(
+  "/track/pageview",
+  trackLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = pageViewSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: "Invalid beacon" });
+      return;
+    }
+
+    // Keep only the referrer's hostname; drop self-referrals.
+    let referrerHost: string | null = null;
+    if (parsed.data.referrer) {
+      try {
+        const host = new URL(parsed.data.referrer).hostname.toLowerCase();
+        const selfHost = String(req.headers.host || "")
+          .split(":")[0]
+          .toLowerCase();
+        if (host && host !== selfHost) referrerHost = host.slice(0, 200);
+      } catch {
+        referrerHost = null;
+      }
+    }
+
+    await recordPageView({
+      visitor_id: parsed.data.visitor_id,
+      path: parsed.data.path,
+      referrer_host: referrerHost,
+      device: parsed.data.device ?? null,
+    });
+
+    res.status(202).json({ success: true });
+  })
+);
+
+/** GET /admin/analytics — dashboard metrics for the admin portal. */
+apiRouter.get(
+  "/admin/analytics",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const days = Number(req.query.days) || 30;
+    const summary = await getAnalyticsSummary(days);
+    res.json({ success: true, ...summary });
   })
 );
 

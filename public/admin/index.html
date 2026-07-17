@@ -25,6 +25,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/assets/site.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <style>
       .status-pending {
         color: #fbbf24;
@@ -83,6 +84,95 @@
         letter-spacing: 0.08em;
         color: rgba(255, 246, 228, 0.4);
       }
+      .tab-btn {
+        border: 1px solid transparent;
+        background: none;
+        color: rgba(255, 246, 228, 0.5);
+        font-family: inherit;
+        font-size: 0.875rem;
+        font-weight: 550;
+        padding: 0.55rem 1.2rem;
+        border-radius: 9999px;
+        cursor: pointer;
+        transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+      }
+      .tab-btn:hover {
+        color: var(--cream);
+      }
+      .tab-btn.active {
+        color: var(--ink);
+        background: linear-gradient(120deg, #f6d56a, #e8a838 55%, #c4841f);
+        border-color: transparent;
+      }
+      .range-btn {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.03);
+        color: rgba(255, 246, 228, 0.55);
+        font-family: inherit;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.35rem 0.9rem;
+        border-radius: 9999px;
+        cursor: pointer;
+        transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+      }
+      .range-btn:hover {
+        color: var(--cream);
+        border-color: rgba(240, 196, 92, 0.4);
+      }
+      .range-btn.active {
+        color: var(--ink);
+        background: rgba(240, 196, 92, 0.92);
+        border-color: transparent;
+      }
+      .chart-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 1.25rem;
+        padding: 1.2rem 1.3rem 1rem;
+      }
+      .chart-title {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: rgba(255, 246, 228, 0.85);
+      }
+      .chart-sub {
+        font-size: 0.6875rem;
+        color: rgba(255, 246, 228, 0.4);
+        margin-top: 0.15rem;
+      }
+      .list-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.55rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 0.8125rem;
+      }
+      .list-row:last-child {
+        border-bottom: 0;
+      }
+      .list-bar {
+        position: relative;
+        display: block;
+        height: 4px;
+        border-radius: 9999px;
+        background: rgba(255, 255, 255, 0.06);
+        margin-top: 0.35rem;
+        overflow: hidden;
+      }
+      .list-bar > span {
+        position: absolute;
+        inset: 0 auto 0 0;
+        border-radius: 9999px;
+        background: linear-gradient(90deg, #f6d56a, #e8a838);
+      }
+      .stat-delta {
+        font-size: 0.6875rem;
+        color: rgba(255, 246, 228, 0.4);
+        margin-top: 0.2rem;
+      }
     </style>
   </head>
   <body data-no-popup class="px-5 py-8 sm:px-8">
@@ -98,7 +188,7 @@
             </svg>
             Audrey’s Angel Graphics
           </a>
-          <h1 class="headline mt-2 text-3xl font-bold text-cream">Requests</h1>
+          <h1 id="page-title" class="headline mt-2 text-3xl font-bold text-cream">Dashboard</h1>
           <p id="subtitle" class="mt-1 text-sm text-cream/45">Loading…</p>
         </div>
         <button
@@ -111,6 +201,142 @@
         </button>
       </header>
 
+      <!-- View tabs -->
+      <nav class="mb-8 inline-flex items-center gap-1 rounded-full border border-white/10 p-1" style="background:rgba(255,255,255,0.03)">
+        <button type="button" id="tab-dashboard" class="tab-btn active">Dashboard</button>
+        <button type="button" id="tab-requests" class="tab-btn">Requests</button>
+      </nav>
+
+      <!-- ═══════════ Dashboard view ═══════════ -->
+      <div id="view-dashboard">
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-cream">Site overview</h2>
+            <p class="mt-1 text-xs text-cream/45">
+              Privacy-friendly analytics — anonymous counts only, no IPs or personal data stored.
+            </p>
+          </div>
+          <div class="flex items-center gap-2" role="group" aria-label="Date range">
+            <button type="button" class="range-btn" data-range="7">7 days</button>
+            <button type="button" class="range-btn active" data-range="30">30 days</button>
+            <button type="button" class="range-btn" data-range="90">90 days</button>
+          </div>
+        </div>
+
+        <!-- Traffic stat cards -->
+        <section class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div class="stat-card">
+            <p class="col-header">Page views</p>
+            <p id="m-views" class="gold-text mt-1.5 text-2xl font-bold" style="letter-spacing:-0.03em">—</p>
+            <p id="m-views-sub" class="stat-delta">&nbsp;</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">Unique visitors</p>
+            <p id="m-visitors" class="mt-1.5 text-2xl font-bold text-cream" style="letter-spacing:-0.03em">—</p>
+            <p id="m-visitors-sub" class="stat-delta">&nbsp;</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">Returning visitors</p>
+            <p id="m-returning" class="mt-1.5 text-2xl font-bold text-emerald-300" style="letter-spacing:-0.03em">—</p>
+            <p id="m-returning-sub" class="stat-delta">&nbsp;</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">New visitors</p>
+            <p id="m-new" class="mt-1.5 text-2xl font-bold text-amber-300" style="letter-spacing:-0.03em">—</p>
+            <p id="m-new-sub" class="stat-delta">&nbsp;</p>
+          </div>
+        </section>
+
+        <!-- Business stat cards -->
+        <section class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div class="stat-card">
+            <p class="col-header">Requests submitted</p>
+            <p id="m-submissions" class="mt-1.5 text-2xl font-bold text-cream" style="letter-spacing:-0.03em">—</p>
+            <p class="stat-delta">in selected range</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">Mailing list</p>
+            <p id="m-newsletter" class="mt-1.5 text-2xl font-bold text-cream" style="letter-spacing:-0.03em">—</p>
+            <p class="stat-delta">real opt-ins, all time</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">Contact messages</p>
+            <p id="m-contact" class="mt-1.5 text-2xl font-bold text-cream" style="letter-spacing:-0.03em">—</p>
+            <p class="stat-delta">all time</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">Views per visitor</p>
+            <p id="m-vpv" class="mt-1.5 text-2xl font-bold text-cream" style="letter-spacing:-0.03em">—</p>
+            <p class="stat-delta">engagement depth</p>
+          </div>
+        </section>
+
+        <!-- Traffic chart -->
+        <section class="chart-card mb-4">
+          <div class="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <p class="chart-title">Traffic over time</p>
+              <p class="chart-sub">Daily page views and unique visitors</p>
+            </div>
+          </div>
+          <div style="position:relative;height:260px;margin-top:0.9rem">
+            <canvas id="chart-traffic"></canvas>
+          </div>
+        </section>
+
+        <div class="mb-4 grid gap-4 lg:grid-cols-2">
+          <!-- New vs returning -->
+          <section class="chart-card">
+            <p class="chart-title">New vs returning visitors</p>
+            <p class="chart-sub">Who’s discovering you vs coming back</p>
+            <div style="position:relative;height:220px;margin-top:0.9rem">
+              <canvas id="chart-audience"></canvas>
+            </div>
+          </section>
+
+          <!-- Submissions -->
+          <section class="chart-card">
+            <p class="chart-title">Graphic requests</p>
+            <p class="chart-sub">Form submissions per day</p>
+            <div style="position:relative;height:220px;margin-top:0.9rem">
+              <canvas id="chart-submissions"></canvas>
+            </div>
+          </section>
+        </div>
+
+        <div class="mb-6 grid gap-4 lg:grid-cols-3">
+          <!-- Devices -->
+          <section class="chart-card">
+            <p class="chart-title">Devices</p>
+            <p class="chart-sub">Share of page views</p>
+            <div style="position:relative;height:200px;margin-top:0.9rem">
+              <canvas id="chart-devices"></canvas>
+            </div>
+          </section>
+
+          <!-- Top pages -->
+          <section class="chart-card">
+            <p class="chart-title">Top pages</p>
+            <p class="chart-sub">Most viewed in range</p>
+            <div id="top-pages" class="mt-3"></div>
+          </section>
+
+          <!-- Top referrers -->
+          <section class="chart-card">
+            <p class="chart-title">Top referrers</p>
+            <p class="chart-sub">Where visitors arrive from</p>
+            <div id="top-referrers" class="mt-3"></div>
+          </section>
+        </div>
+
+        <p id="dash-error" class="mb-6 hidden text-sm text-rose-400"></p>
+        <p id="dash-empty" class="mb-6 hidden text-sm text-cream/40">
+          No traffic recorded yet — data starts flowing as soon as visitors browse the site.
+        </p>
+      </div>
+
+      <!-- ═══════════ Requests view ═══════════ -->
+      <div id="view-requests" class="hidden">
       <!-- Stats -->
       <section class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div class="stat-card">
@@ -226,6 +452,7 @@
       <p class="mt-4 text-xs text-cream/40">
         Tip: click <span class="text-amber-300">pending</span> to mark every claim for that angel name complete.
       </p>
+      </div><!-- /view-requests -->
     </main>
 
     <script>
@@ -579,11 +806,305 @@
         window.location.href = "/admin/login";
       });
 
+      /* ═══════════ Dashboard ═══════════ */
+
+      const dashError = document.getElementById("dash-error");
+      const dashEmpty = document.getElementById("dash-empty");
+      const viewDashboard = document.getElementById("view-dashboard");
+      const viewRequests = document.getElementById("view-requests");
+      const tabDashboard = document.getElementById("tab-dashboard");
+      const tabRequests = document.getElementById("tab-requests");
+
+      let currentRange = 30;
+      const charts = {};
+
+      function switchView(view) {
+        const dash = view === "dashboard";
+        viewDashboard.classList.toggle("hidden", !dash);
+        viewRequests.classList.toggle("hidden", dash);
+        tabDashboard.classList.toggle("active", dash);
+        tabRequests.classList.toggle("active", !dash);
+        document.getElementById("page-title").textContent = dash
+          ? "Dashboard"
+          : "Requests";
+      }
+
+      tabDashboard.addEventListener("click", () => switchView("dashboard"));
+      tabRequests.addEventListener("click", () => switchView("requests"));
+
+      document.querySelectorAll(".range-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const days = Number(btn.getAttribute("data-range"));
+          if (!days || days === currentRange) return;
+          currentRange = days;
+          document
+            .querySelectorAll(".range-btn")
+            .forEach((b) => b.classList.toggle("active", b === btn));
+          loadAnalytics();
+        });
+      });
+
+      const GOLD = "#f0c45c";
+      const AMBER = "#e8a838";
+      const CREAM = "rgba(255,246,228,0.85)";
+      const EMERALD = "#6ee7b7";
+      const GRID = "rgba(255,255,255,0.05)";
+      const TICK = "rgba(255,246,228,0.4)";
+
+      if (window.Chart) {
+        Chart.defaults.color = TICK;
+        Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+        Chart.defaults.font.size = 11;
+        Chart.defaults.plugins.legend.labels.boxWidth = 10;
+        Chart.defaults.plugins.legend.labels.boxHeight = 10;
+        Chart.defaults.plugins.legend.labels.usePointStyle = true;
+      }
+
+      function shortDay(iso) {
+        const d = new Date(iso + "T00:00:00Z");
+        return d.toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        });
+      }
+
+      function renderChart(id, config) {
+        const ctx = document.getElementById(id);
+        if (!ctx || !window.Chart) return;
+        if (charts[id]) charts[id].destroy();
+        charts[id] = new Chart(ctx, config);
+      }
+
+      function axisOptions(stacked) {
+        return {
+          x: {
+            stacked: Boolean(stacked),
+            grid: { display: false },
+            ticks: { maxTicksLimit: 10, maxRotation: 0 },
+          },
+          y: {
+            stacked: Boolean(stacked),
+            beginAtZero: true,
+            grid: { color: GRID },
+            ticks: { precision: 0, maxTicksLimit: 5 },
+            border: { display: false },
+          },
+        };
+      }
+
+      function renderTraffic(daily) {
+        const labels = daily.map((d) => shortDay(d.day));
+        renderChart("chart-traffic", {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Page views",
+                data: daily.map((d) => d.views),
+                borderColor: GOLD,
+                backgroundColor: "rgba(240,196,92,0.12)",
+                fill: true,
+                tension: 0.35,
+                pointRadius: 0,
+                pointHitRadius: 12,
+                borderWidth: 2,
+              },
+              {
+                label: "Unique visitors",
+                data: daily.map((d) => d.visitors),
+                borderColor: CREAM,
+                backgroundColor: "transparent",
+                borderDash: [5, 4],
+                tension: 0.35,
+                pointRadius: 0,
+                pointHitRadius: 12,
+                borderWidth: 1.5,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            scales: axisOptions(false),
+          },
+        });
+      }
+
+      function renderAudience(daily) {
+        const labels = daily.map((d) => shortDay(d.day));
+        renderChart("chart-audience", {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "New",
+                data: daily.map((d) => d.new_visitors),
+                backgroundColor: AMBER,
+                borderRadius: 3,
+                maxBarThickness: 18,
+              },
+              {
+                label: "Returning",
+                data: daily.map((d) => d.returning_visitors),
+                backgroundColor: EMERALD,
+                borderRadius: 3,
+                maxBarThickness: 18,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            scales: axisOptions(true),
+          },
+        });
+      }
+
+      function renderSubmissions(rows) {
+        renderChart("chart-submissions", {
+          type: "bar",
+          data: {
+            labels: rows.map((r) => shortDay(r.day)),
+            datasets: [
+              {
+                label: "Requests",
+                data: rows.map((r) => r.count),
+                backgroundColor: GOLD,
+                borderRadius: 3,
+                maxBarThickness: 18,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: axisOptions(false),
+          },
+        });
+      }
+
+      function renderDevices(devices) {
+        const palette = [GOLD, EMERALD, "rgba(255,246,228,0.55)", AMBER];
+        renderChart("chart-devices", {
+          type: "doughnut",
+          data: {
+            labels: devices.map(
+              (d) => d.device.charAt(0).toUpperCase() + d.device.slice(1)
+            ),
+            datasets: [
+              {
+                data: devices.map((d) => d.views),
+                backgroundColor: devices.map((_, i) => palette[i % palette.length]),
+                borderColor: "rgba(10,8,6,0.9)",
+                borderWidth: 2,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: "68%",
+            plugins: { legend: { position: "bottom" } },
+          },
+        });
+      }
+
+      function renderList(elId, rows, labelKey, valueKey, valueLabel) {
+        const el = document.getElementById(elId);
+        el.innerHTML = "";
+        if (!rows.length) {
+          el.innerHTML =
+            '<p class="text-xs text-cream/35" style="padding:0.5rem 0">Nothing here yet.</p>';
+          return;
+        }
+        const max = Math.max(...rows.map((r) => r[valueKey]), 1);
+        for (const row of rows) {
+          const item = document.createElement("div");
+          item.className = "list-row";
+          item.innerHTML =
+            '<div style="min-width:0;flex:1">' +
+            '<p class="truncate text-cream/80">' +
+            escapeHtml(row[labelKey]) +
+            "</p>" +
+            '<span class="list-bar"><span style="width:' +
+            Math.round((row[valueKey] / max) * 100) +
+            '%"></span></span>' +
+            "</div>" +
+            '<span class="text-cream/50" style="white-space:nowrap">' +
+            row[valueKey].toLocaleString() +
+            " " +
+            valueLabel +
+            "</span>";
+          el.appendChild(item);
+        }
+      }
+
+      function setStat(id, value, subId, subText) {
+        document.getElementById(id).textContent = value;
+        if (subId) document.getElementById(subId).innerHTML = subText || "&nbsp;";
+      }
+
+      async function loadAnalytics() {
+        dashError.classList.add("hidden");
+        try {
+          const res = await fetch("/admin/analytics?days=" + currentRange, {
+            credentials: "include",
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            dashError.textContent = data.error || "Could not load analytics";
+            dashError.classList.remove("hidden");
+            return;
+          }
+
+          const t = data.totals;
+          const perDay = data.range_days
+            ? Math.round((t.views / data.range_days) * 10) / 10
+            : 0;
+          setStat("m-views", t.views.toLocaleString(), "m-views-sub", "~" + perDay + " per day");
+          setStat("m-visitors", t.visitors.toLocaleString(), "m-visitors-sub", "in last " + data.range_days + " days");
+          setStat(
+            "m-returning",
+            t.returning_visitors.toLocaleString(),
+            "m-returning-sub",
+            t.returning_rate + "% of visitors"
+          );
+          setStat("m-new", t.new_visitors.toLocaleString(), "m-new-sub", "first-time in range");
+          document.getElementById("m-submissions").textContent = t.submissions.toLocaleString();
+          document.getElementById("m-newsletter").textContent = t.newsletter_subscribers.toLocaleString();
+          document.getElementById("m-contact").textContent = t.contact_messages.toLocaleString();
+          document.getElementById("m-vpv").textContent = t.views_per_visitor || "—";
+
+          dashEmpty.classList.toggle("hidden", t.views > 0);
+
+          renderTraffic(data.daily);
+          renderAudience(data.daily);
+          renderSubmissions(data.submissions_daily);
+          renderDevices(data.devices);
+          renderList("top-pages", data.top_pages, "path", "views", "views");
+          renderList("top-referrers", data.top_referrers, "referrer_host", "views", "views");
+        } catch {
+          dashError.textContent = "Network error loading analytics";
+          dashError.classList.remove("hidden");
+        }
+      }
+
       (async () => {
         const admin = await ensureAuth();
         if (!admin) return;
         adminEmail = admin.email;
         subtitle.textContent = admin.email;
+        await loadAnalytics();
         await loadGraphics();
         await loadEntries();
       })();

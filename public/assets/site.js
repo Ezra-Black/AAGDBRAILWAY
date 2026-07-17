@@ -112,6 +112,45 @@
     });
   }
 
+  /* ── Anonymous page-view beacon ────────────────────────── */
+  /* Privacy-friendly, first-party analytics: a random id (no PII) lets the
+     dashboard count returning visitors. The server stores only a salted
+     hash of it — never IP addresses or personal data. */
+
+  function initTracking() {
+    try {
+      var key = "aag_vid_v1";
+      var vid = localStorage.getItem(key);
+      if (!vid) {
+        vid =
+          window.crypto && crypto.randomUUID
+            ? crypto.randomUUID()
+            : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+                var r = (Math.random() * 16) | 0;
+                return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+              });
+        localStorage.setItem(key, vid);
+      }
+
+      var width = window.innerWidth || 1024;
+      var device = width < 640 ? "mobile" : width < 1024 ? "tablet" : "desktop";
+
+      var payload = JSON.stringify({
+        visitor_id: vid,
+        path: location.pathname,
+        referrer: document.referrer || undefined,
+        device: device,
+      });
+
+      fetch("/track/pageview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        keepalive: true,
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   /* ── Facebook quick sign-in ────────────────────────────── */
   /* When a visitor lands with an existing Facebook session on their
      browser, invite them to continue with Facebook and share their email.
@@ -414,6 +453,7 @@
   function boot() {
     initReveal();
     initMobileMenu();
+    initTracking();
     initPopup();
     bindNewsletterForms();
     initFacebook();
