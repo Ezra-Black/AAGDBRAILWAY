@@ -154,10 +154,14 @@ export async function migrate(): Promise<void> {
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       code        TEXT NOT NULL UNIQUE,
       label       TEXT NOT NULL,
+      image_url   TEXT,
       active      BOOLEAN NOT NULL DEFAULT true,
       sort_order  INT NOT NULL DEFAULT 0,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE archive_graphics
+      ADD COLUMN IF NOT EXISTS image_url TEXT;
 
     CREATE INDEX IF NOT EXISTS idx_archive_graphics_active
       ON archive_graphics (active, sort_order);
@@ -198,9 +202,18 @@ export async function migrate(): Promise<void> {
 
   // Archive-only designs: sold in the shop but never on the request form.
   await query(`
-    INSERT INTO archive_graphics (code, label, sort_order)
-    VALUES ('fairy-ring', 'Fairy Ring', 0)
-    ON CONFLICT (code) DO NOTHING
+    INSERT INTO archive_graphics (code, label, image_url, active, sort_order)
+    VALUES (
+      'fairy-ring',
+      'Fairy Ring',
+      '/assets/shop/fairy-ring.jpg',
+      true,
+      0
+    )
+    ON CONFLICT (code) DO UPDATE
+      SET label = EXCLUDED.label,
+          image_url = EXCLUDED.image_url,
+          active = true
   `);
 
   await query(
