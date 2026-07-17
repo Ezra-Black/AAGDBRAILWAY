@@ -71,6 +71,28 @@
         font-weight: 600;
         white-space: nowrap;
       }
+      .archive-btn {
+        color: rgba(255, 246, 228, 0.6);
+        background: none;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 9999px;
+        padding: 0.2rem 0.7rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: color 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+      }
+      .archive-btn:hover {
+        color: var(--cream, #fff6e4);
+        border-color: rgba(240, 196, 92, 0.5);
+        background: rgba(240, 196, 92, 0.08);
+      }
+      .archive-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
       .stat-card {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -411,20 +433,53 @@
         <p id="graphics-empty" class="mt-3 hidden text-sm text-cream/40">No graphic options yet.</p>
       </section>
 
-      <!-- Filter -->
-      <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <!-- Active / Archived sub-tabs + bulk clean-up -->
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="inline-flex items-center gap-2" role="group" aria-label="Requests view">
+          <button type="button" id="req-tab-active" class="range-btn active">Active</button>
+          <button type="button" id="req-tab-archived" class="range-btn">Archived</button>
+        </div>
+        <button
+          type="button"
+          id="req-archive-complete"
+          class="range-btn"
+          title="Move every fully completed angel name into the archive"
+        >
+          Archive all complete
+        </button>
+      </div>
+
+      <!-- Filters + search -->
+      <div class="mb-4 flex flex-wrap items-end gap-3">
         <div class="field">
-          <label for="filter_graphic" style="font-size:0.75rem">Filter by graphic</label>
-          <select id="filter_graphic" class="min-w-[220px]" style="padding:0.6rem 0.9rem;font-size:0.875rem">
+          <label for="filter_graphic" style="font-size:0.75rem">Graphic</label>
+          <select id="filter_graphic" class="min-w-[200px]" style="padding:0.6rem 0.9rem;font-size:0.875rem">
             <option value="">All graphics</option>
           </select>
+        </div>
+        <div class="field">
+          <label for="filter_status" style="font-size:0.75rem">Status</label>
+          <select id="filter_status" class="min-w-[150px]" style="padding:0.6rem 0.9rem;font-size:0.875rem">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="complete">Complete</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;min-width:220px">
+          <label for="search_requests" style="font-size:0.75rem">Search</label>
+          <input
+            id="search_requests"
+            type="search"
+            placeholder="Angel name, real name, email, graphic…"
+            style="padding:0.6rem 0.9rem;font-size:0.875rem"
+          />
         </div>
       </div>
 
       <!-- Requests table -->
       <div id="list" class="glass-panel rounded-[1.5rem]">
         <div
-          class="hidden gap-4 border-b border-white/5 px-5 py-3.5 sm:grid sm:grid-cols-[1fr_1.1fr_1.3fr_0.65fr_0.65fr] sm:items-end"
+          class="hidden gap-4 border-b border-white/5 px-5 py-3.5 sm:grid sm:grid-cols-[1fr_1fr_1.2fr_0.6fr_0.6fr_0.55fr] sm:items-end"
         >
           <span class="col-header">Angel name</span>
           <span class="col-header">Graphics</span>
@@ -444,6 +499,7 @@
             </span>
           </span>
           <span class="col-header">Status</span>
+          <span class="col-header">Actions</span>
         </div>
         <div id="rows" class="divide-y divide-white/5"></div>
       </div>
@@ -452,6 +508,7 @@
       <p id="error" class="mt-6 hidden text-sm text-rose-400"></p>
       <p class="mt-4 text-xs text-cream/40">
         Tip: click <span class="text-amber-300">pending</span> to mark every claim for that angel name complete.
+        Archiving tucks finished names away without deleting anything — restore them anytime from the Archived tab.
       </p>
       </div><!-- /view-requests -->
 
@@ -481,14 +538,53 @@
           </div>
         </section>
 
+        <!-- Active / Archived sub-tabs + bulk clean-up -->
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div class="inline-flex items-center gap-2" role="group" aria-label="Orders view">
+            <button type="button" id="ord-tab-active" class="range-btn active">Active</button>
+            <button type="button" id="ord-tab-archived" class="range-btn">Archived</button>
+          </div>
+          <button
+            type="button"
+            id="ord-archive-paid"
+            class="range-btn"
+            title="Move every paid order into the archive"
+          >
+            Archive all paid
+          </button>
+        </div>
+
+        <!-- Filters + search -->
+        <div class="mb-4 flex flex-wrap items-end gap-3">
+          <div class="field">
+            <label for="filter_order_status" style="font-size:0.75rem">Status</label>
+            <select id="filter_order_status" class="min-w-[150px]" style="padding:0.6rem 0.9rem;font-size:0.875rem">
+              <option value="">All statuses</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1;min-width:220px">
+            <label for="search_orders" style="font-size:0.75rem">Search</label>
+            <input
+              id="search_orders"
+              type="search"
+              placeholder="Angel name, real name, email, graphic…"
+              style="padding:0.6rem 0.9rem;font-size:0.875rem"
+            />
+          </div>
+        </div>
+
         <div class="glass-panel rounded-[1.5rem]">
-          <div class="hidden gap-4 border-b border-white/5 px-5 py-3.5 sm:grid sm:grid-cols-[0.9fr_1fr_1fr_1.3fr_0.6fr_0.6fr]">
+          <div class="hidden gap-4 border-b border-white/5 px-5 py-3.5 sm:grid sm:grid-cols-[0.85fr_1fr_1fr_1.25fr_0.5fr_0.6fr_0.55fr]">
             <span class="col-header">Date</span>
             <span class="col-header">Angel name</span>
             <span class="col-header">Graphic</span>
             <span class="col-header">Email</span>
             <span class="col-header">Amount</span>
             <span class="col-header">Status</span>
+            <span class="col-header">Actions</span>
           </div>
           <div id="order-rows" class="divide-y divide-white/5"></div>
         </div>
@@ -508,11 +604,25 @@
       const graphicsList = document.getElementById("graphics-list");
       const graphicsEmpty = document.getElementById("graphics-empty");
       const filterSelect = document.getElementById("filter_graphic");
+      const statusSelect = document.getElementById("filter_status");
+      const searchRequests = document.getElementById("search_requests");
+      const reqTabActive = document.getElementById("req-tab-active");
+      const reqTabArchived = document.getElementById("req-tab-archived");
+      const reqArchiveCompleteBtn = document.getElementById("req-archive-complete");
       const graphicForm = document.getElementById("graphic-form");
       const graphicAddBtn = document.getElementById("graphic-add-btn");
 
       let adminEmail = "";
       let graphicsCache = [];
+      let requestsArchived = false;
+
+      function debounce(fn, ms) {
+        let t;
+        return (...args) => {
+          clearTimeout(t);
+          t = setTimeout(() => fn(...args), ms);
+        };
+      }
 
       async function ensureAuth() {
         const res = await fetch("/admin/me", { credentials: "include" });
@@ -657,9 +767,67 @@
         }
       });
 
-      filterSelect.addEventListener("change", () => {
+      filterSelect.addEventListener("change", () => loadEntries());
+      statusSelect.addEventListener("change", () => loadEntries());
+      searchRequests.addEventListener("input", debounce(() => loadEntries(), 300));
+
+      function setRequestsArchived(archived) {
+        if (requestsArchived === archived) return;
+        requestsArchived = archived;
+        reqTabActive.classList.toggle("active", !archived);
+        reqTabArchived.classList.toggle("active", archived);
+        reqArchiveCompleteBtn.style.display = archived ? "none" : "";
         loadEntries();
+      }
+      reqTabActive.addEventListener("click", () => setRequestsArchived(false));
+      reqTabArchived.addEventListener("click", () => setRequestsArchived(true));
+
+      reqArchiveCompleteBtn.addEventListener("click", async () => {
+        if (!confirm("Archive every fully completed angel name? You can restore them from the Archived tab.")) return;
+        reqArchiveCompleteBtn.disabled = true;
+        try {
+          const res = await fetch("/admin/entries/archive-completed", {
+            method: "POST",
+            credentials: "include",
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          await loadEntries();
+        } catch {
+          errorEl.textContent = "Network error archiving completed requests";
+          errorEl.classList.remove("hidden");
+        } finally {
+          reqArchiveCompleteBtn.disabled = false;
+        }
       });
+
+      async function setNameArchived(angelName, archived, buttonEl) {
+        buttonEl.textContent = "…";
+        buttonEl.disabled = true;
+        try {
+          const res = await fetch("/admin/angel-names/archive", {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ angel_name: angelName, archived }),
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            errorEl.textContent = data.error || "Could not update archive state";
+            errorEl.classList.remove("hidden");
+          }
+        } catch {
+          errorEl.textContent = "Network error updating archive state";
+          errorEl.classList.remove("hidden");
+        }
+        await loadEntries();
+      }
 
       async function markComplete(angelName, buttonEl) {
         buttonEl.textContent = "…";
@@ -750,9 +918,14 @@
       async function loadEntries() {
         errorEl.classList.add("hidden");
         const code = filterSelect.value;
-        const url =
-          "/admin/entries" +
-          (code ? "?graphic_code=" + encodeURIComponent(code) : "");
+        const params = new URLSearchParams();
+        if (code) params.set("graphic_code", code);
+        if (statusSelect.value) params.set("status", statusSelect.value);
+        const q = searchRequests.value.trim();
+        if (q) params.set("q", q);
+        if (requestsArchived) params.set("archived", "1");
+        const qs = params.toString();
+        const url = "/admin/entries" + (qs ? "?" + qs : "");
         const res = await fetch(url, { credentials: "include" });
         if (res.status === 401) {
           window.location.href = "/admin/login";
@@ -780,16 +953,25 @@
 
         rowsEl.innerHTML = "";
         empty.classList.toggle("hidden", groups.length > 0);
-        empty.textContent = filterLabel
-          ? "No requests for this graphic yet."
+        empty.textContent = requestsArchived
+          ? "Nothing archived yet — use Archive on a finished request to tidy it away."
+          : q || filterLabel || statusSelect.value
+          ? "No requests match these filters."
           : "No requests yet.";
 
         if (!groups.length) return;
 
+        const archiveBtn = (name) =>
+          '<button type="button" data-archive-name="' +
+          escapeAttr(name) +
+          '" class="archive-btn">' +
+          (requestsArchived ? "Restore" : "Archive") +
+          "</button>";
+
         for (const group of groups) {
           const row = document.createElement("div");
           row.className =
-            "grid gap-3 px-5 py-4 sm:grid-cols-[1fr_1.1fr_1.3fr_0.65fr_0.65fr] sm:gap-4 sm:items-start";
+            "grid gap-3 px-5 py-4 sm:grid-cols-[1fr_1fr_1.2fr_0.6fr_0.6fr_0.55fr] sm:gap-4 sm:items-start";
           row.innerHTML =
             '<div class="min-w-0">' +
             '<p class="font-medium text-cream">' +
@@ -803,6 +985,7 @@
             '<div class="mt-2 flex items-center gap-2 sm:hidden">' +
             renderDuplicate(group) +
             renderStatus(group) +
+            archiveBtn(group.angel_name) +
             "</div>" +
             "</div>" +
             '<div class="min-w-0 text-sm text-cream/70">' +
@@ -818,6 +1001,9 @@
             "</div>" +
             '<div class="hidden sm:block">' +
             renderStatus(group) +
+            "</div>" +
+            '<div class="hidden sm:block">' +
+            archiveBtn(group.angel_name) +
             "</div>";
           rowsEl.appendChild(row);
         }
@@ -827,6 +1013,14 @@
             const name = btn.getAttribute("data-complete-name");
             if (!name) return;
             markComplete(name, btn);
+          });
+        });
+
+        rowsEl.querySelectorAll("[data-archive-name]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const name = btn.getAttribute("data-archive-name");
+            if (!name) return;
+            setNameArchived(name, !requestsArchived, btn);
           });
         });
       }
@@ -865,6 +1059,68 @@
       let currentRange = 30;
       const charts = {};
       let ordersLoaded = false;
+      let ordersArchived = false;
+
+      const ordTabActive = document.getElementById("ord-tab-active");
+      const ordTabArchived = document.getElementById("ord-tab-archived");
+      const ordArchivePaidBtn = document.getElementById("ord-archive-paid");
+      const orderStatusSelect = document.getElementById("filter_order_status");
+      const searchOrders = document.getElementById("search_orders");
+
+      function setOrdersArchived(archived) {
+        if (ordersArchived === archived) return;
+        ordersArchived = archived;
+        ordTabActive.classList.toggle("active", !archived);
+        ordTabArchived.classList.toggle("active", archived);
+        ordArchivePaidBtn.style.display = archived ? "none" : "";
+        loadOrders();
+      }
+      ordTabActive.addEventListener("click", () => setOrdersArchived(false));
+      ordTabArchived.addEventListener("click", () => setOrdersArchived(true));
+      orderStatusSelect.addEventListener("change", () => loadOrders());
+      searchOrders.addEventListener("input", debounce(() => loadOrders(), 300));
+
+      ordArchivePaidBtn.addEventListener("click", async () => {
+        if (!confirm("Archive every paid order? You can restore them from the Archived tab.")) return;
+        ordArchivePaidBtn.disabled = true;
+        try {
+          const res = await fetch("/admin/purchases/archive-paid", {
+            method: "POST",
+            credentials: "include",
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          await loadOrders();
+        } catch {
+          document.getElementById("orders-error").textContent =
+            "Network error archiving paid orders";
+          document.getElementById("orders-error").classList.remove("hidden");
+        } finally {
+          ordArchivePaidBtn.disabled = false;
+        }
+      });
+
+      async function setOrderArchived(id, archived, buttonEl) {
+        buttonEl.textContent = "…";
+        buttonEl.disabled = true;
+        try {
+          const res = await fetch("/admin/purchases/" + id + "/archive", {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ archived }),
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+        } catch {
+          /* reload below shows the true state */
+        }
+        await loadOrders();
+      }
 
       const VIEW_TITLES = {
         dashboard: "Dashboard",
@@ -893,7 +1149,15 @@
         const errEl = document.getElementById("orders-error");
         errEl.classList.add("hidden");
         try {
-          const res = await fetch("/admin/purchases", { credentials: "include" });
+          const params = new URLSearchParams();
+          if (orderStatusSelect.value) params.set("status", orderStatusSelect.value);
+          const q = searchOrders.value.trim();
+          if (q) params.set("q", q);
+          if (ordersArchived) params.set("archived", "1");
+          const qs = params.toString();
+          const res = await fetch("/admin/purchases" + (qs ? "?" + qs : ""), {
+            credentials: "include",
+          });
           if (res.status === 401) {
             window.location.href = "/admin/login";
             return;
@@ -917,6 +1181,11 @@
 
           rows.innerHTML = "";
           emptyEl.classList.toggle("hidden", purchases.length > 0);
+          emptyEl.textContent = ordersArchived
+            ? "Nothing archived yet — use Archive on a finished order to tidy it away."
+            : q || orderStatusSelect.value
+            ? "No orders match these filters."
+            : "No orders yet — they’ll appear here the moment someone buys from the archive shop.";
 
           for (const p of purchases) {
             const when = new Date(p.created_at);
@@ -928,7 +1197,7 @@
                 : "status-pending";
             const row = document.createElement("div");
             row.className =
-              "grid gap-2 px-5 py-4 text-sm sm:grid-cols-[0.9fr_1fr_1fr_1.3fr_0.6fr_0.6fr] sm:items-center";
+              "grid gap-2 px-5 py-4 text-sm sm:grid-cols-[0.85fr_1fr_1fr_1.25fr_0.5fr_0.6fr_0.55fr] sm:items-center";
             row.innerHTML =
               '<span class="text-cream/50">' +
               when.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
@@ -952,13 +1221,26 @@
               '" style="pointer-events:none">' +
               escapeHtml(p.status) +
               "</span></span>" +
+              '<span><button type="button" data-archive-order="' +
+              escapeAttr(p.id) +
+              '" class="archive-btn">' +
+              (ordersArchived ? "Restore" : "Archive") +
+              "</button></span>" +
               (p.note
-                ? '<p class="text-xs text-cream/45 sm:col-span-6" style="margin-top:0.2rem">Note: ' +
+                ? '<p class="text-xs text-cream/45 sm:col-span-7" style="margin-top:0.2rem">Note: ' +
                   escapeHtml(p.note) +
                   "</p>"
                 : "");
             rows.appendChild(row);
           }
+
+          rows.querySelectorAll("[data-archive-order]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const id = btn.getAttribute("data-archive-order");
+              if (!id) return;
+              setOrderArchived(id, !ordersArchived, btn);
+            });
+          });
         } catch {
           errEl.textContent = "Network error loading orders";
           errEl.classList.remove("hidden");

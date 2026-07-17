@@ -20,6 +20,7 @@ export interface Purchase {
   currency: string;
   stripe_payment_intent_id: string | null;
   status: "pending" | "paid" | "failed";
+  archived_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -36,6 +37,7 @@ function mapPurchase(row: Record<string, unknown>): Purchase {
     currency: row.currency as string,
     stripe_payment_intent_id: (row.stripe_payment_intent_id as string) ?? null,
     status: row.status as Purchase["status"],
+    archived_at: (row.archived_at as Date) ?? null,
     created_at: row.created_at as Date,
     updated_at: row.updated_at as Date,
   };
@@ -154,19 +156,71 @@ export interface AdminPurchase extends Purchase {
   graphic_label: string | null;
 }
 
+export interface AdminPurchaseFilters {
+  archived?: boolean;
+  search?: string;
+  status?: Purchase["status"] | null;
+}
+
 export async function listPurchasesForAdmin(
-  limit = 200
+  limit = 200,
+  filters: AdminPurchaseFilters = {}
 ): Promise<AdminPurchase[]> {
+  const params: unknown[] = [limit];
+  const clauses = [
+    filters.archived ? "p.archived_at IS NOT NULL" : "p.archived_at IS NULL",
+  ];
+  if (filters.status) {
+    params.push(filters.status);
+    clauses.push(`p.status = $${params.length}`);
+  }
+  if (filters.search?.trim()) {
+    params.push(`%${filters.search.trim()}%`);
+    const n = params.length;
+    clauses.push(
+      `(p.angel_name ILIKE $${n}
+        OR p.real_name ILIKE $${n}
+        OR p.email ILIKE $${n}
+        OR p.graphic_code ILIKE $${n}
+        OR a.label ILIKE $${n})`
+    );
+  }
   const result = await query(
     `SELECT p.*, a.label AS graphic_label
      FROM purchases p
      LEFT JOIN archive_graphics a ON a.code = p.graphic_code
+     WHERE ${clauses.join(" AND ")}
      ORDER BY p.created_at DESC
      LIMIT $1`,
-    [limit]
+    params
   );
   return result.rows.map((row) => ({
     ...mapPurchase(row),
     graphic_label: (row.graphic_label as string) ?? null,
   }));
+}
+
+/** Archive (or restore) a single order. */
+export async function setPurchaseArchived(
+  id: string,
+  archived: boolean
+): Promise<boolean> {
+  const result = await query(
+    `UPDATE purchases
+     SET archived_at = ${archived ? "NOW()" : "NULL"},
+         updated_at = NOW()
+     WHERE id = $1`,
+    [id]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** Bulk clean-up: archive every paid, unarchived order. */
+export async function archivePaidPurchases(): Promise<number> {
+  const result = await query(
+    `UPDATE purchases
+     SET archived_at = NOW(), updated_at = NOW()
+     WHERE archived_at IS NULL AND status = 'paid'`
+  );
+  return result.rowCount ?? 0;
 }

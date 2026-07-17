@@ -30,6 +30,10 @@ export async function migrate(): Promise<void> {
 
     ALTER TABLE entries ADD COLUMN IF NOT EXISTS email TEXT;
     ALTER TABLE entries ADD COLUMN IF NOT EXISTS graphic_code TEXT;
+    ALTER TABLE entries ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+
+    CREATE INDEX IF NOT EXISTS idx_entries_archived
+      ON entries (archived_at);
 
     CREATE INDEX IF NOT EXISTS idx_entries_real_name
       ON entries (lower(real_name));
@@ -183,11 +187,16 @@ export async function migrate(): Promise<void> {
       metadata                  JSONB NOT NULL DEFAULT '{}'::jsonb
     );
 
+    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+
     CREATE INDEX IF NOT EXISTS idx_purchases_created_at
       ON purchases (created_at DESC);
 
     CREATE INDEX IF NOT EXISTS idx_purchases_status
       ON purchases (status);
+
+    CREATE INDEX IF NOT EXISTS idx_purchases_archived
+      ON purchases (archived_at);
   `);
 
   // Keep the archive in sync: any option currently offered (or offered at any

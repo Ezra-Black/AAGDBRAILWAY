@@ -148,11 +148,6 @@ export const shopCheckoutSchema = z
     angel_name: nameField,
     real_name: nameField,
     email: emailField,
-    note: z
-      .string()
-      .transform(sanitizeText)
-      .pipe(z.string().max(500, "Note is too long (500 characters max)"))
-      .optional(),
     // Honeypot — must be empty/omitted.
     website: z.string().max(0).optional(),
   })

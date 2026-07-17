@@ -7,6 +7,7 @@ import {
   type AdminRequest,
 } from "./auth";
 import {
+  archiveCompletedEntries,
   createEntry,
   emailExistsInEntries,
   findRecentDuplicateClaim,
@@ -17,6 +18,7 @@ import {
   listEntries,
   listPending,
   markAngelNameComplete,
+  setAngelNameArchived,
   updateEntryStatus,
 } from "./db/entries";
 import { createAdmin, getAdminByEmail } from "./db/admins";
@@ -46,12 +48,14 @@ import { createContactMessage, listContactMessages } from "./db/contact";
 import { getAnalyticsSummary, recordPageView } from "./db/analytics";
 import {
   archiveGraphicOption,
+  archivePaidPurchases,
   createPurchase,
   getArchiveGraphicByCode,
   getPurchaseByIntent,
   listArchiveGraphics,
   listPurchasesForAdmin,
   markPurchaseStatusByIntent,
+  setPurchaseArchived,
 } from "./db/shop";
 import {
   getStripe,
@@ -237,7 +241,9 @@ apiRouter.get(
   })
 );
 
-/** GET /admin/entries — angel names grouped with graphics + all emails */
+/** GET /admin/entries — angel names grouped with graphics + all emails.
+ *  Query params: graphic_code, q (search), status (pending|complete), archived (1/true).
+ */
 apiRouter.get(
   "/admin/entries",
   requireAdmin,
@@ -246,16 +252,71 @@ apiRouter.get(
       typeof req.query.graphic_code === "string"
         ? req.query.graphic_code.trim()
         : "";
-    const groups = await listAngelGroupsForAdmin(
-      2000,
-      graphicCode || null
-    );
+    const search =
+      typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+    const statusRaw =
+      typeof req.query.status === "string" ? req.query.status.trim() : "";
+    const status =
+      statusRaw === "pending" || statusRaw === "complete" ? statusRaw : null;
+    const archived =
+      req.query.archived === "1" || req.query.archived === "true";
+
+    const groups = await listAngelGroupsForAdmin(2000, {
+      graphicCode: graphicCode || null,
+      search: search || undefined,
+      status,
+      archived,
+    });
     res.json({
       success: true,
       count: groups.length,
       filter: graphicCode || null,
+      archived,
       groups,
     });
+  })
+);
+
+/** PATCH /admin/angel-names/archive — archive or restore all rows for a name */
+apiRouter.patch(
+  "/admin/angel-names/archive",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({
+        angel_name: z.string().trim().min(1).max(120),
+        archived: z.boolean(),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res
+        .status(400)
+        .json({ success: false, error: "angel_name and archived are required" });
+      return;
+    }
+
+    const updated = await setAngelNameArchived(
+      parsed.data.angel_name,
+      parsed.data.archived
+    );
+    logger.info("Admin toggled angel name archive", {
+      angel_name: parsed.data.angel_name,
+      archived: parsed.data.archived,
+      updated,
+    });
+    res.json({ success: true, updated });
+  })
+);
+
+/** POST /admin/entries/archive-completed — bulk clean-up of finished requests */
+apiRouter.post(
+  "/admin/entries/archive-completed",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const updated = await archiveCompletedEntries();
+    logger.info("Admin archived completed entries", { updated });
+    res.json({ success: true, updated });
   })
 );
 
@@ -768,7 +829,7 @@ apiRouter.post(
       real_name: parsed.data.real_name,
       email: parsed.data.email,
       graphic_code: graphic.code,
-      note: parsed.data.note?.trim() || null,
+      note: null,
       amount_cents: amount,
       currency: SHOP_CURRENCY,
       stripe_payment_intent_id: intent.id,
@@ -842,13 +903,73 @@ apiRouter.post(
   })
 );
 
-/** GET /admin/purchases — order list for the admin portal. */
+/** GET /admin/purchases — order list for the admin portal.
+ *  Query params: q (search), status (pending|paid|failed), archived (1/true).
+ */
 apiRouter.get(
   "/admin/purchases",
   requireAdmin,
+  asyncHandler(async (req, res) => {
+    const search =
+      typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+    const statusRaw =
+      typeof req.query.status === "string" ? req.query.status.trim() : "";
+    const status =
+      statusRaw === "pending" || statusRaw === "paid" || statusRaw === "failed"
+        ? statusRaw
+        : null;
+    const archived =
+      req.query.archived === "1" || req.query.archived === "true";
+
+    const purchases = await listPurchasesForAdmin(200, {
+      search: search || undefined,
+      status,
+      archived,
+    });
+    res.json({ success: true, count: purchases.length, archived, purchases });
+  })
+);
+
+/** PATCH /admin/purchases/:id/archive — archive or restore one order */
+apiRouter.patch(
+  "/admin/purchases/:id/archive",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid order ID" });
+      return;
+    }
+    const parsed = z
+      .object({ archived: z.boolean() })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: "archived is required" });
+      return;
+    }
+
+    const ok = await setPurchaseArchived(idCheck.data, parsed.data.archived);
+    if (!ok) {
+      res.status(404).json({ success: false, error: "Order not found" });
+      return;
+    }
+    logger.info("Admin toggled order archive", {
+      id: idCheck.data,
+      archived: parsed.data.archived,
+    });
+    res.json({ success: true });
+  })
+);
+
+/** POST /admin/purchases/archive-paid — bulk clean-up of paid orders */
+apiRouter.post(
+  "/admin/purchases/archive-paid",
+  requireAdmin,
   asyncHandler(async (_req, res) => {
-    const purchases = await listPurchasesForAdmin(200);
-    res.json({ success: true, count: purchases.length, purchases });
+    const updated = await archivePaidPurchases();
+    logger.info("Admin archived paid orders", { updated });
+    res.json({ success: true, updated });
   })
 );
 

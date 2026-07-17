@@ -9,6 +9,7 @@ export interface Entry {
   email: string | null;
   graphic_code: string | null;
   status: EntryStatus;
+  archived_at: Date | null;
   created_at: Date;
   updated_at: Date;
   metadata: Record<string, unknown>;
@@ -30,6 +31,7 @@ function mapRow(row: Record<string, unknown>): Entry {
     email: (row.email as string) ?? null,
     graphic_code: (row.graphic_code as string) ?? null,
     status: row.status as EntryStatus,
+    archived_at: (row.archived_at as Date) ?? null,
     created_at: row.created_at as Date,
     updated_at: row.updated_at as Date,
     metadata: (row.metadata as Record<string, unknown>) ?? {},
@@ -87,8 +89,23 @@ export interface AdminAngelGroup {
 
 /** Raw admin rows (one per submission). */
 export async function listEntriesForAdmin(
-  limit = 2000
+  limit = 2000,
+  options: { archived?: boolean; search?: string } = {}
 ): Promise<AdminEntryListItem[]> {
+  const archivedClause = options.archived
+    ? "e.archived_at IS NOT NULL"
+    : "e.archived_at IS NULL";
+  const params: unknown[] = [limit];
+  let searchClause = "";
+  if (options.search?.trim()) {
+    params.push(`%${options.search.trim()}%`);
+    searchClause = `
+       AND (e.angel_name ILIKE $2
+         OR e.real_name ILIKE $2
+         OR e.email ILIKE $2
+         OR e.graphic_code ILIKE $2
+         OR g.label ILIKE $2)`;
+  }
   const result = await query(
     `SELECT
        e.id,
@@ -101,9 +118,10 @@ export async function listEntriesForAdmin(
        e.created_at
      FROM entries e
      LEFT JOIN graphic_options g ON g.code = e.graphic_code
+     WHERE ${archivedClause}${searchClause}
      ORDER BY e.created_at DESC
      LIMIT $1`,
-    [limit]
+    params
   );
 
   return result.rows.map((row) => ({
@@ -118,15 +136,24 @@ export async function listEntriesForAdmin(
   }));
 }
 
-/** Group submissions by angel name for the admin portal.
- *  Optional graphicCode filter: only rows for that graphic category.
- */
+export interface AdminGroupFilters {
+  graphicCode?: string | null;
+  archived?: boolean;
+  search?: string;
+  /** "pending" = has open claims, "complete" = everything processed. */
+  status?: "pending" | "complete" | null;
+}
+
+/** Group submissions by angel name for the admin portal. */
 export async function listAngelGroupsForAdmin(
   limit = 2000,
-  graphicCode?: string | null
+  filters: AdminGroupFilters = {}
 ): Promise<AdminAngelGroup[]> {
-  const rows = await listEntriesForAdmin(limit);
-  const filterCode = graphicCode?.trim().toLowerCase() || "";
+  const rows = await listEntriesForAdmin(limit, {
+    archived: filters.archived,
+    search: filters.search,
+  });
+  const filterCode = filters.graphicCode?.trim().toLowerCase() || "";
   const filtered = filterCode
     ? rows.filter(
         (row) => (row.graphic_code || "").trim().toLowerCase() === filterCode
@@ -184,9 +211,44 @@ export async function listAngelGroupsForAdmin(
     }
   }
 
-  return Array.from(groups.values()).sort(
-    (a, b) => b.latest_at.getTime() - a.latest_at.getTime()
+  let list = Array.from(groups.values());
+  if (filters.status === "pending") {
+    list = list.filter((g) => g.has_pending);
+  } else if (filters.status === "complete") {
+    list = list.filter((g) => !g.has_pending);
+  }
+
+  return list.sort((a, b) => b.latest_at.getTime() - a.latest_at.getTime());
+}
+
+/** Archive (or restore) every submission for an angel name. */
+export async function setAngelNameArchived(
+  angelName: string,
+  archived: boolean
+): Promise<number> {
+  const result = await query(
+    `UPDATE entries
+     SET archived_at = ${archived ? "NOW()" : "NULL"},
+         updated_at = NOW()
+     WHERE lower(angel_name) = lower($1)`,
+    [angelName]
   );
+  return result.rowCount ?? 0;
+}
+
+/** Bulk clean-up: archive every fully completed, unarchived submission. */
+export async function archiveCompletedEntries(): Promise<number> {
+  const result = await query(
+    `UPDATE entries
+     SET archived_at = NOW(), updated_at = NOW()
+     WHERE archived_at IS NULL
+       AND status = 'processed'
+       AND lower(angel_name) NOT IN (
+         SELECT lower(angel_name) FROM entries
+         WHERE archived_at IS NULL AND status IN ('pending', 'processing')
+       )`
+  );
+  return result.rowCount ?? 0;
 }
 
 export async function markAngelNameComplete(
