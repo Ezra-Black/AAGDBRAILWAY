@@ -126,6 +126,26 @@ export async function migrate(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_facebook_users_email
       ON facebook_users (lower(email));
+
+    -- Privacy-friendly first-party analytics: no IPs, no PII.
+    -- visitor_key is a salted hash of a random client-generated id.
+    CREATE TABLE IF NOT EXISTS page_views (
+      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      visitor_key    TEXT NOT NULL,
+      path           TEXT NOT NULL,
+      referrer_host  TEXT,
+      device         TEXT,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_page_views_created_at
+      ON page_views (created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_page_views_visitor
+      ON page_views (visitor_key, created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_page_views_path
+      ON page_views (path);
   `);
 
   await query(

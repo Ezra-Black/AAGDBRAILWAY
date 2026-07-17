@@ -41,6 +41,20 @@ Migrations run automatically on app boot.
 | `GET` | `/admin/contact-messages` | Contact inbox (admin session required) |
 | `GET` | `/auth/facebook/config` | Whether Facebook quick sign-in is enabled (+ app id) |
 | `POST` | `/auth/facebook` | `{ "access_token" }` → verify with Facebook, store email securely |
+| `POST` | `/track/pageview` | Anonymous page-view beacon (no IPs / PII stored) |
+| `GET` | `/admin/analytics?days=` | Dashboard metrics: traffic, returning users, top pages, devices |
+
+### Analytics dashboard
+
+The admin portal opens on a **Dashboard** tab with traffic charts and metrics
+(7 / 30 / 90-day ranges): page views, unique visitors, new vs returning,
+devices, top pages, top referrers, plus request/newsletter/contact counts.
+Tracking is privacy-friendly by design: the browser keeps a **random id**
+(no personal data) in localStorage so returning visitors can be counted, and
+the server stores only a **salted hash** of that id along with path, referrer
+hostname, and a coarse device bucket. No IP addresses, no fingerprinting, no
+third-party trackers. Optionally set `ANALYTICS_SALT` to a random string to
+strengthen the hashing.
 
 ### Facebook quick sign-in
 
