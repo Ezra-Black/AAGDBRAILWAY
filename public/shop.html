@@ -310,6 +310,14 @@
             Preparing secure payment…
           </div>
           <div id="payment-element" class="mt-6"></div>
+          <div id="checkout-unavailable" class="mt-6 hidden rounded-2xl border border-white/10 px-5 py-6 text-center" style="background:rgba(12,9,5,0.5)">
+            <p class="text-sm text-cream/70">Online checkout is opening very soon.</p>
+            <p class="mt-2 text-xs text-cream/45">
+              In the meantime,
+              <a href="/contact" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">send us a message</a>
+              with the details above and we’ll take your order personally.
+            </p>
+          </div>
           <p id="err-4" class="mt-3 hidden text-sm text-rose-300"></p>
           <button type="button" id="pay-btn" class="btn-primary big-btn mt-6 w-full" disabled>
             Pay <span id="pay-amount">$5</span> securely
@@ -531,27 +539,28 @@
             fetch("/shop/config", { cache: "no-store" }),
             fetch("/shop/graphics", { cache: "no-store" }),
           ]);
-          const cfg = await cfgRes.json();
-          const g = await gRes.json();
+          const cfg = await cfgRes.json().catch(() => ({}));
+          const g = await gRes.json().catch(() => ({}));
 
-          if (!cfgRes.ok || !cfg.success || !cfg.enabled) {
-            disableShop();
-            return;
+          // Stripe keys are optional: without them the shop still shows the
+          // archive, and the final step points people to the contact page.
+          if (cfgRes.ok && cfg.success && cfg.enabled) {
+            try {
+              stripe = Stripe(cfg.publishable_key);
+              shopConfig = cfg;
+              const price = fmtPrice(cfg.price_cents, cfg.currency);
+              document.getElementById("price-badge").textContent = "✦ " + price + " per graphic";
+              document.getElementById("pay-amount").textContent = price;
+            } catch {
+              stripe = null;
+              shopConfig = null;
+            }
           }
-          shopConfig = cfg;
-          stripe = Stripe(cfg.publishable_key);
-
-          const price = fmtPrice(cfg.price_cents, cfg.currency);
-          document.getElementById("price-badge").textContent = "✦ " + price + " per graphic";
-          document.getElementById("pay-amount").textContent = price;
 
           graphicsCache = (g.success && g.graphics) || [];
           graphicSelect.innerHTML = "";
           if (!graphicsCache.length) {
-            const opt = document.createElement("option");
-            opt.value = "";
-            opt.textContent = "The archive is empty right now";
-            graphicSelect.appendChild(opt);
+            disableShop();
             return;
           }
           const placeholder = document.createElement("option");
@@ -603,14 +612,21 @@
         document.getElementById("sum-graphic").textContent = graphic ? graphic.label : payload.graphic_code;
         document.getElementById("sum-angel").textContent = payload.angel_name;
         document.getElementById("sum-email").textContent = payload.email;
-        document.getElementById("sum-total").textContent = fmtPrice(
-          shopConfig.price_cents,
-          shopConfig.currency
-        );
+        document.getElementById("sum-total").textContent = shopConfig
+          ? fmtPrice(shopConfig.price_cents, shopConfig.currency)
+          : "$5";
 
         const payBtn = document.getElementById("pay-btn");
         const loading = document.getElementById("payment-loading");
         showError(4, "");
+
+        // Payments not configured yet — show the contact fallback instead.
+        if (!shopConfig || !stripe) {
+          loading.style.display = "none";
+          payBtn.style.display = "none";
+          document.getElementById("checkout-unavailable").classList.remove("hidden");
+          return;
+        }
 
         // Reuse the payment element if nothing changed (e.g. they went back
         // to double-check and returned without edits).

@@ -195,8 +195,12 @@ export async function migrate(): Promise<void> {
   await query(`
     INSERT INTO archive_graphics (code, label, sort_order)
     SELECT code, label, COALESCE(sort_order, 0)
-    FROM graphic_options
+    FROM graphic_options go
     WHERE code IS NOT NULL AND trim(code) <> ''
+      AND NOT EXISTS (
+        SELECT 1 FROM archive_graphics ag
+        WHERE lower(trim(ag.label)) = lower(trim(go.label))
+      )
     ON CONFLICT (code) DO NOTHING
   `);
 
@@ -214,6 +218,19 @@ export async function migrate(): Promise<void> {
       SET label = EXCLUDED.label,
           image_url = EXCLUDED.image_url,
           active = true
+  `);
+
+  // Hide label duplicates (e.g. a hand-added "Fairy Ring" without an image)
+  // so the shop dropdown only shows the canonical entry with artwork.
+  await query(`
+    UPDATE archive_graphics a
+    SET active = false
+    FROM archive_graphics b
+    WHERE a.id <> b.id
+      AND lower(trim(a.label)) = lower(trim(b.label))
+      AND b.image_url IS NOT NULL
+      AND a.image_url IS NULL
+      AND COALESCE(a.active, true) = true
   `);
 
   await query(
