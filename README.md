@@ -43,6 +43,26 @@ Migrations run automatically on app boot.
 | `POST` | `/auth/facebook` | `{ "access_token" }` → verify with Facebook, store email securely |
 | `POST` | `/track/pageview` | Anonymous page-view beacon (no IPs / PII stored) |
 | `GET` | `/admin/analytics?days=` | Dashboard metrics: traffic, returning users, top pages, devices |
+| `GET` | `/shop/config` | Shop status, Stripe publishable key, price |
+| `GET` | `/shop/graphics` | Archive graphics dropdown (every option ever offered) |
+| `POST` | `/shop/checkout` | Start a $5 purchase → Stripe PaymentIntent client secret |
+| `POST` | `/shop/confirm` | Verify a payment server-side with Stripe, mark purchase paid |
+| `POST` | `/stripe/webhook` | Optional Stripe webhook (needs `STRIPE_WEBHOOK_SECRET`) |
+| `GET` | `/admin/purchases` | Shop orders (admin session required) |
+
+### The Archive Shop (`/shop`)
+
+Past graphic styles are sold as **$5 AAG Archive Graphics**. The
+`archive_graphics` table permanently tracks every option ever offered on the
+request form (synced automatically on boot and whenever an admin adds an
+option — removing an option from the form keeps it in the archive). The shop
+page walks buyers through a large-type, step-by-step guided checkout
+(graphic → names → email → review & pay) with an embedded Stripe Payment
+Element. Amounts are always set server-side; payments are verified with
+Stripe server-side before an order is marked paid. Orders appear in the
+admin portal's **Orders** tab. Configure with `STRIPE_SECRET_KEY` +
+`STRIPE_PUBLISHABLE_KEY` (and optionally `STRIPE_WEBHOOK_SECRET` +
+`SHOP_PRICE_CENTS`).
 
 ### Analytics dashboard
 

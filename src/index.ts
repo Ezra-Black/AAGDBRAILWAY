@@ -10,9 +10,11 @@ import express, {
 import helmet from "helmet";
 import { migrate } from "./db/migrate";
 import { closePool } from "./db/pool";
+import { markPurchaseStatusByIntent } from "./db/shop";
 import { logger } from "./logger";
 import { apiRouter } from "./routes";
 import { globalLimiter } from "./security";
+import { getStripe, stripeConfigured } from "./stripe";
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -38,6 +40,7 @@ app.use(
           "https://cdn.jsdelivr.net",
           "https://unpkg.com",
           "https://connect.facebook.net",
+          "https://js.stripe.com",
         ],
         scriptSrcElem: [
           "'self'",
@@ -46,8 +49,16 @@ app.use(
           "https://cdn.jsdelivr.net",
           "https://unpkg.com",
           "https://connect.facebook.net",
+          "https://js.stripe.com",
         ],
-        imgSrc: ["'self'", "data:", "blob:", "https://*.fbcdn.net", "https://*.facebook.com"],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "blob:",
+          "https://*.fbcdn.net",
+          "https://*.facebook.com",
+          "https://*.stripe.com",
+        ],
         connectSrc: [
           "'self'",
           "https://cdn.jsdelivr.net",
@@ -55,12 +66,18 @@ app.use(
           "https://graph.facebook.com",
           "https://www.facebook.com",
           "https://web.facebook.com",
+          "https://api.stripe.com",
+          "https://m.stripe.network",
+          "https://r.stripe.com",
         ],
         frameSrc: [
           "'self'",
           "https://www.facebook.com",
           "https://web.facebook.com",
           "https://staticxx.facebook.com",
+          "https://js.stripe.com",
+          "https://hooks.stripe.com",
+          "https://m.stripe.network",
         ],
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
         workerSrc: ["'self'", "blob:"],
@@ -77,6 +94,48 @@ app.use(
       ? corsOrigin.split(",").map((o) => o.trim())
       : true,
   })
+);
+
+/**
+ * Stripe webhook (optional, recommended in production): set
+ * STRIPE_WEBHOOK_SECRET and point Stripe at /stripe/webhook. Must be mounted
+ * BEFORE the JSON parser because signature verification needs the raw body.
+ */
+app.post(
+  "/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  async (req: Request, res: Response) => {
+    const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+    if (!secret || !stripeConfigured()) {
+      res.status(404).json({ success: false, error: "Not found" });
+      return;
+    }
+
+    try {
+      const event = getStripe().webhooks.constructEvent(
+        req.body,
+        String(req.headers["stripe-signature"] || ""),
+        secret
+      );
+
+      if (event.type === "payment_intent.succeeded") {
+        const intent = event.data.object;
+        await markPurchaseStatusByIntent(intent.id, "paid");
+        logger.info("Webhook: purchase paid", { payment_intent: intent.id });
+      } else if (event.type === "payment_intent.payment_failed") {
+        const intent = event.data.object;
+        await markPurchaseStatusByIntent(intent.id, "failed");
+        logger.info("Webhook: purchase failed", { payment_intent: intent.id });
+      }
+
+      res.json({ received: true });
+    } catch (err) {
+      logger.error("Webhook signature verification failed", {
+        error: String(err),
+      });
+      res.status(400).json({ success: false, error: "Invalid signature" });
+    }
+  }
 );
 
 app.use(express.json({ limit: "8kb" }));
@@ -113,6 +172,10 @@ app.get("/about", (_req, res) => {
 
 app.get("/contact", (_req, res) => {
   res.sendFile(path.join(publicDir, "contact.html"));
+});
+
+app.get("/shop", (_req, res) => {
+  res.sendFile(path.join(publicDir, "shop.html"));
 });
 
 app.get("/admin", (_req, res) => {
