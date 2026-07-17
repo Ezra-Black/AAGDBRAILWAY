@@ -19,7 +19,7 @@ export interface Purchase {
   amount_cents: number;
   currency: string;
   stripe_payment_intent_id: string | null;
-  status: "pending" | "paid" | "failed";
+  status: "pending" | "paid" | "failed" | "delivered";
   archived_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -142,12 +142,30 @@ export async function markPurchaseStatusByIntent(
   paymentIntentId: string,
   status: Purchase["status"]
 ): Promise<Purchase | null> {
+  // Stripe "paid" must not overwrite an admin "delivered" mark.
   const result = await query(
     `UPDATE purchases
      SET status = $2, updated_at = NOW()
      WHERE stripe_payment_intent_id = $1
+       AND NOT (status = 'delivered' AND $2::text = 'paid')
      RETURNING *`,
     [paymentIntentId, status]
+  );
+  return result.rows[0] ? mapPurchase(result.rows[0]) : null;
+}
+
+/** Admin-driven status change (paid ↔ delivered). */
+export async function setPurchaseStatus(
+  id: string,
+  status: "paid" | "delivered"
+): Promise<Purchase | null> {
+  const result = await query(
+    `UPDATE purchases
+     SET status = $2, updated_at = NOW()
+     WHERE id = $1
+       AND status IN ('paid', 'delivered')
+     RETURNING *`,
+    [id, status]
   );
   return result.rows[0] ? mapPurchase(result.rows[0]) : null;
 }
@@ -215,12 +233,13 @@ export async function setPurchaseArchived(
   return (result.rowCount ?? 0) > 0;
 }
 
-/** Bulk clean-up: archive every paid, unarchived order. */
+/** Bulk clean-up: archive every paid or delivered, unarchived order. */
 export async function archivePaidPurchases(): Promise<number> {
   const result = await query(
     `UPDATE purchases
      SET archived_at = NOW(), updated_at = NOW()
-     WHERE archived_at IS NULL AND status = 'paid'`
+     WHERE archived_at IS NULL
+       AND status IN ('paid', 'delivered')`
   );
   return result.rowCount ?? 0;
 }

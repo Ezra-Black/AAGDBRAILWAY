@@ -51,6 +51,38 @@
         font-size: 0.75rem;
         font-weight: 600;
       }
+      .status-paid {
+        color: #6ee7b7;
+        cursor: pointer;
+        background: rgba(110, 231, 183, 0.1);
+        border: 1px solid rgba(110, 231, 183, 0.35);
+        border-radius: 9999px;
+        padding: 0.2rem 0.7rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        font-family: inherit;
+        transition: background 0.25s ease, color 0.25s ease;
+      }
+      .status-paid:hover {
+        background: rgba(110, 231, 183, 0.22);
+        color: #a7f3d0;
+      }
+      .status-delivered {
+        color: #7dd3fc;
+        cursor: pointer;
+        background: rgba(125, 211, 252, 0.1);
+        border: 1px solid rgba(125, 211, 252, 0.35);
+        border-radius: 9999px;
+        padding: 0.2rem 0.7rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        font-family: inherit;
+        transition: background 0.25s ease, color 0.25s ease;
+      }
+      .status-delivered:hover {
+        background: rgba(125, 211, 252, 0.22);
+        color: #bae6fd;
+      }
       .dup-yes {
         color: #fca5a5;
         background: rgba(252, 165, 165, 0.08);
@@ -518,15 +550,19 @@
           <div>
             <h2 class="text-lg font-semibold text-cream">Archive shop orders</h2>
             <p class="mt-1 text-xs text-cream/45">
-              $5 archive graphic purchases — paid orders are ready to be worked on.
+              $5 archive graphic purchases — click <span class="text-emerald-300">paid</span> to mark delivered when the graphic is sent.
             </p>
           </div>
         </div>
 
-        <section class="mb-6 grid grid-cols-3 gap-3">
+        <section class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div class="stat-card">
-            <p class="col-header">Paid orders</p>
+            <p class="col-header">Paid</p>
             <p id="o-paid" class="mt-1.5 text-2xl font-bold text-emerald-300" style="letter-spacing:-0.03em">—</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">Delivered</p>
+            <p id="o-delivered" class="mt-1.5 text-2xl font-bold text-sky-300" style="letter-spacing:-0.03em">—</p>
           </div>
           <div class="stat-card">
             <p class="col-header">Revenue</p>
@@ -548,9 +584,9 @@
             type="button"
             id="ord-archive-paid"
             class="range-btn"
-            title="Move every paid order into the archive"
+            title="Move every paid or delivered order into the archive"
           >
-            Archive all paid
+            Archive all finished
           </button>
         </div>
 
@@ -561,6 +597,7 @@
             <select id="filter_order_status" class="min-w-[150px]" style="padding:0.6rem 0.9rem;font-size:0.875rem">
               <option value="">All statuses</option>
               <option value="paid">Paid</option>
+              <option value="delivered">Delivered</option>
               <option value="pending">Pending</option>
               <option value="failed">Failed</option>
             </select>
@@ -1081,7 +1118,7 @@
       searchOrders.addEventListener("input", debounce(() => loadOrders(), 300));
 
       ordArchivePaidBtn.addEventListener("click", async () => {
-        if (!confirm("Archive every paid order? You can restore them from the Archived tab.")) return;
+        if (!confirm("Archive every paid or delivered order? You can restore them from the Archived tab.")) return;
         ordArchivePaidBtn.disabled = true;
         try {
           const res = await fetch("/admin/purchases/archive-paid", {
@@ -1120,6 +1157,39 @@
           /* reload below shows the true state */
         }
         await loadOrders();
+      }
+
+      async function setOrderStatus(id, status, buttonEl) {
+        const prev = buttonEl.textContent;
+        buttonEl.textContent = "…";
+        buttonEl.disabled = true;
+        try {
+          const res = await fetch("/admin/purchases/" + id + "/status", {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status }),
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            document.getElementById("orders-error").textContent =
+              data.error || "Could not update order status";
+            document.getElementById("orders-error").classList.remove("hidden");
+          }
+        } catch {
+          document.getElementById("orders-error").textContent =
+            "Network error updating order status";
+          document.getElementById("orders-error").classList.remove("hidden");
+        }
+        await loadOrders();
+        if (buttonEl.isConnected) {
+          buttonEl.textContent = prev;
+          buttonEl.disabled = false;
+        }
       }
 
       const VIEW_TITLES = {
@@ -1172,12 +1242,17 @@
           const purchases = data.purchases || [];
 
           const paid = purchases.filter((p) => p.status === "paid");
-          const revenueCents = paid.reduce((s, p) => s + (p.amount_cents || 0), 0);
+          const delivered = purchases.filter((p) => p.status === "delivered");
+          const fulfilled = purchases.filter(
+            (p) => p.status === "paid" || p.status === "delivered"
+          );
+          const revenueCents = fulfilled.reduce((s, p) => s + (p.amount_cents || 0), 0);
           document.getElementById("o-paid").textContent = paid.length;
+          document.getElementById("o-delivered").textContent = delivered.length;
           document.getElementById("o-revenue").textContent =
             "$" + (revenueCents / 100).toLocaleString();
           document.getElementById("o-pending").textContent =
-            purchases.length - paid.length;
+            purchases.length - fulfilled.length;
 
           rows.innerHTML = "";
           emptyEl.classList.toggle("hidden", purchases.length > 0);
@@ -1187,14 +1262,38 @@
             ? "No orders match these filters."
             : "No orders yet — they’ll appear here the moment someone buys from the archive shop.";
 
+          function renderOrderStatus(p) {
+            if (p.status === "paid") {
+              return (
+                '<button type="button" data-order-status="' +
+                escapeAttr(p.id) +
+                '" data-next-status="delivered" class="status-paid" title="Mark as delivered">' +
+                "paid" +
+                "</button>"
+              );
+            }
+            if (p.status === "delivered") {
+              return (
+                '<button type="button" data-order-status="' +
+                escapeAttr(p.id) +
+                '" data-next-status="paid" class="status-delivered" title="Mark back as paid">' +
+                "delivered" +
+                "</button>"
+              );
+            }
+            const statusClass =
+              p.status === "failed" ? "dup-yes" : "status-pending";
+            return (
+              '<span class="' +
+              statusClass +
+              '" style="pointer-events:none">' +
+              escapeHtml(p.status) +
+              "</span>"
+            );
+          }
+
           for (const p of purchases) {
             const when = new Date(p.created_at);
-            const statusClass =
-              p.status === "paid"
-                ? "status-complete"
-                : p.status === "failed"
-                ? "dup-yes"
-                : "status-pending";
             const row = document.createElement("div");
             row.className =
               "grid gap-2 px-5 py-4 text-sm sm:grid-cols-[0.85fr_1fr_1fr_1.25fr_0.5fr_0.6fr_0.55fr] sm:items-center";
@@ -1216,11 +1315,9 @@
               '<span class="text-cream/70">$' +
               (p.amount_cents / 100).toFixed(2).replace(/\.00$/, "") +
               "</span>" +
-              '<span><span class="' +
-              statusClass +
-              '" style="pointer-events:none">' +
-              escapeHtml(p.status) +
-              "</span></span>" +
+              "<span>" +
+              renderOrderStatus(p) +
+              "</span>" +
               '<span><button type="button" data-archive-order="' +
               escapeAttr(p.id) +
               '" class="archive-btn">' +
@@ -1239,6 +1336,15 @@
               const id = btn.getAttribute("data-archive-order");
               if (!id) return;
               setOrderArchived(id, !ordersArchived, btn);
+            });
+          });
+
+          rows.querySelectorAll("[data-order-status]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const id = btn.getAttribute("data-order-status");
+              const next = btn.getAttribute("data-next-status");
+              if (!id || (next !== "paid" && next !== "delivered")) return;
+              setOrderStatus(id, next, btn);
             });
           });
         } catch {

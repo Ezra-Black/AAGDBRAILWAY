@@ -181,13 +181,19 @@ export async function migrate(): Promise<void> {
       currency                  TEXT NOT NULL DEFAULT 'usd',
       stripe_payment_intent_id  TEXT UNIQUE,
       status                    TEXT NOT NULL DEFAULT 'pending'
-                                CHECK (status IN ('pending', 'paid', 'failed')),
+                                CHECK (status IN ('pending', 'paid', 'failed', 'delivered')),
       created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       metadata                  JSONB NOT NULL DEFAULT '{}'::jsonb
     );
 
     ALTER TABLE purchases ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+
+    -- Existing DBs may still have the old CHECK without 'delivered'.
+    ALTER TABLE purchases DROP CONSTRAINT IF EXISTS purchases_status_check;
+    ALTER TABLE purchases
+      ADD CONSTRAINT purchases_status_check
+      CHECK (status IN ('pending', 'paid', 'failed', 'delivered'));
 
     CREATE INDEX IF NOT EXISTS idx_purchases_created_at
       ON purchases (created_at DESC);

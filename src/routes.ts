@@ -56,6 +56,7 @@ import {
   listPurchasesForAdmin,
   markPurchaseStatusByIntent,
   setPurchaseArchived,
+  setPurchaseStatus,
 } from "./db/shop";
 import {
   getStripe,
@@ -881,8 +882,9 @@ apiRouter.post(
 
     let status = purchase.status;
     if (intent.status === "succeeded") {
-      status = "paid";
-    } else if (intent.status === "canceled") {
+      // Keep delivered if an admin already marked it; otherwise mark paid.
+      status = purchase.status === "delivered" ? "delivered" : "paid";
+    } else if (intent.status === "canceled" && purchase.status !== "delivered") {
       status = "failed";
     }
 
@@ -894,9 +896,9 @@ apiRouter.post(
     res.json({
       success: true,
       status,
-      paid: status === "paid",
+      paid: status === "paid" || status === "delivered",
       message:
-        status === "paid"
+        status === "paid" || status === "delivered"
           ? "Payment received! Your archive graphic is officially in the queue."
           : "Payment not completed yet.",
     });
@@ -904,7 +906,7 @@ apiRouter.post(
 );
 
 /** GET /admin/purchases — order list for the admin portal.
- *  Query params: q (search), status (pending|paid|failed), archived (1/true).
+ *  Query params: q (search), status (pending|paid|failed|delivered), archived (1/true).
  */
 apiRouter.get(
   "/admin/purchases",
@@ -915,7 +917,10 @@ apiRouter.get(
     const statusRaw =
       typeof req.query.status === "string" ? req.query.status.trim() : "";
     const status =
-      statusRaw === "pending" || statusRaw === "paid" || statusRaw === "failed"
+      statusRaw === "pending" ||
+      statusRaw === "paid" ||
+      statusRaw === "failed" ||
+      statusRaw === "delivered"
         ? statusRaw
         : null;
     const archived =
@@ -927,6 +932,46 @@ apiRouter.get(
       archived,
     });
     res.json({ success: true, count: purchases.length, archived, purchases });
+  })
+);
+
+/** PATCH /admin/purchases/:id/status — mark paid ↔ delivered */
+apiRouter.patch(
+  "/admin/purchases/:id/status",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid order ID" });
+      return;
+    }
+    const parsed = z
+      .object({
+        status: z.enum(["paid", "delivered"]),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "status must be paid or delivered",
+      });
+      return;
+    }
+
+    const purchase = await setPurchaseStatus(idCheck.data, parsed.data.status);
+    if (!purchase) {
+      res.status(404).json({
+        success: false,
+        error: "Order not found or not eligible for that status",
+      });
+      return;
+    }
+    logger.info("Admin updated order status", {
+      id: purchase.id,
+      status: purchase.status,
+    });
+    res.json({ success: true, purchase });
   })
 );
 
