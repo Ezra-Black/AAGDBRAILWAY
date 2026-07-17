@@ -196,6 +196,13 @@ export async function migrate(): Promise<void> {
     ON CONFLICT (code) DO NOTHING
   `);
 
+  // Archive-only designs: sold in the shop but never on the request form.
+  await query(`
+    INSERT INTO archive_graphics (code, label, sort_order)
+    VALUES ('fairy-ring', 'Fairy Ring', 0)
+    ON CONFLICT (code) DO NOTHING
+  `);
+
   await query(
     `INSERT INTO site_stats (key, value)
      VALUES ('newsletter_signups', 55)
