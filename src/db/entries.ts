@@ -84,6 +84,9 @@ export interface AdminAngelGroup {
   /** True when this angel name has more than one submission on file. */
   duplicate: boolean;
   submission_count: number;
+  /** Earliest submission for this angel name. */
+  created_at: Date;
+  /** Most recent submission for this angel name. */
   latest_at: Date;
 }
 
@@ -174,6 +177,7 @@ export async function listAngelGroupsForAdmin(
         has_pending: false,
         duplicate: false,
         submission_count: 0,
+        created_at: row.created_at,
         latest_at: row.created_at,
       };
       groups.set(key, group);
@@ -188,6 +192,9 @@ export async function listAngelGroupsForAdmin(
     if (row.created_at > group.latest_at) {
       group.latest_at = row.created_at;
       group.angel_name = row.angel_name;
+    }
+    if (row.created_at < group.created_at) {
+      group.created_at = row.created_at;
     }
 
     if (row.graphic_code) {

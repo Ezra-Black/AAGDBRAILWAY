@@ -661,6 +661,44 @@
         };
       }
 
+      /** Relative age: "3 hours ago", "5 days ago", "2 months ago". */
+      function formatRelativeAge(value) {
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) return "—";
+        const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+        if (seconds < 60) return "just now";
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) {
+          return minutes === 1 ? "1 minute ago" : minutes + " minutes ago";
+        }
+        const hours = Math.floor(minutes / 60);
+        if (hours < 48) {
+          return hours === 1 ? "1 hour ago" : hours + " hours ago";
+        }
+        const days = Math.floor(hours / 24);
+        if (days < 60) {
+          return days === 1 ? "1 day ago" : days + " days ago";
+        }
+        const months = Math.floor(days / 30);
+        if (months < 24) {
+          return months === 1 ? "1 month ago" : months + " months ago";
+        }
+        const years = Math.floor(days / 365);
+        return years === 1 ? "1 year ago" : years + " years ago";
+      }
+
+      function absoluteDateTitle(value) {
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        return date.toLocaleString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      }
+
       async function ensureAuth() {
         const res = await fetch("/admin/me", { credentials: "include" });
         if (!res.ok) {
@@ -1014,7 +1052,11 @@
             '<p class="font-medium text-cream">' +
             escapeHtml(group.angel_name) +
             "</p>" +
-            '<p class="mt-1 text-xs text-cream/40">' +
+            '<p class="mt-1 text-xs text-cream/40" title="' +
+            escapeAttr(absoluteDateTitle(group.created_at || group.latest_at)) +
+            '">' +
+            formatRelativeAge(group.created_at || group.latest_at) +
+            " · " +
             (group.emails?.length || 0) +
             " email" +
             ((group.emails?.length || 0) === 1 ? "" : "s") +
@@ -1293,15 +1335,14 @@
           }
 
           for (const p of purchases) {
-            const when = new Date(p.created_at);
             const row = document.createElement("div");
             row.className =
               "grid gap-2 px-5 py-4 text-sm sm:grid-cols-[0.85fr_1fr_1fr_1.25fr_0.5fr_0.6fr_0.55fr] sm:items-center";
             row.innerHTML =
-              '<span class="text-cream/50">' +
-              when.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
-              " · " +
-              when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) +
+              '<span class="text-cream/50" title="' +
+              escapeAttr(absoluteDateTitle(p.created_at)) +
+              '">' +
+              formatRelativeAge(p.created_at) +
               "</span>" +
               '<span class="font-medium text-cream">' +
               escapeHtml(p.angel_name) +
