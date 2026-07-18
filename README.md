@@ -34,8 +34,14 @@ Migrations run automatically on app boot.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/graphics` | Active graphic dropdown options from DB |
+| `GET` | `/graphics` | Open graphic offers from DB (incl. `expires_at` vault countdowns; expired offers are auto-vaulted) |
 | `POST` | `/submit` | `{ "real_name", "angel_name", "email", "graphic_code" }` → create entry (`status: pending`) |
+| `GET` | `/newsletter/posts` | Public newsletter feed (blog-style posts written by admins) |
+| `POST` | `/admin/newsletter/posts` | Publish a post `{ "title", "author_name", "body" }` (admin session required) |
+| `DELETE` | `/admin/newsletter/posts/:id` | Delete a post (admin session required) |
+| `GET` | `/admin/graphics/vault-alerts` | Offers auto-vaulted since last dismissal — powers the portal bell (admin) |
+| `POST` | `/admin/graphics/vault-alerts/ack` | Dismiss all vault notifications (admin) |
+| `PATCH` | `/admin/graphics/:id/vault` | Vault an offer immediately, before its timer ends (admin) |
 | `POST` | `/newsletter/subscribe` | `{ "email" }` → mailing-list opt-in (popup / footer forms) |
 | `POST` | `/contact` | `{ "name", "email", "message" }` → save message + forward to the ProtonMail inbox |
 | `GET` | `/admin/contact-messages` | Contact inbox (admin session required) |
@@ -63,6 +69,26 @@ Stripe server-side before an order is marked paid. Orders appear in the
 admin portal's **Orders** tab. Configure with `STRIPE_SECRET_KEY` +
 `STRIPE_PUBLISHABLE_KEY` (and optionally `STRIPE_WEBHOOK_SECRET` +
 `SHOP_PRICE_CENTS`).
+
+### The Newsletter (`/newsletter`) — limited-time drops + studio posts
+
+The public newsletter page has two sections:
+
+1. **Countdown offer cards** — every open `graphic_options` row becomes a UI
+   card automatically. When an admin adds a graphic option they also pick an
+   **offer timer** (12 hours … 30 days, or no timer); the deadline is stored
+   in `graphic_options.expires_at` in Postgres, so countdowns survive
+   restarts and stay in sync across visitors (the server's clock is the
+   source of truth). When a timer hits zero the offer is **auto-vaulted**:
+   `active = false`, `vaulted_at` set, it disappears from the request form
+   (submits with its code are rejected), and it lives on as a $5 archive
+   graphic in the shop. A background sweep runs every 60 s, and all listing
+   endpoints sweep on read, so vaulting works even across downtime. Admins
+   get a **notification bell** in the portal for newly auto-vaulted offers
+   (dismissable), plus a **Vault now** button to close an offer early.
+2. **Studio posts** — Facebook-style posts (subject title, author name,
+   body) written from the portal's **Newsletter** tab and stored in
+   `newsletter_posts`. Newest first, line breaks preserved.
 
 ### Analytics dashboard
 

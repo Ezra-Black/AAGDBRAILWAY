@@ -224,6 +224,13 @@ export const adminGraphicCreateSchema = z
       ),
     code: z.string().max(64).optional(),
     sort_order: z.coerce.number().int().min(0).max(100000).optional(),
+    // Offer countdown: hours until the graphic is vaulted into the archive.
+    // Omit (or null) for an offer with no deadline.
+    duration_hours: z.coerce
+      .number()
+      .positive("Duration must be positive")
+      .max(24 * 365, "Duration is too long (1 year max)")
+      .optional(),
   })
   .strict()
   .transform((data) => {
@@ -235,5 +242,37 @@ export const adminGraphicCreateSchema = z
       label,
       code: code || `graphic-${Date.now().toString(36)}`,
       sort_order: data.sort_order ?? 0,
+      duration_hours: data.duration_hours ?? null,
     };
   });
+
+/** Admin newsletter post — subject title, author display name, body. */
+export const newsletterPostSchema = z
+  .object({
+    title: z
+      .string()
+      .transform(sanitizeText)
+      .pipe(
+        z
+          .string()
+          .min(1, "Title is required")
+          .max(200, "Title is too long (200 characters max)")
+          .refine((v) => !/[<>{};`$\\]/.test(v), "Invalid characters in title")
+      ),
+    author_name: nameField,
+    body: z
+      .string()
+      .transform((value) =>
+        value
+          .normalize("NFKC")
+          .replace(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g, "")
+          .trim()
+      )
+      .pipe(
+        z
+          .string()
+          .min(1, "Write something for the post body")
+          .max(10000, "Post is too long (10,000 characters max)")
+      ),
+  })
+  .strict();

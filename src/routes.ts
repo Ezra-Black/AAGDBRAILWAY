@@ -24,7 +24,22 @@ import {
 import { createAdmin, getAdminByEmail } from "./db/admins";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { graphicCodeExists, listActiveGraphics, createGraphicOption, deleteGraphicOption, listAllGraphics } from "./db/graphics";
+import {
+  acknowledgeVaultedGraphics,
+  createGraphicOption,
+  deleteGraphicOption,
+  graphicCodeExists,
+  listActiveGraphics,
+  listAllGraphics,
+  listUnacknowledgedVaulted,
+  vaultExpiredGraphics,
+  vaultGraphicOption,
+} from "./db/graphics";
+import {
+  createNewsletterPost,
+  deleteNewsletterPost,
+  listNewsletterPosts,
+} from "./db/newsletter";
 import { logger } from "./logger";
 import {
   checkoutLimiter,
@@ -81,6 +96,7 @@ import {
   contactSchema,
   facebookAuthSchema,
   lookupQuerySchema,
+  newsletterPostSchema,
   newsletterSubscribeSchema,
   pageViewSchema,
   PASSWORD_RULES,
@@ -321,13 +337,68 @@ apiRouter.post(
   })
 );
 
-/** GET /admin/graphics — manage dropdown options */
+/** GET /admin/graphics — manage dropdown options (sweeps expired offers first) */
 apiRouter.get(
   "/admin/graphics",
   requireAdmin,
   asyncHandler(async (_req, res) => {
+    await vaultExpiredGraphics();
     const graphics = await listAllGraphics();
+    res.json({
+      success: true,
+      count: graphics.length,
+      now: new Date().toISOString(),
+      graphics,
+    });
+  })
+);
+
+/** GET /admin/graphics/vault-alerts — offers auto-vaulted since last dismissal */
+apiRouter.get(
+  "/admin/graphics/vault-alerts",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    await vaultExpiredGraphics();
+    const graphics = await listUnacknowledgedVaulted();
     res.json({ success: true, count: graphics.length, graphics });
+  })
+);
+
+/** POST /admin/graphics/vault-alerts/ack — dismiss all vault notifications */
+apiRouter.post(
+  "/admin/graphics/vault-alerts/ack",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const updated = await acknowledgeVaultedGraphics();
+    res.json({ success: true, updated });
+  })
+);
+
+/** PATCH /admin/graphics/:id/vault — close an offer immediately */
+apiRouter.patch(
+  "/admin/graphics/:id/vault",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid graphic ID" });
+      return;
+    }
+
+    const graphic = await vaultGraphicOption(idCheck.data);
+    if (!graphic) {
+      res.status(404).json({
+        success: false,
+        error: "Graphic not found or already vaulted",
+      });
+      return;
+    }
+
+    logger.info("Admin vaulted graphic option", {
+      id: graphic.id,
+      code: graphic.code,
+    });
+    res.json({ success: true, graphic });
   })
 );
 
@@ -346,13 +417,22 @@ apiRouter.post(
       return;
     }
 
+    const { duration_hours, ...option } = parsed.data;
+    const expiresAt = duration_hours
+      ? new Date(Date.now() + duration_hours * 60 * 60 * 1000)
+      : null;
+
     try {
-      const graphic = await createGraphicOption(parsed.data);
+      const graphic = await createGraphicOption({
+        ...option,
+        expires_at: expiresAt,
+      });
       // Every option ever offered is tracked in the archive for the shop.
       await archiveGraphicOption(graphic);
       logger.info("Admin created graphic option", {
         id: graphic.id,
         code: graphic.code,
+        expires_at: graphic.expires_at,
       });
       res.status(201).json({ success: true, graphic });
     } catch (err) {
@@ -417,13 +497,22 @@ apiRouter.patch(
   })
 );
 
-/** GET /graphics — active dropdown options (codes + labels from DB) */
+/** GET /graphics — open offers (codes, labels, vault countdowns from DB).
+ *  Expired offers are swept into the vault before listing, so a dead timer
+ *  can never be requested. `now` lets clients sync their countdowns.
+ */
 apiRouter.get(
   "/graphics",
   readLimiter,
   asyncHandler(async (_req, res) => {
+    await vaultExpiredGraphics();
     const graphics = await listActiveGraphics();
-    res.json({ success: true, count: graphics.length, graphics });
+    res.json({
+      success: true,
+      count: graphics.length,
+      now: new Date().toISOString(),
+      graphics,
+    });
   })
 );
 
@@ -705,6 +794,63 @@ apiRouter.post(
         ? "You’re in! Welcome to the list — good things are coming your way."
         : "You’re already on the list — we’ve got you covered.",
     });
+  })
+);
+
+/** GET /newsletter/posts — public feed for the newsletter page. */
+apiRouter.get(
+  "/newsletter/posts",
+  readLimiter,
+  asyncHandler(async (_req, res) => {
+    const posts = await listNewsletterPosts(100);
+    res.json({ success: true, count: posts.length, posts });
+  })
+);
+
+/** POST /admin/newsletter/posts — publish a newsletter post. */
+apiRouter.post(
+  "/admin/newsletter/posts",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const parsed = newsletterPostSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const post = await createNewsletterPost(parsed.data);
+    logger.info("Admin published newsletter post", {
+      id: post.id,
+      title: post.title,
+      author_name: post.author_name,
+    });
+    res.status(201).json({ success: true, post });
+  })
+);
+
+/** DELETE /admin/newsletter/posts/:id — take a post down. */
+apiRouter.delete(
+  "/admin/newsletter/posts/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid post ID" });
+      return;
+    }
+
+    const removed = await deleteNewsletterPost(idCheck.data);
+    if (!removed) {
+      res.status(404).json({ success: false, error: "Post not found" });
+      return;
+    }
+
+    logger.info("Admin deleted newsletter post", { id: idCheck.data });
+    res.json({ success: true });
   })
 );
 

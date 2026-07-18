@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Newsletter — Audrey’s Angel Graphics</title>
+    <meta
+      name="description"
+      content="Studio news, updates, and limited-time graphic drops. When the timer runs out, the design is vaulted — request yours before it’s gone."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              dusk: "#0a0806",
+              honey: "#f0c45c",
+              cream: "#fff6e4",
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/site.css" />
+    <style>
+      .offer-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1.4rem 1.4rem 1.5rem;
+        overflow: hidden;
+      }
+      .offer-card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(ellipse 130% 70% at 50% -20%, rgba(240, 196, 92, 0.12), transparent 60%);
+        pointer-events: none;
+      }
+      .offer-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 9999px;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .offer-badge.live {
+        color: #fbbf24;
+        background: rgba(251, 191, 36, 0.1);
+        border: 1px solid rgba(251, 191, 36, 0.35);
+      }
+      .offer-badge.live .pulse-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 9999px;
+        background: #fbbf24;
+        animation: offerPulse 1.4s ease-in-out infinite;
+      }
+      .offer-badge.open {
+        color: #6ee7b7;
+        background: rgba(110, 231, 183, 0.08);
+        border: 1px solid rgba(110, 231, 183, 0.3);
+      }
+      .offer-badge.gone {
+        color: rgba(255, 246, 228, 0.5);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      @keyframes offerPulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.35; transform: scale(0.75); }
+      }
+      .countdown {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.5rem;
+      }
+      .countdown .unit {
+        border-radius: 0.9rem;
+        border: 1px solid rgba(240, 196, 92, 0.22);
+        background: rgba(12, 9, 5, 0.55);
+        padding: 0.55rem 0.25rem 0.5rem;
+        text-align: center;
+      }
+      .countdown .unit b {
+        display: block;
+        font-size: 1.35rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.03em;
+        background: linear-gradient(180deg, #fff8ea 10%, #f0c45c 55%, #c9952a 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+      .countdown .unit span {
+        display: block;
+        margin-top: 0.15rem;
+        font-size: 0.5625rem;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: rgba(255, 246, 228, 0.4);
+      }
+      .countdown.urgent .unit {
+        border-color: rgba(252, 165, 165, 0.45);
+      }
+      .countdown.urgent .unit b {
+        background: linear-gradient(180deg, #ffe4e4 10%, #fca5a5 55%, #ef4444 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+      }
+      .offer-card.vaulted {
+        opacity: 0.75;
+      }
+      .offer-card.vaulted .countdown .unit b {
+        background: none;
+        -webkit-background-clip: initial;
+        background-clip: initial;
+        color: rgba(255, 246, 228, 0.35);
+      }
+      .post-card {
+        padding: 1.5rem 1.5rem 1.6rem;
+      }
+      .post-avatar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: 9999px;
+        flex-shrink: 0;
+        font-weight: 700;
+        font-size: 1.05rem;
+        color: var(--ink);
+        background: linear-gradient(135deg, #f6d56a, #e8a838 60%, #c4841f);
+        box-shadow: 0 8px 22px rgba(232, 168, 56, 0.3);
+      }
+      .post-body {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="orb" style="width:300px;height:300px;background:#f0c45c;top:8%;left:6%;opacity:0.14"></div>
+    <div class="orb" style="width:340px;height:340px;background:#e8a838;bottom:12%;right:4%;opacity:0.1;animation-delay:1.2s"></div>
+
+    <!-- Navigation -->
+    <header class="fixed inset-x-0 top-0 z-40 px-4 pt-4">
+      <nav class="glass-nav mx-auto flex max-w-5xl items-center justify-between rounded-full px-5 py-3">
+        <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-wide" style="color:var(--cream);text-decoration:none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" fill="#f0c45c" />
+          </svg>
+          Audrey’s Angel Graphics
+        </a>
+        <div class="hidden items-center gap-7 text-sm sm:flex">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/newsletter" class="nav-link active">Newsletter</a>
+          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta">Request yours</a>
+        </div>
+        <button
+          id="menu-toggle"
+          type="button"
+          class="sm:hidden"
+          aria-label="Open menu"
+          aria-expanded="false"
+          style="background:none;border:0;color:var(--cream);cursor:pointer;padding:0.25rem"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+      </nav>
+      <div id="mobile-menu" class="mobile-menu glass-nav mx-auto mt-2 max-w-5xl rounded-3xl p-5 sm:hidden">
+        <div class="flex flex-col gap-4 text-sm">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/newsletter" class="nav-link active">Newsletter</a>
+          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta justify-center">Request yours</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="relative z-10 mx-auto max-w-3xl px-5 pb-20 pt-36 sm:pt-44">
+      <header class="reveal mb-12 text-center">
+        <p class="eyebrow">Newsletter</p>
+        <h1 class="headline mt-4 text-4xl font-bold text-cream sm:text-5xl">
+          Fresh from the <span class="gold-text">studio.</span>
+        </h1>
+        <p class="mx-auto mt-4 max-w-md text-base font-light leading-relaxed text-cream/60">
+          Limited-time graphic drops and studio news, straight from Audrey’s desk.
+          When a timer runs out, that design is vaulted — for good.
+        </p>
+      </header>
+
+      <!-- ═══════════ Limited-time offers ═══════════ -->
+      <section class="reveal mb-14" style="--reveal-delay:0.1s">
+        <div class="mb-5 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 class="headline text-2xl font-bold text-cream">Before they’re vaulted</h2>
+            <p class="mt-1.5 text-sm font-light text-cream/55">
+              Every graphic below is open for free requests — until its countdown hits zero.
+              Then it’s locked into the archive and off the request form forever.
+            </p>
+          </div>
+        </div>
+
+        <div id="offers-grid" class="grid gap-4 sm:grid-cols-2"></div>
+        <p id="offers-empty" class="hidden rounded-2xl border border-white/10 px-5 py-6 text-center text-sm text-cream/45" style="background:rgba(255,255,255,0.03)">
+          No open offers right now — new drops are announced here first, so check back soon.
+        </p>
+        <p id="offers-error" class="hidden text-sm text-rose-400"></p>
+      </section>
+
+      <hr class="divider-glow mb-12" />
+
+      <!-- ═══════════ Posts feed ═══════════ -->
+      <section class="reveal" style="--reveal-delay:0.15s">
+        <div class="mb-6">
+          <h2 class="headline text-2xl font-bold text-cream">Studio updates</h2>
+          <p class="mt-1.5 text-sm font-light text-cream/55">
+            Notes, announcements, and behind-the-scenes from the team.
+          </p>
+        </div>
+
+        <div id="posts-feed" class="space-y-5"></div>
+        <p id="posts-empty" class="hidden rounded-2xl border border-white/10 px-5 py-6 text-center text-sm text-cream/45" style="background:rgba(255,255,255,0.03)">
+          Nothing posted yet — the first studio update will land here soon.
+        </p>
+        <p id="posts-error" class="hidden text-sm text-rose-400"></p>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 mt-8 px-5 pb-10">
+      <div class="mx-auto max-w-5xl">
+        <hr class="divider-glow" />
+        <div class="mt-8 flex flex-wrap items-center justify-between gap-3 text-[11px] text-cream/30">
+          <p>© <span id="year"></span> Audrey’s Angel Graphics</p>
+          <div class="flex items-center gap-4">
+            <a href="/" class="footer-link" style="font-size:11px">Home</a>
+            <a href="/about" class="footer-link" style="font-size:11px">About</a>
+            <a href="/newsletter" class="footer-link" style="font-size:11px">Newsletter</a>
+            <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
+            <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
+            <a href="/admin/login" class="footer-link" style="font-size:11px">Admin</a>
+          </div>
+          <p>
+            built by
+            <a href="https://buymeacoffee.com/ezrablack" target="_blank" rel="noopener noreferrer" class="underline decoration-honey/30 underline-offset-2 hover:text-cream/50">ezra black</a>
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <script src="/assets/site.js"></script>
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      function escapeHtml(str) {
+        return String(str ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function escapeAttr(str) {
+        return escapeHtml(str).replace(/'/g, "&#39;");
+      }
+
+      function formatRelativeAge(value) {
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) return "";
+        const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+        if (seconds < 60) return "just now";
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return minutes === 1 ? "1 minute ago" : minutes + " minutes ago";
+        const hours = Math.floor(minutes / 60);
+        if (hours < 48) return hours === 1 ? "1 hour ago" : hours + " hours ago";
+        const days = Math.floor(hours / 24);
+        if (days < 60) return days === 1 ? "1 day ago" : days + " days ago";
+        const months = Math.floor(days / 30);
+        if (months < 24) return months === 1 ? "1 month ago" : months + " months ago";
+        const years = Math.floor(days / 365);
+        return years === 1 ? "1 year ago" : years + " years ago";
+      }
+
+      /* ═══════════ Limited-time offer cards ═══════════ */
+
+      const offersGrid = document.getElementById("offers-grid");
+      const offersEmpty = document.getElementById("offers-empty");
+      const offersError = document.getElementById("offers-error");
+
+      // Difference between server clock and this browser's clock, so
+      // countdowns stay honest even if the visitor's clock is off.
+      let clockSkewMs = 0;
+      let countdownInterval = null;
+
+      function pad2(n) {
+        return String(n).padStart(2, "0");
+      }
+
+      function renderOfferCard(g) {
+        const card = document.createElement("article");
+        card.className = "glass-card offer-card";
+        card.dataset.expiresAt = g.expires_at || "";
+        card.dataset.code = g.code;
+
+        const badge = g.expires_at
+          ? '<span class="offer-badge live" data-badge><span class="pulse-dot"></span>Vaulting soon</span>'
+          : '<span class="offer-badge open" data-badge>Open offer</span>';
+
+        const countdown = g.expires_at
+          ? '<div class="countdown" data-countdown>' +
+            '<div class="unit"><b data-d>--</b><span>Days</span></div>' +
+            '<div class="unit"><b data-h>--</b><span>Hours</span></div>' +
+            '<div class="unit"><b data-m>--</b><span>Min</span></div>' +
+            '<div class="unit"><b data-s>--</b><span>Sec</span></div>' +
+            "</div>" +
+            '<p class="text-xs leading-relaxed text-cream/45" data-fomo>' +
+            "When this hits zero, <strong class=\"text-cream/70\">" +
+            escapeHtml(g.label) +
+            "</strong> is vaulted into the archive — no more free requests." +
+            "</p>"
+          : '<p class="text-xs leading-relaxed text-cream/45">' +
+            "No vault date set yet — but offers can close at any time, so don’t sit on it." +
+            "</p>";
+
+        card.innerHTML =
+          '<div class="relative flex items-start justify-between gap-3">' +
+          badge +
+          "</div>" +
+          '<div class="relative">' +
+          '<h3 class="headline text-xl font-bold text-cream">' +
+          escapeHtml(g.label) +
+          "</h3>" +
+          '<p class="mt-1 text-xs text-cream/40">' +
+          escapeHtml(g.code) +
+          "</p>" +
+          "</div>" +
+          '<div class="relative space-y-3">' +
+          countdown +
+          "</div>" +
+          '<div class="relative mt-auto">' +
+          '<a href="/form?graphic=' +
+          encodeURIComponent(g.code) +
+          '" class="btn-primary w-full" data-cta style="padding:0.7rem 1.4rem;font-size:0.85rem">Request it free →</a>' +
+          "</div>";
+        return card;
+      }
+
+      function markCardVaulted(card) {
+        if (card.classList.contains("vaulted")) return;
+        card.classList.add("vaulted");
+        const badge = card.querySelector("[data-badge]");
+        if (badge) {
+          badge.className = "offer-badge gone";
+          badge.textContent = "Vaulted";
+        }
+        const fomo = card.querySelector("[data-fomo]");
+        if (fomo) {
+          fomo.innerHTML =
+            "This one’s gone into the vault. You can still get it as a print-ready archive graphic in the shop.";
+        }
+        const cta = card.querySelector("[data-cta]");
+        if (cta) {
+          cta.className = "btn-secondary w-full";
+          cta.style.cssText = "padding:0.7rem 1.4rem;font-size:0.85rem";
+          cta.href = "/shop";
+          cta.textContent = "Find it in the archive shop";
+        }
+      }
+
+      function tickCountdowns() {
+        const now = Date.now() + clockSkewMs;
+        offersGrid.querySelectorAll(".offer-card").forEach((card) => {
+          const iso = card.dataset.expiresAt;
+          if (!iso) return;
+          const remaining = new Date(iso).getTime() - now;
+          const cd = card.querySelector("[data-countdown]");
+          if (!cd) return;
+          if (remaining <= 0) {
+            cd.querySelector("[data-d]").textContent = "00";
+            cd.querySelector("[data-h]").textContent = "00";
+            cd.querySelector("[data-m]").textContent = "00";
+            cd.querySelector("[data-s]").textContent = "00";
+            markCardVaulted(card);
+            return;
+          }
+          const totalSec = Math.floor(remaining / 1000);
+          cd.querySelector("[data-d]").textContent = pad2(Math.floor(totalSec / 86400));
+          cd.querySelector("[data-h]").textContent = pad2(Math.floor((totalSec % 86400) / 3600));
+          cd.querySelector("[data-m]").textContent = pad2(Math.floor((totalSec % 3600) / 60));
+          cd.querySelector("[data-s]").textContent = pad2(totalSec % 60);
+          cd.classList.toggle("urgent", remaining < 6 * 60 * 60 * 1000);
+        });
+      }
+
+      async function loadOffers() {
+        offersError.classList.add("hidden");
+        try {
+          const res = await fetch("/graphics", { cache: "no-store" });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            offersError.textContent = data.error || "Couldn’t load current offers.";
+            offersError.classList.remove("hidden");
+            return;
+          }
+
+          if (data.now) {
+            clockSkewMs = new Date(data.now).getTime() - Date.now();
+          }
+
+          const graphics = Array.isArray(data.graphics) ? data.graphics : [];
+          offersGrid.innerHTML = "";
+          offersEmpty.classList.toggle("hidden", graphics.length > 0);
+
+          // Timed offers first — that's where the urgency is.
+          graphics.sort((a, b) => {
+            if (a.expires_at && b.expires_at)
+              return new Date(a.expires_at) - new Date(b.expires_at);
+            if (a.expires_at) return -1;
+            if (b.expires_at) return 1;
+            return 0;
+          });
+
+          for (const g of graphics) {
+            offersGrid.appendChild(renderOfferCard(g));
+          }
+
+          tickCountdowns();
+          if (countdownInterval) clearInterval(countdownInterval);
+          countdownInterval = setInterval(tickCountdowns, 1000);
+        } catch {
+          offersError.textContent = "Couldn’t load current offers. Refresh to try again.";
+          offersError.classList.remove("hidden");
+        }
+      }
+
+      /* ═══════════ Posts feed ═══════════ */
+
+      const postsFeed = document.getElementById("posts-feed");
+      const postsEmpty = document.getElementById("posts-empty");
+      const postsError = document.getElementById("posts-error");
+
+      function renderPost(post) {
+        const el = document.createElement("article");
+        el.className = "glass-card post-card";
+        const initial = (post.author_name || "A").trim().charAt(0).toUpperCase();
+        el.innerHTML =
+          '<div class="flex items-center gap-3">' +
+          '<div class="post-avatar">' +
+          escapeHtml(initial) +
+          "</div>" +
+          '<div class="min-w-0">' +
+          '<p class="text-sm font-semibold text-cream">' +
+          escapeHtml(post.author_name) +
+          "</p>" +
+          '<p class="text-xs text-cream/40">' +
+          escapeHtml(formatRelativeAge(post.created_at)) +
+          " · Audrey’s Angel Graphics" +
+          "</p>" +
+          "</div>" +
+          "</div>" +
+          '<h3 class="headline mt-4 text-lg font-bold text-cream">' +
+          escapeHtml(post.title) +
+          "</h3>" +
+          '<p class="post-body mt-2 text-sm font-light leading-relaxed text-cream/70">' +
+          escapeHtml(post.body) +
+          "</p>";
+        return el;
+      }
+
+      async function loadPosts() {
+        postsError.classList.add("hidden");
+        try {
+          const res = await fetch("/newsletter/posts", { cache: "no-store" });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            postsError.textContent = data.error || "Couldn’t load posts.";
+            postsError.classList.remove("hidden");
+            return;
+          }
+          const posts = Array.isArray(data.posts) ? data.posts : [];
+          postsFeed.innerHTML = "";
+          postsEmpty.classList.toggle("hidden", posts.length > 0);
+          for (const post of posts) {
+            postsFeed.appendChild(renderPost(post));
+          }
+        } catch {
+          postsError.textContent = "Couldn’t load posts. Refresh to try again.";
+          postsError.classList.remove("hidden");
+        }
+      }
+
+      loadOffers();
+      loadPosts();
+      // Re-sync offers with the server every few minutes so vaulted
+      // graphics drop off even on a long-idle tab.
+      setInterval(loadOffers, 5 * 60 * 1000);
+    </script>
+  </body>
+</html>
