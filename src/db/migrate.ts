@@ -66,8 +66,34 @@ export async function migrate(): Promise<void> {
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+    -- Limited-time offers: expires_at is the vault deadline shown as a
+    -- countdown on the newsletter page. vaulted_at is set when the offer
+    -- closes (automatically or by an admin); vault_acknowledged drives the
+    -- admin portal notification bell.
+    ALTER TABLE graphic_options ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+    ALTER TABLE graphic_options ADD COLUMN IF NOT EXISTS vaulted_at TIMESTAMPTZ;
+    ALTER TABLE graphic_options
+      ADD COLUMN IF NOT EXISTS vault_acknowledged BOOLEAN NOT NULL DEFAULT true;
+
     CREATE INDEX IF NOT EXISTS idx_graphic_options_active
       ON graphic_options (active, sort_order);
+
+    CREATE INDEX IF NOT EXISTS idx_graphic_options_expires
+      ON graphic_options (expires_at)
+      WHERE vaulted_at IS NULL;
+
+    -- Newsletter: blog-style posts written by admins for the public page.
+    CREATE TABLE IF NOT EXISTS newsletter_posts (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      title        TEXT NOT NULL,
+      author_name  TEXT NOT NULL,
+      body         TEXT NOT NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_newsletter_posts_created_at
+      ON newsletter_posts (created_at DESC);
 
     CREATE TABLE IF NOT EXISTS admins (
       id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),

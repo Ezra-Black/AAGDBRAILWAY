@@ -8,6 +8,7 @@ import express, {
   type NextFunction,
 } from "express";
 import helmet from "helmet";
+import { vaultExpiredGraphics } from "./db/graphics";
 import { migrate } from "./db/migrate";
 import { closePool } from "./db/pool";
 import { markPurchaseStatusByIntent } from "./db/shop";
@@ -178,6 +179,10 @@ app.get("/shop", (_req, res) => {
   res.sendFile(path.join(publicDir, "shop.html"));
 });
 
+app.get("/newsletter", (_req, res) => {
+  res.sendFile(path.join(publicDir, "newsletter.html"));
+});
+
 app.get("/admin", (_req, res) => {
   res.redirect(302, "/admin/");
 });
@@ -211,6 +216,23 @@ async function start() {
   }
 
   await migrate();
+
+  // Vault sweep: close limited-time graphic offers whose countdown hit zero.
+  // Listings also filter expired offers on read, so this is belt-and-braces
+  // persistence — it keeps the DB truthful even when nobody is browsing.
+  const sweepVault = async () => {
+    try {
+      const vaulted = await vaultExpiredGraphics();
+      if (vaulted > 0) {
+        logger.info("Vault sweep closed expired graphic offers", { vaulted });
+      }
+    } catch (err) {
+      logger.error("Vault sweep failed", { error: String(err) });
+    }
+  };
+  await sweepVault();
+  const vaultTimer = setInterval(sweepVault, 60_000);
+  vaultTimer.unref();
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     logger.info(`Server listening on port ${PORT}`, {

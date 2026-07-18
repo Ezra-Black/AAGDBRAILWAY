@@ -227,6 +227,87 @@
         color: rgba(255, 246, 228, 0.4);
         margin-top: 0.2rem;
       }
+      /* Offer timer chips in the graphic options list */
+      .offer-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border-radius: 9999px;
+        padding: 0.2rem 0.7rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .offer-chip.timed {
+        color: #fbbf24;
+        background: rgba(251, 191, 36, 0.1);
+        border: 1px solid rgba(251, 191, 36, 0.35);
+      }
+      .offer-chip.urgent {
+        color: #fca5a5;
+        background: rgba(252, 165, 165, 0.1);
+        border: 1px solid rgba(252, 165, 165, 0.4);
+      }
+      .offer-chip.vaulted {
+        color: rgba(255, 246, 228, 0.5);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .offer-chip.no-timer {
+        color: #6ee7b7;
+        background: rgba(110, 231, 183, 0.08);
+        border: 1px solid rgba(110, 231, 183, 0.3);
+      }
+      /* Notification bell */
+      .bell-btn {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.6rem;
+        height: 2.6rem;
+        border-radius: 9999px;
+        border: 1px solid rgba(255, 246, 228, 0.18);
+        background: rgba(255, 255, 255, 0.03);
+        color: rgba(255, 246, 228, 0.75);
+        cursor: pointer;
+        transition: border-color 0.25s ease, background 0.25s ease, color 0.25s ease;
+      }
+      .bell-btn:hover {
+        color: var(--cream);
+        border-color: rgba(240, 196, 92, 0.45);
+        background: rgba(240, 196, 92, 0.06);
+      }
+      .bell-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        min-width: 1.15rem;
+        height: 1.15rem;
+        padding: 0 0.3rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9999px;
+        background: linear-gradient(135deg, #fb7185, #e11d48);
+        color: #fff;
+        font-size: 0.625rem;
+        font-weight: 700;
+        box-shadow: 0 4px 12px rgba(225, 29, 72, 0.5);
+      }
+      .bell-panel {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 0.6rem);
+        width: min(22rem, calc(100vw - 2.5rem));
+        border-radius: 1.25rem;
+        border: 1px solid rgba(240, 196, 92, 0.25);
+        background: rgba(20, 15, 9, 0.97);
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+        padding: 1rem 1.1rem;
+        z-index: 50;
+      }
     </style>
   </head>
   <body data-no-popup class="px-5 py-8 sm:px-8">
@@ -245,14 +326,48 @@
           <h1 id="page-title" class="headline mt-2 text-3xl font-bold text-cream">Dashboard</h1>
           <p id="subtitle" class="mt-1 text-sm text-cream/45">Loading…</p>
         </div>
-        <button
-          id="logout-btn"
-          type="button"
-          class="btn-secondary"
-          style="padding:0.55rem 1.2rem;font-size:0.8125rem"
-        >
-          Log out
-        </button>
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <button
+              id="bell-btn"
+              type="button"
+              class="bell-btn"
+              aria-label="Vault notifications"
+              aria-expanded="false"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+              </svg>
+              <span id="bell-badge" class="bell-badge hidden">0</span>
+            </button>
+            <div id="bell-panel" class="bell-panel hidden">
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <p class="text-sm font-semibold text-cream">Vaulted offers</p>
+                <button
+                  id="bell-dismiss"
+                  type="button"
+                  class="archive-btn hidden"
+                  style="font-size:0.7rem"
+                >
+                  Dismiss all
+                </button>
+              </div>
+              <div id="bell-list" class="max-h-72 space-y-2 overflow-y-auto"></div>
+              <p id="bell-empty" class="text-xs text-cream/40">
+                All clear — offers whose timer runs out get auto-vaulted and show up here.
+              </p>
+            </div>
+          </div>
+          <button
+            id="logout-btn"
+            type="button"
+            class="btn-secondary"
+            style="padding:0.55rem 1.2rem;font-size:0.8125rem"
+          >
+            Log out
+          </button>
+        </div>
       </header>
 
       <!-- View tabs -->
@@ -260,6 +375,7 @@
         <button type="button" id="tab-dashboard" class="tab-btn active">Dashboard</button>
         <button type="button" id="tab-requests" class="tab-btn">Requests</button>
         <button type="button" id="tab-orders" class="tab-btn">Orders</button>
+        <button type="button" id="tab-newsletter" class="tab-btn">Newsletter</button>
       </nav>
 
       <!-- ═══════════ Dashboard view ═══════════ -->
@@ -418,12 +534,14 @@
           <div>
             <h2 class="text-lg font-semibold text-cream">Graphic options</h2>
             <p class="mt-1 text-xs text-cream/45">
-              Add or remove categories that appear in the public form dropdown.
+              Add or remove options on the public form. Each new option becomes a
+              countdown offer card on the newsletter page — when its timer runs out
+              it’s auto-vaulted into the archive shop.
             </p>
           </div>
         </div>
 
-        <form id="graphic-form" class="mb-4 grid gap-3 sm:grid-cols-[1.4fr_1fr_auto]">
+        <form id="graphic-form" class="mb-4 grid gap-3 sm:grid-cols-[1.2fr_0.85fr_1fr_auto]">
           <div class="field">
             <label for="graphic_label">Label</label>
             <input
@@ -448,6 +566,30 @@
               placeholder="auto from label"
               style="padding:0.6rem 0.9rem;font-size:0.875rem"
             />
+          </div>
+          <div class="field">
+            <label for="graphic_duration">
+              Offer timer
+              <span class="help-tip" tabindex="0" role="button" aria-label="What does the offer timer do?" style="margin-left:0.25rem">
+                ?
+                <span class="help-bubble" role="tooltip">
+                  Sets how long this graphic stays open for free requests. It shows
+                  as a live countdown on the newsletter page, and when the timer
+                  hits zero the offer is automatically vaulted — off the request
+                  form, archive-shop only. Pick “No timer” to leave it open-ended.
+                </span>
+              </span>
+            </label>
+            <select id="graphic_duration" name="duration_hours" style="padding:0.6rem 0.9rem;font-size:0.875rem">
+              <option value="">No timer — stays open</option>
+              <option value="12">12 hours</option>
+              <option value="24">24 hours</option>
+              <option value="48">2 days</option>
+              <option value="72">3 days</option>
+              <option value="168" selected>7 days</option>
+              <option value="336">14 days</option>
+              <option value="720">30 days</option>
+            </select>
           </div>
           <div class="flex items-end">
             <button
@@ -631,6 +773,81 @@
         </p>
         <p id="orders-error" class="mt-6 hidden text-sm text-rose-400"></p>
       </div><!-- /view-orders -->
+
+      <!-- ═══════════ Newsletter view ═══════════ -->
+      <div id="view-newsletter" class="hidden">
+        <div class="mb-6">
+          <h2 class="text-lg font-semibold text-cream">Newsletter posts</h2>
+          <p class="mt-1 text-xs text-cream/45">
+            Publish blog-style updates to the public
+            <a href="/newsletter" target="_blank" rel="noopener" class="text-amber-300 underline decoration-amber-300/40 underline-offset-2">newsletter page</a>.
+            Posts appear instantly, newest first, under the live offer countdowns.
+          </p>
+        </div>
+
+        <section class="glass-panel mb-8 rounded-[1.5rem] p-5 sm:p-6">
+          <form id="post-form" class="space-y-4">
+            <div class="grid gap-3 sm:grid-cols-[1.4fr_1fr]">
+              <div class="field">
+                <label for="post_title">Subject title</label>
+                <input
+                  id="post_title"
+                  name="title"
+                  type="text"
+                  maxlength="200"
+                  required
+                  placeholder="New drop: Fairy Ring is live!"
+                  style="padding:0.6rem 0.9rem;font-size:0.875rem"
+                />
+              </div>
+              <div class="field">
+                <label for="post_author">Post as (author name)</label>
+                <input
+                  id="post_author"
+                  name="author_name"
+                  type="text"
+                  maxlength="120"
+                  required
+                  placeholder="Audrey"
+                  style="padding:0.6rem 0.9rem;font-size:0.875rem"
+                />
+              </div>
+            </div>
+            <div class="field">
+              <label for="post_body">Body</label>
+              <textarea
+                id="post_body"
+                name="body"
+                maxlength="10000"
+                required
+                placeholder="What’s new in the studio? Line breaks are kept as written."
+                style="padding:0.7rem 0.9rem;font-size:0.875rem;min-height:150px"
+              ></textarea>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <p id="post-form-error" class="hidden text-sm text-rose-400"></p>
+              <button
+                type="submit"
+                id="post-publish-btn"
+                class="btn-primary ml-auto"
+                style="padding:0.6rem 1.6rem;font-size:0.875rem"
+              >
+                Publish post
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <div class="mb-3 flex items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold text-cream/80">Published posts</h3>
+          <span id="posts-count" class="text-xs text-cream/40"></span>
+        </div>
+        <div id="admin-posts" class="space-y-3"></div>
+        <p id="admin-posts-empty" class="mt-2 hidden text-sm text-cream/40">
+          No posts yet — publish your first studio update above.
+        </p>
+        <p id="admin-posts-error" class="mt-2 hidden text-sm text-rose-400"></p>
+      </div><!-- /view-newsletter -->
     </main>
 
     <script>
@@ -652,6 +869,8 @@
       let adminEmail = "";
       let graphicsCache = [];
       let requestsArchived = false;
+      let graphicsClockSkewMs = 0;
+      let graphicsTickInterval = null;
 
       function debounce(fn, ms) {
         let t;
@@ -733,6 +952,55 @@
         filterSelect.value = current || "";
       }
 
+      function formatCountdown(ms) {
+        const totalSec = Math.max(0, Math.floor(ms / 1000));
+        const d = Math.floor(totalSec / 86400);
+        const h = Math.floor((totalSec % 86400) / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        const pad = (n) => String(n).padStart(2, "0");
+        return (
+          (d > 0 ? d + "d " : "") + pad(h) + "h " + pad(m) + "m " + pad(s) + "s"
+        );
+      }
+
+      function tickGraphicChips() {
+        const now = Date.now() + graphicsClockSkewMs;
+        graphicsList.querySelectorAll("[data-offer-expires]").forEach((chip) => {
+          const remaining =
+            new Date(chip.getAttribute("data-offer-expires")).getTime() - now;
+          if (remaining <= 0) {
+            chip.className = "offer-chip vaulted";
+            chip.textContent = "Vaulting…";
+            return;
+          }
+          chip.classList.toggle("urgent", remaining < 6 * 60 * 60 * 1000);
+          chip.textContent = "Vaults in " + formatCountdown(remaining);
+        });
+      }
+
+      function offerChip(g) {
+        if (g.vaulted_at) {
+          return (
+            '<span class="offer-chip vaulted" title="' +
+            escapeAttr(absoluteDateTitle(g.vaulted_at)) +
+            '">Vaulted ' +
+            escapeHtml(formatRelativeAge(g.vaulted_at)) +
+            "</span>"
+          );
+        }
+        if (g.expires_at) {
+          return (
+            '<span class="offer-chip timed" data-offer-expires="' +
+            escapeAttr(g.expires_at) +
+            '" title="Vaults ' +
+            escapeAttr(absoluteDateTitle(g.expires_at)) +
+            '">Vaults in …</span>'
+          );
+        }
+        return '<span class="offer-chip no-timer">No timer</span>';
+      }
+
       async function loadGraphics() {
         const res = await fetch("/admin/graphics", { credentials: "include" });
         if (res.status === 401) {
@@ -746,6 +1014,10 @@
           return;
         }
 
+        if (data.now) {
+          graphicsClockSkewMs = new Date(data.now).getTime() - Date.now();
+        }
+
         graphicsCache = data.graphics || [];
         populateFilter();
         graphicsList.innerHTML = "";
@@ -757,20 +1029,71 @@
             "flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm";
           row.innerHTML =
             '<div class="min-w-0">' +
-            '<p class="font-medium text-cream">' +
+            '<p class="font-medium text-cream' +
+            (g.vaulted_at ? " opacity-60" : "") +
+            '">' +
             escapeHtml(g.label) +
             "</p>" +
             '<p class="text-xs text-cream/40">' +
             escapeHtml(g.code) +
             "</p>" +
             "</div>" +
+            '<div class="flex flex-wrap items-center gap-2">' +
+            offerChip(g) +
+            (g.vaulted_at
+              ? ""
+              : '<button type="button" data-vault-graphic="' +
+                escapeAttr(g.id) +
+                '" class="archive-btn" title="Close this offer now and vault it into the archive">' +
+                "Vault now" +
+                "</button>") +
             '<button type="button" data-delete-graphic="' +
             escapeAttr(g.id) +
             '" class="rounded-full border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 transition hover:bg-rose-500/10" style="background:none;cursor:pointer">' +
             "Remove" +
-            "</button>";
+            "</button>" +
+            "</div>";
           graphicsList.appendChild(row);
         }
+
+        tickGraphicChips();
+        if (graphicsTickInterval) clearInterval(graphicsTickInterval);
+        graphicsTickInterval = setInterval(tickGraphicChips, 1000);
+
+        graphicsList.querySelectorAll("[data-vault-graphic]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-vault-graphic");
+            if (!id) return;
+            if (
+              !confirm(
+                "Vault this offer now? It comes off the request form immediately and lives on in the archive shop."
+              )
+            )
+              return;
+            btn.disabled = true;
+            try {
+              const res2 = await fetch("/admin/graphics/" + id + "/vault", {
+                method: "PATCH",
+                credentials: "include",
+              });
+              if (res2.status === 401) {
+                window.location.href = "/admin/login";
+                return;
+              }
+              const payload = await res2.json();
+              if (!res2.ok || !payload.success) {
+                errorEl.textContent = payload.error || "Could not vault graphic";
+                errorEl.classList.remove("hidden");
+                return;
+              }
+              await loadGraphics();
+              await loadVaultAlerts();
+            } catch {
+              errorEl.textContent = "Network error vaulting graphic";
+              errorEl.classList.remove("hidden");
+            }
+          });
+        });
 
         graphicsList.querySelectorAll("[data-delete-graphic]").forEach((btn) => {
           btn.addEventListener("click", async () => {
@@ -811,13 +1134,18 @@
 
         const label = document.getElementById("graphic_label").value.trim();
         const code = document.getElementById("graphic_code").value.trim();
+        const duration = document.getElementById("graphic_duration").value;
 
         try {
           const res = await fetch("/admin/graphics", {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ label, code: code || undefined }),
+            body: JSON.stringify({
+              label,
+              code: code || undefined,
+              duration_hours: duration ? Number(duration) : undefined,
+            }),
           });
           if (res.status === 401) {
             window.location.href = "/admin/login";
@@ -1234,26 +1562,238 @@
         }
       }
 
+      const viewNewsletter = document.getElementById("view-newsletter");
+      const tabNewsletter = document.getElementById("tab-newsletter");
+      let postsLoaded = false;
+
       const VIEW_TITLES = {
         dashboard: "Dashboard",
         requests: "Requests",
         orders: "Orders",
+        newsletter: "Newsletter",
       };
 
       function switchView(view) {
         viewDashboard.classList.toggle("hidden", view !== "dashboard");
         viewRequests.classList.toggle("hidden", view !== "requests");
         viewOrders.classList.toggle("hidden", view !== "orders");
+        viewNewsletter.classList.toggle("hidden", view !== "newsletter");
         tabDashboard.classList.toggle("active", view === "dashboard");
         tabRequests.classList.toggle("active", view === "requests");
         tabOrders.classList.toggle("active", view === "orders");
+        tabNewsletter.classList.toggle("active", view === "newsletter");
         document.getElementById("page-title").textContent = VIEW_TITLES[view];
         if (view === "orders" && !ordersLoaded) loadOrders();
+        if (view === "newsletter" && !postsLoaded) loadAdminPosts();
       }
 
       tabDashboard.addEventListener("click", () => switchView("dashboard"));
       tabRequests.addEventListener("click", () => switchView("requests"));
       tabOrders.addEventListener("click", () => switchView("orders"));
+      tabNewsletter.addEventListener("click", () => switchView("newsletter"));
+
+      /* ═══════════ Newsletter posts ═══════════ */
+
+      const postForm = document.getElementById("post-form");
+      const postPublishBtn = document.getElementById("post-publish-btn");
+      const postFormError = document.getElementById("post-form-error");
+      const adminPosts = document.getElementById("admin-posts");
+      const adminPostsEmpty = document.getElementById("admin-posts-empty");
+      const adminPostsError = document.getElementById("admin-posts-error");
+
+      async function loadAdminPosts() {
+        adminPostsError.classList.add("hidden");
+        try {
+          const res = await fetch("/newsletter/posts", { cache: "no-store" });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            adminPostsError.textContent = data.error || "Could not load posts";
+            adminPostsError.classList.remove("hidden");
+            return;
+          }
+          postsLoaded = true;
+          const posts = data.posts || [];
+          document.getElementById("posts-count").textContent =
+            posts.length + " post" + (posts.length === 1 ? "" : "s");
+          adminPosts.innerHTML = "";
+          adminPostsEmpty.classList.toggle("hidden", posts.length > 0);
+
+          for (const post of posts) {
+            const card = document.createElement("article");
+            card.className = "glass-panel rounded-2xl p-4 sm:p-5";
+            card.innerHTML =
+              '<div class="flex flex-wrap items-start justify-between gap-3">' +
+              '<div class="min-w-0">' +
+              '<p class="font-semibold text-cream">' +
+              escapeHtml(post.title) +
+              "</p>" +
+              '<p class="mt-0.5 text-xs text-cream/40" title="' +
+              escapeAttr(absoluteDateTitle(post.created_at)) +
+              '">' +
+              escapeHtml(post.author_name) +
+              " · " +
+              escapeHtml(formatRelativeAge(post.created_at)) +
+              "</p>" +
+              "</div>" +
+              '<button type="button" data-delete-post="' +
+              escapeAttr(post.id) +
+              '" class="rounded-full border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 transition hover:bg-rose-500/10" style="background:none;cursor:pointer">' +
+              "Delete" +
+              "</button>" +
+              "</div>" +
+              '<p class="mt-3 text-sm text-cream/65" style="white-space:pre-wrap;overflow-wrap:anywhere">' +
+              escapeHtml(post.body) +
+              "</p>";
+            adminPosts.appendChild(card);
+          }
+
+          adminPosts.querySelectorAll("[data-delete-post]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              const id = btn.getAttribute("data-delete-post");
+              if (!id) return;
+              if (!confirm("Delete this post? It disappears from the public newsletter page immediately.")) return;
+              btn.disabled = true;
+              try {
+                const res2 = await fetch("/admin/newsletter/posts/" + id, {
+                  method: "DELETE",
+                  credentials: "include",
+                });
+                if (res2.status === 401) {
+                  window.location.href = "/admin/login";
+                  return;
+                }
+                await loadAdminPosts();
+              } catch {
+                adminPostsError.textContent = "Network error deleting post";
+                adminPostsError.classList.remove("hidden");
+                btn.disabled = false;
+              }
+            });
+          });
+        } catch {
+          adminPostsError.textContent = "Network error loading posts";
+          adminPostsError.classList.remove("hidden");
+        }
+      }
+
+      postForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        postFormError.classList.add("hidden");
+        postPublishBtn.disabled = true;
+        postPublishBtn.textContent = "Publishing…";
+
+        try {
+          const res = await fetch("/admin/newsletter/posts", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: document.getElementById("post_title").value.trim(),
+              author_name: document.getElementById("post_author").value.trim(),
+              body: document.getElementById("post_body").value.trim(),
+            }),
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            postFormError.textContent =
+              data.error ||
+              (data.details ? Object.values(data.details).flat().join(" ") : "Could not publish post");
+            postFormError.classList.remove("hidden");
+            return;
+          }
+          const authorKeep = document.getElementById("post_author").value;
+          postForm.reset();
+          document.getElementById("post_author").value = authorKeep;
+          await loadAdminPosts();
+        } catch {
+          postFormError.textContent = "Network error publishing post";
+          postFormError.classList.remove("hidden");
+        } finally {
+          postPublishBtn.disabled = false;
+          postPublishBtn.textContent = "Publish post";
+        }
+      });
+
+      /* ═══════════ Vault notification bell ═══════════ */
+
+      const bellBtn = document.getElementById("bell-btn");
+      const bellBadge = document.getElementById("bell-badge");
+      const bellPanel = document.getElementById("bell-panel");
+      const bellList = document.getElementById("bell-list");
+      const bellEmpty = document.getElementById("bell-empty");
+      const bellDismiss = document.getElementById("bell-dismiss");
+
+      async function loadVaultAlerts() {
+        try {
+          const res = await fetch("/admin/graphics/vault-alerts", {
+            credentials: "include",
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!data.success) return;
+
+          const alerts = data.graphics || [];
+          bellBadge.classList.toggle("hidden", alerts.length === 0);
+          bellBadge.textContent = alerts.length > 99 ? "99+" : String(alerts.length);
+          bellDismiss.classList.toggle("hidden", alerts.length === 0);
+          bellEmpty.classList.toggle("hidden", alerts.length > 0);
+
+          bellList.innerHTML = "";
+          for (const g of alerts) {
+            const item = document.createElement("div");
+            item.className =
+              "rounded-xl border border-white/10 px-3 py-2.5";
+            item.style.background = "rgba(255,255,255,0.03)";
+            item.innerHTML =
+              '<p class="text-sm font-medium text-cream">' +
+              escapeHtml(g.label) +
+              "</p>" +
+              '<p class="mt-0.5 text-xs text-cream/45">' +
+              "Timer hit zero — auto-vaulted " +
+              escapeHtml(formatRelativeAge(g.vaulted_at)) +
+              ". It’s off the request form and archive-shop only now." +
+              "</p>";
+            bellList.appendChild(item);
+          }
+        } catch {
+          /* bell is best-effort; next poll retries */
+        }
+      }
+
+      bellBtn.addEventListener("click", () => {
+        const open = bellPanel.classList.toggle("hidden");
+        bellBtn.setAttribute("aria-expanded", String(!open));
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!bellPanel.classList.contains("hidden") &&
+            !bellPanel.contains(e.target) &&
+            !bellBtn.contains(e.target)) {
+          bellPanel.classList.add("hidden");
+          bellBtn.setAttribute("aria-expanded", "false");
+        }
+      });
+
+      bellDismiss.addEventListener("click", async () => {
+        bellDismiss.disabled = true;
+        try {
+          const res = await fetch("/admin/graphics/vault-alerts/ack", {
+            method: "POST",
+            credentials: "include",
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          await loadVaultAlerts();
+        } finally {
+          bellDismiss.disabled = false;
+        }
+      });
 
       async function loadOrders() {
         const rows = document.getElementById("order-rows");
@@ -1666,9 +2206,22 @@
         if (!admin) return;
         adminEmail = admin.email;
         subtitle.textContent = admin.email;
+
+        // Sensible default author name for newsletter posts (editable).
+        const authorInput = document.getElementById("post_author");
+        if (authorInput && !authorInput.value) {
+          const local = String(admin.email || "").split("@")[0];
+          authorInput.value = local
+            ? local.charAt(0).toUpperCase() + local.slice(1)
+            : "";
+        }
+
         await loadAnalytics();
         await loadGraphics();
         await loadEntries();
+        await loadVaultAlerts();
+        // Keep the bell + offer timers honest while the portal sits open.
+        setInterval(loadVaultAlerts, 60_000);
       })();
     </script>
   </body>
