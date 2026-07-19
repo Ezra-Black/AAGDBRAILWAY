@@ -144,19 +144,6 @@ export async function migrate(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user
       ON password_reset_tokens (user_id);
 
-    -- Link requests and orders to the account that made them (when logged
-    -- in), so the profile portal can show a user's activity.
-    ALTER TABLE entries ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;
-    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;
-
-    CREATE INDEX IF NOT EXISTS idx_entries_user
-      ON entries (user_id)
-      WHERE user_id IS NOT NULL;
-
-    CREATE INDEX IF NOT EXISTS idx_purchases_user
-      ON purchases (user_id)
-      WHERE user_id IS NOT NULL;
-
     CREATE TABLE IF NOT EXISTS admins (
       id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       email          TEXT NOT NULL UNIQUE,
@@ -291,6 +278,22 @@ export async function migrate(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_purchases_archived
       ON purchases (archived_at);
+  `);
+
+  // Link requests and orders to the account that made them (when logged in),
+  // so the profile portal can show a user's activity. Runs after the main
+  // block because it references both users and purchases.
+  await query(`
+    ALTER TABLE entries ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_entries_user
+      ON entries (user_id)
+      WHERE user_id IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_purchases_user
+      ON purchases (user_id)
+      WHERE user_id IS NOT NULL;
   `);
 
   // Keep the archive in sync: any option currently offered (or offered at any
