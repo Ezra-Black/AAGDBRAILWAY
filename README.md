@@ -56,6 +56,59 @@ Migrations run automatically on app boot.
 | `POST` | `/stripe/webhook` | Optional Stripe webhook (needs `STRIPE_WEBHOOK_SECRET`) |
 | `GET` | `/admin/purchases` | Shop orders (admin session required) |
 
+### User accounts & profile portal (`/profile`)
+
+Visitors can create a free account to track their graphic requests and shop
+orders. All auth endpoints live under `/api/auth`:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/api/auth/register` | `{ "email", "password", "name", "angel_name?" }` → create account + session |
+| `POST` | `/api/auth/login` | `{ "email", "password" }` → sets httpOnly session cookie |
+| `POST` | `/api/auth/logout` | Destroy the DB session + clear the cookie |
+| `GET` | `/api/auth/me` | Current user (protected) |
+| `PUT` | `/api/auth/profile` | Update `email` / `name` / `angel_name` (protected) |
+| `POST` | `/api/auth/profile/photo` | multipart upload, field `photo` — JPEG/PNG/WebP/GIF, 5 MB max (protected) |
+| `DELETE` | `/api/auth/profile/photo` | Remove the profile photo (protected) |
+| `POST` | `/api/auth/password` | `{ "current_password", "new_password" }` — signs out other devices (protected) |
+| `POST` | `/api/auth/forgot-password` | `{ "email" }` → email a single-use reset link (needs SMTP) |
+| `POST` | `/api/auth/reset-password` | `{ "token", "new_password" }` → finish the reset |
+| `GET` | `/api/auth/activity` | The account's requests + orders (protected) |
+
+**Security model**
+
+- Passwords hashed with **bcrypt (cost 12)**; strong-password rules enforced
+  by zod on register/change/reset.
+- **Session cookies, not JWT**: an opaque 256-bit random token in an
+  `httpOnly` + `Secure` (production) + `SameSite=Lax` cookie; only the
+  SHA-256 hash is stored in `user_sessions`, so neither XSS nor a DB dump
+  yields a usable session. Sessions are revocable server-side (password
+  change/reset kills all of them) and expired ones are swept hourly.
+- **CSRF**: SameSite=Lax cookies + JSON-only request bodies + strict CORS
+  (credentials only ever allowed for an explicit `CORS_ORIGIN` allow-list).
+- **Rate limiting** on login/register (`USER_AUTH_RATE_MAX`), password
+  resets (`PASSWORD_RESET_RATE_MAX`), and profile writes (`PROFILE_RATE_MAX`).
+- Login and forgot-password responses never reveal whether an email exists
+  (including a constant-time-ish dummy bcrypt compare on unknown emails).
+- Profile photos are validated by **magic bytes** (not client MIME), capped
+  at 5 MB, stored under random filenames, and served with `nosniff`.
+
+**Frontend**: `public/assets/auth.js` is included on every page. It injects
+prominent **Log in / Log out / profile-avatar** controls into the header
+nav, and exposes `AAGAuth.requireAuth(...)` — a promise-based login/register
+modal that pages use to gate actions. The request form (`/form`) and the
+shop's payment step (`/shop`) call it automatically for unauthenticated
+visitors and **continue the interrupted action right after login** (the
+typed-in form/order state is preserved). `/profile` is the account portal:
+photo upload with preview, display name / angel's name / email editing,
+password change, and an activity feed of requests and orders. Requests and
+purchases made while logged in are linked via `entries.user_id` /
+`purchases.user_id` (older ones made with the same email also show up).
+
+**Future OAuth**: verify the provider token server-side (see
+`src/facebook.ts` for the pattern), match/create the `users` row, then call
+`issueSession()` from `src/userAuth.ts` — the cookie flow is shared.
+
 ### The Archive Shop (`/shop`)
 
 Past graphic styles are sold as **$5 AAG Archive Graphics**. The
@@ -221,6 +274,18 @@ npm run db:migrate
      - Start: `npm start`
      - Health check: `/health`
 
+7. **Variables for user accounts** (web service → **Variables**)
+   - `PUBLIC_BASE_URL` = your public domain (e.g. `https://your-app.up.railway.app`) — used in password-reset email links.
+   - SMTP vars (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, optional `SMTP_PORT`/`SMTP_FROM`) — required for password-reset emails; the rest of auth works without them.
+   - No JWT secret is needed: sessions are opaque random tokens stored (hashed) in Postgres.
+
+8. **Volume for profile photos** (recommended)
+   - Web service → right-click → **Attach Volume**, mount at e.g. `/data`.
+   - Set `UPLOAD_DIR=/data/uploads` in the service variables.
+   - Without a volume, uploads still work but photos are lost on redeploy
+     (the container filesystem is ephemeral). Alternatively swap
+     `src/uploads.ts` for S3/R2 later — the API routes won't change.
+
 Optional: use the included [`Dockerfile`](Dockerfile) by setting the service builder to Dockerfile in Railway settings.
 
 ### Connection string notes
@@ -263,16 +328,22 @@ LIMIT 50;
 │   ├── about.html         # About us
 │   ├── contact.html       # Contact form
 │   ├── form.html          # Request form
+│   ├── profile.html       # User profile portal (photo, angel's name, activity)
+│   ├── reset-password.html# Password-reset landing page
 │   ├── admin/             # Admin login + portal
-│   └── assets/            # Shared design system (site.css, site.js + opt-in popup)
+│   └── assets/            # Shared design system (site.css, site.js, auth.js)
 ├── src/
 │   ├── index.ts           # Express app
 │   ├── routes.ts          # REST endpoints
+│   ├── authRoutes.ts      # /api/auth — user register/login/profile/reset
+│   ├── userAuth.ts        # User session model + middleware
+│   ├── uploads.ts         # Profile photo storage (multer + magic-byte checks)
 │   ├── validation.ts      # Zod schemas
 │   ├── logger.ts
 │   └── db/
 │       ├── pool.ts
 │       ├── migrate.ts
+│       ├── users.ts       # Users, sessions, reset tokens, activity
 │       ├── entries.ts
 │       ├── contact.ts
 │       └── stats.ts

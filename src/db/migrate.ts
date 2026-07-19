@@ -95,6 +95,55 @@ export async function migrate(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_newsletter_posts_created_at
       ON newsletter_posts (created_at DESC);
 
+    -- ── Site users (customers) ─────────────────────────────────────
+    -- Separate from admins: these are visitors who register to track
+    -- their graphic requests and shop orders. angel_name is the custom
+    -- name for their deceased loved one used on graphics.
+    CREATE TABLE IF NOT EXISTS users (
+      id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email              TEXT NOT NULL UNIQUE,
+      password_hash      TEXT NOT NULL,
+      name               TEXT NOT NULL,
+      angel_name         TEXT,
+      profile_photo_url  TEXT,
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_users_email
+      ON users (lower(email));
+
+    -- DB-backed sessions (opaque random token, only its SHA-256 stored).
+    CREATE TABLE IF NOT EXISTS user_sessions (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash  TEXT NOT NULL UNIQUE,
+      expires_at  TIMESTAMPTZ NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_sessions_token
+      ON user_sessions (token_hash);
+
+    CREATE INDEX IF NOT EXISTS idx_user_sessions_expires
+      ON user_sessions (expires_at);
+
+    CREATE INDEX IF NOT EXISTS idx_user_sessions_user
+      ON user_sessions (user_id);
+
+    -- Single-use, short-lived password reset tokens (hash only).
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash  TEXT NOT NULL UNIQUE,
+      expires_at  TIMESTAMPTZ NOT NULL,
+      used_at     TIMESTAMPTZ,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user
+      ON password_reset_tokens (user_id);
+
     CREATE TABLE IF NOT EXISTS admins (
       id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       email          TEXT NOT NULL UNIQUE,
@@ -229,6 +278,22 @@ export async function migrate(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_purchases_archived
       ON purchases (archived_at);
+  `);
+
+  // Link requests and orders to the account that made them (when logged in),
+  // so the profile portal can show a user's activity. Runs after the main
+  // block because it references both users and purchases.
+  await query(`
+    ALTER TABLE entries ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_entries_user
+      ON entries (user_id)
+      WHERE user_id IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_purchases_user
+      ON purchases (user_id)
+      WHERE user_id IS NOT NULL;
   `);
 
   // Keep the archive in sync: any option currently offered (or offered at any

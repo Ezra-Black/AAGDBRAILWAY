@@ -107,12 +107,14 @@ export async function createPurchase(input: {
   amount_cents: number;
   currency: string;
   stripe_payment_intent_id: string;
+  /** Account that made the purchase, when logged in. */
+  user_id?: string | null;
 }): Promise<Purchase> {
   const result = await query(
     `INSERT INTO purchases
        (angel_name, real_name, email, graphic_code, note,
-        amount_cents, currency, stripe_payment_intent_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        amount_cents, currency, stripe_payment_intent_id, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       input.angel_name,
@@ -123,6 +125,7 @@ export async function createPurchase(input: {
       input.amount_cents,
       input.currency,
       input.stripe_payment_intent_id,
+      input.user_id ?? null,
     ]
   );
   return mapPurchase(result.rows[0]);

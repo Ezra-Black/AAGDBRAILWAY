@@ -20,6 +20,8 @@ export interface CreateEntryInput {
   angel_name: string;
   email: string;
   graphic_code: string;
+  /** Account that made the request, when logged in. */
+  user_id?: string | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -40,14 +42,15 @@ function mapRow(row: Record<string, unknown>): Entry {
 
 export async function createEntry(input: CreateEntryInput): Promise<Entry> {
   const result = await query(
-    `INSERT INTO entries (real_name, angel_name, email, graphic_code, metadata)
-     VALUES ($1, $2, $3, $4, $5::jsonb)
+    `INSERT INTO entries (real_name, angel_name, email, graphic_code, user_id, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb)
      RETURNING *`,
     [
       input.real_name,
       input.angel_name,
       input.email,
       input.graphic_code,
+      input.user_id ?? null,
       JSON.stringify(input.metadata ?? {}),
     ]
   );

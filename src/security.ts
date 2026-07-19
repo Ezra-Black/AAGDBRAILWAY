@@ -46,6 +46,42 @@ export const loginLimiter = rateLimit({
   },
 });
 
+/** Site-user login/register brute-force protection. */
+export const userAuthLimiter = rateLimit({
+  windowMs: envInt("USER_AUTH_RATE_WINDOW_MS", 15 * 60 * 1000),
+  max: envInt("USER_AUTH_RATE_MAX", 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many attempts. Please wait a few minutes and try again.",
+  },
+});
+
+/** Password reset emails — keep enumeration/spam expensive. */
+export const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: envInt("PASSWORD_RESET_RATE_MAX", 5),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many reset requests. Please try again later.",
+  },
+});
+
+/** Profile updates / photo uploads — logged-in users, still bounded. */
+export const profileLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: envInt("PROFILE_RATE_MAX", 30),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many profile updates. Please wait a moment.",
+  },
+});
+
 /** Visit bump: once an hour per IP so refreshes don’t explode the counter. */
 export const newsletterVisitLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,

@@ -192,6 +192,7 @@
     </footer>
 
     <script src="/assets/site.js"></script>
+    <script src="/assets/auth.js"></script>
     <script>
       document.getElementById("year").textContent = new Date().getFullYear();
 
@@ -309,6 +310,18 @@
 
       loadGraphics();
 
+      // Prefill from the logged-in account (name, angel's name, email).
+      function prefillFromUser(user) {
+        if (!user) return;
+        const realName = document.getElementById("real_name");
+        const angelName = document.getElementById("angel_name");
+        const emailInput = document.getElementById("email");
+        if (!realName.value && user.name) realName.value = user.name;
+        if (!angelName.value && user.angel_name) angelName.value = user.angel_name;
+        if (!emailInput.value && user.email) emailInput.value = user.email;
+      }
+      document.addEventListener("aag:auth", (e) => prefillFromUser(e.detail.user));
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         message.hidden = true;
@@ -333,6 +346,23 @@
         if (!graphic_code) {
           showMessage(
             "Please choose a graphic from the dropdown (or refresh if options didn’t load).",
+            false
+          );
+          return;
+        }
+
+        // Requests are tracked per account: unauthenticated visitors get the
+        // login/register modal here, and the submission continues seamlessly
+        // right after they sign in.
+        try {
+          await AAGAuth.requireAuth({
+            title: "Log in to send your request",
+            message:
+              "An account lets us track your request and show its progress on your profile. It takes seconds — your form is saved and will send right after.",
+          });
+        } catch {
+          showMessage(
+            "Please log in (or create a free account) to send your request — everything you typed is still here.",
             false
           );
           return;
