@@ -39,6 +39,45 @@ export function contactInboxAddress(): string {
  * Returns true when the email was handed to the SMTP server. The message is
  * always stored in Postgres first, so a mail failure never loses it.
  */
+/**
+ * Send a password-reset link to a user. Returns true when handed to SMTP.
+ * When SMTP isn't configured the caller still responds generically (never
+ * revealing whether the email exists) and the reset simply can't complete.
+ */
+export async function sendPasswordResetEmail(
+  to: string,
+  resetUrl: string
+): Promise<boolean> {
+  if (!mailerConfigured()) {
+    logger.warn(
+      "SMTP not configured — password reset email not sent. Set SMTP_HOST/SMTP_USER/SMTP_PASS to enable resets."
+    );
+    return false;
+  }
+
+  try {
+    await getTransporter().sendMail({
+      from:
+        process.env.SMTP_FROM?.trim() ||
+        `"Audrey's Angel Graphics" <${process.env.SMTP_USER!.trim()}>`,
+      to,
+      subject: "Reset your Audrey's Angel Graphics password",
+      text:
+        `We received a request to reset the password for your account.\n\n` +
+        `Open this link to choose a new password (valid for 1 hour):\n` +
+        `${resetUrl}\n\n` +
+        `If you didn't ask for this, you can safely ignore this email — ` +
+        `your password will not change.\n`,
+    });
+    return true;
+  } catch (err) {
+    logger.error("Failed to send password reset email", {
+      error: String(err),
+    });
+    return false;
+  }
+}
+
 export async function sendContactEmail(input: {
   name: string;
   email: string;

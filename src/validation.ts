@@ -108,6 +108,76 @@ export const PASSWORD_RULES = [
   "At least one special character (!@#$%^&* etc.)",
 ];
 
+/* ── Site-user (customer) auth ─────────────────────────────── */
+
+/** POST /api/auth/register */
+export const userRegisterSchema = z
+  .object({
+    email: emailField,
+    password: strongPasswordField,
+    name: nameField,
+    // The custom name for a deceased loved one used on graphics. Optional
+    // at signup — it can be added later from the profile portal.
+    angel_name: nameField.optional().or(z.literal("").transform(() => undefined)),
+    // Honeypot — must be empty/omitted.
+    website: z.string().max(0).optional(),
+  })
+  .strict();
+
+/** POST /api/auth/login */
+export const userLoginSchema = z
+  .object({
+    email: emailField,
+    password: z.string().min(1, "Password is required").max(200),
+  })
+  .strict();
+
+/** PUT /api/auth/profile — all fields optional, only provided ones change. */
+export const userProfileUpdateSchema = z
+  .object({
+    email: emailField.optional(),
+    name: nameField.optional(),
+    angel_name: nameField
+      .optional()
+      .or(z.literal("").transform(() => null))
+      .or(z.null()),
+  })
+  .strict()
+  .refine(
+    (data) => Object.values(data).some((v) => v !== undefined),
+    "Provide at least one field to update"
+  );
+
+/** POST /api/auth/password — change while logged in. */
+export const userChangePasswordSchema = z
+  .object({
+    current_password: z.string().min(1, "Current password is required").max(200),
+    new_password: strongPasswordField,
+  })
+  .strict();
+
+/** POST /api/auth/forgot-password */
+export const userForgotPasswordSchema = z
+  .object({
+    email: emailField,
+    // Honeypot — must be empty/omitted.
+    website: z.string().max(0).optional(),
+  })
+  .strict();
+
+/** POST /api/auth/reset-password */
+export const userResetPasswordSchema = z
+  .object({
+    token: z
+      .string()
+      .trim()
+      .min(32, "Invalid reset link")
+      .max(128, "Invalid reset link")
+      .refine((v) => /^[a-f0-9]+$/i.test(v), "Invalid reset link"),
+    new_password: strongPasswordField,
+  })
+  .strict();
+
 /** Mailing-list opt-in from the popup / footer. */
 export const newsletterSubscribeSchema = z
   .object({

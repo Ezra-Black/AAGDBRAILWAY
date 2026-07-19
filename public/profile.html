@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Profile — Audrey’s Angel Graphics</title>
+    <meta
+      name="description"
+      content="Manage your Audrey’s Angel Graphics account — profile photo, angel’s name, password, and your requests and orders."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              dusk: "#0a0806",
+              honey: "#f0c45c",
+              cream: "#fff6e4",
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/site.css" />
+    <style>
+      .profile-avatar {
+        width: 96px;
+        height: 96px;
+        border-radius: 9999px;
+        object-fit: cover;
+        border: 2px solid rgba(240, 196, 92, 0.5);
+        background: rgba(240, 196, 92, 0.12);
+      }
+      .avatar-fallback {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--gold);
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 9999px;
+        padding: 0.2rem 0.7rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: capitalize;
+      }
+      .status-pending   { background: rgba(240,196,92,0.14); color: #f0c45c; border: 1px solid rgba(240,196,92,0.35); }
+      .status-processing{ background: rgba(96,165,250,0.14); color: #93c5fd; border: 1px solid rgba(96,165,250,0.35); }
+      .status-processed, .status-paid, .status-delivered
+                        { background: rgba(110,231,183,0.12); color: #6ee7b7; border: 1px solid rgba(110,231,183,0.35); }
+      .status-failed    { background: rgba(251,113,133,0.12); color: #fda4af; border: 1px solid rgba(251,113,133,0.35); }
+      .activity-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.8rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .activity-row:last-child { border-bottom: 0; }
+    </style>
+  </head>
+  <body data-no-popup>
+    <div class="orb" style="width:300px;height:300px;background:#f0c45c;top:8%;left:6%;opacity:0.14"></div>
+    <div class="orb" style="width:340px;height:340px;background:#e8a838;bottom:8%;right:4%;opacity:0.1;animation-delay:1.4s"></div>
+
+    <!-- Navigation -->
+    <header class="fixed inset-x-0 top-0 z-40 px-4 pt-4">
+      <nav class="glass-nav mx-auto flex max-w-5xl items-center justify-between rounded-full px-5 py-3">
+        <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-wide" style="color:var(--cream);text-decoration:none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" fill="#f0c45c" />
+          </svg>
+          Audrey’s Angel Graphics
+        </a>
+        <div class="hidden items-center gap-7 text-sm sm:flex">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/newsletter" class="nav-link">Newsletter</a>
+          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta">Request yours</a>
+        </div>
+        <button
+          id="menu-toggle"
+          type="button"
+          class="sm:hidden"
+          aria-label="Open menu"
+          aria-expanded="false"
+          style="background:none;border:0;color:var(--cream);cursor:pointer;padding:0.25rem"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+      </nav>
+      <div id="mobile-menu" class="mobile-menu glass-nav mx-auto mt-2 max-w-5xl rounded-3xl p-5 sm:hidden">
+        <div class="flex flex-col gap-4 text-sm">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/newsletter" class="nav-link">Newsletter</a>
+          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta justify-center">Request yours</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="relative z-10 mx-auto max-w-3xl px-5 pb-20 pt-36 sm:pt-44">
+      <!-- Signed-out fallback (shown when the login modal is dismissed) -->
+      <section id="signed-out" class="hidden text-center">
+        <p class="eyebrow">Your account</p>
+        <h1 class="headline mt-4 text-4xl font-bold text-cream">Log in to see your profile.</h1>
+        <p class="mx-auto mt-4 max-w-md text-base font-light leading-relaxed text-cream/60">
+          Your profile keeps your angel’s name, photo, and every request and
+          order in one place.
+        </p>
+        <button type="button" id="signed-out-login" class="btn-primary mt-8">Log in / create account</button>
+      </section>
+
+      <div id="portal" class="hidden">
+        <!-- Account header -->
+        <section class="reveal is-visible text-center">
+          <p class="eyebrow">Your account</p>
+          <h1 class="headline mt-4 text-4xl font-bold text-cream sm:text-5xl">
+            Hello, <span id="hello-name" class="gold-text">friend</span>.
+          </h1>
+          <p class="mt-3 text-sm text-cream/50">
+            Member since <span id="member-since">—</span>
+          </p>
+        </section>
+
+        <!-- Photo + profile -->
+        <section class="glass-panel mt-10 rounded-[2rem] p-6 sm:p-8">
+          <h2 class="headline text-xl font-semibold text-cream">Profile</h2>
+
+          <div class="mt-6 flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+            <!-- Photo upload + preview -->
+            <div class="flex flex-col items-center gap-3">
+              <div id="avatar-wrap"></div>
+              <input id="photo-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" />
+              <div class="flex gap-2">
+                <button type="button" id="photo-pick" class="btn-secondary" style="padding:0.5rem 1rem;font-size:0.78rem">Choose photo</button>
+                <button type="button" id="photo-remove" class="btn-secondary hidden" style="padding:0.5rem 1rem;font-size:0.78rem">Remove</button>
+              </div>
+              <button type="button" id="photo-upload" class="btn-primary hidden" style="padding:0.5rem 1.2rem;font-size:0.78rem">Save new photo</button>
+              <p id="photo-note" aria-live="polite" class="min-h-[1rem] max-w-[12rem] text-center text-[11px] text-cream/50"></p>
+            </div>
+
+            <!-- Editable fields -->
+            <form id="profile-form" class="flex-1 space-y-4">
+              <div class="field">
+                <label for="pf-name">Display name</label>
+                <input id="pf-name" type="text" maxlength="120" autocomplete="name" />
+              </div>
+              <div class="field">
+                <label for="pf-angel">Angel’s name</label>
+                <input id="pf-angel" type="text" maxlength="120" placeholder="Your loved one’s name" />
+                <p class="mt-1.5 text-xs text-cream/45">
+                  The name of your deceased loved one — this is the name we
+                  feature on their graphics.
+                </p>
+              </div>
+              <div class="field">
+                <label for="pf-email">Email</label>
+                <input id="pf-email" type="email" maxlength="254" autocomplete="email" />
+              </div>
+              <button type="submit" class="btn-primary w-full sm:w-auto">Save profile</button>
+              <p id="profile-note" role="status" aria-live="polite" class="min-h-[1.1rem] text-xs text-cream/50"></p>
+            </form>
+          </div>
+        </section>
+
+        <!-- Change password -->
+        <section class="glass-panel mt-6 rounded-[2rem] p-6 sm:p-8">
+          <h2 class="headline text-xl font-semibold text-cream">Change password</h2>
+          <p class="mt-2 text-sm font-light text-cream/55">
+            Changing your password signs you out everywhere else.
+          </p>
+          <form id="password-form" class="mt-5 grid gap-4 sm:grid-cols-2">
+            <div class="field">
+              <label for="pw-current">Current password</label>
+              <input id="pw-current" type="password" maxlength="200" autocomplete="current-password" />
+            </div>
+            <div class="field">
+              <label for="pw-new">New password</label>
+              <input id="pw-new" type="password" maxlength="200" autocomplete="new-password" placeholder="10+ chars, mixed case, number, symbol" />
+            </div>
+            <div class="sm:col-span-2">
+              <button type="submit" class="btn-primary w-full sm:w-auto">Update password</button>
+              <p id="password-note" role="status" aria-live="polite" class="mt-2 min-h-[1.1rem] text-xs text-cream/50"></p>
+            </div>
+          </form>
+        </section>
+
+        <!-- Activity -->
+        <section class="glass-panel mt-6 rounded-[2rem] p-6 sm:p-8">
+          <h2 class="headline text-xl font-semibold text-cream">Your activity</h2>
+          <p class="mt-2 text-sm font-light text-cream/55">
+            Every graphic request and archive order tied to your account.
+          </p>
+
+          <h3 class="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-cream/40">Graphic requests</h3>
+          <div id="activity-requests" class="mt-2 text-sm text-cream/70">
+            <p class="py-3 text-cream/40">Loading…</p>
+          </div>
+
+          <h3 class="mt-8 text-xs font-semibold uppercase tracking-[0.2em] text-cream/40">Shop orders</h3>
+          <div id="activity-orders" class="mt-2 text-sm text-cream/70">
+            <p class="py-3 text-cream/40">Loading…</p>
+          </div>
+
+          <div class="mt-8 flex flex-wrap gap-3">
+            <a href="/form" class="btn-secondary" style="padding:0.6rem 1.3rem;font-size:0.8125rem">Make a new request</a>
+            <a href="/shop" class="btn-secondary" style="padding:0.6rem 1.3rem;font-size:0.8125rem">Browse the archive shop</a>
+          </div>
+        </section>
+
+        <!-- Log out -->
+        <section class="mt-8 text-center">
+          <button type="button" id="logout-btn" class="btn-secondary">Log out</button>
+        </section>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative z-10 mt-8 px-5 pb-10">
+      <div class="mx-auto max-w-5xl">
+        <hr class="divider-glow" />
+        <div class="mt-8 flex flex-wrap items-center justify-between gap-3 text-[11px] text-cream/30">
+          <p>© <span id="year"></span> Audrey’s Angel Graphics</p>
+          <div class="flex items-center gap-4">
+            <a href="/" class="footer-link" style="font-size:11px">Home</a>
+            <a href="/about" class="footer-link" style="font-size:11px">About</a>
+            <a href="/newsletter" class="footer-link" style="font-size:11px">Newsletter</a>
+            <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
+            <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
+          </div>
+          <p>
+            built by
+            <a href="https://buymeacoffee.com/ezrablack" target="_blank" rel="noopener noreferrer" class="underline decoration-honey/30 underline-offset-2 hover:text-cream/50">ezra black</a>
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <script src="/assets/site.js"></script>
+    <script src="/assets/auth.js"></script>
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      const portal = document.getElementById("portal");
+      const signedOut = document.getElementById("signed-out");
+
+      /* ── Small helpers ─────────────────────────────────── */
+      function note(id, text, ok) {
+        const el = document.getElementById(id);
+        el.textContent = text || "";
+        el.style.color = ok ? "rgba(110,231,183,0.95)" : "rgba(251,113,133,0.9)";
+      }
+
+      function detailText(data, fallback) {
+        if (data && data.details) return Object.values(data.details).flat().join(" ");
+        return (data && data.error) || fallback;
+      }
+
+      function fmtDate(value) {
+        try {
+          return new Date(value).toLocaleDateString("en-US", {
+            year: "numeric", month: "long", day: "numeric",
+          });
+        } catch { return "—"; }
+      }
+
+      function esc(value) {
+        const div = document.createElement("div");
+        div.textContent = String(value ?? "");
+        return div.innerHTML;
+      }
+
+      /* ── Render user into the page ─────────────────────── */
+      function renderAvatar(user, previewUrl) {
+        const wrap = document.getElementById("avatar-wrap");
+        const url = previewUrl || user.profile_photo_url;
+        if (url) {
+          wrap.innerHTML = '<img class="profile-avatar" alt="Profile photo" src="' + esc(url) + '" />';
+        } else {
+          const initials = (user.name || user.email || "?")
+            .trim().split(/\s+/).slice(0, 2).map((p) => p.charAt(0)).join("").toUpperCase();
+          wrap.innerHTML = '<div class="profile-avatar avatar-fallback">' + esc(initials) + "</div>";
+        }
+        document.getElementById("photo-remove").classList.toggle("hidden", !user.profile_photo_url);
+      }
+
+      function renderUser(user) {
+        document.getElementById("hello-name").textContent = (user.name || "friend").split(/\s+/)[0];
+        document.getElementById("member-since").textContent = fmtDate(user.created_at);
+        document.getElementById("pf-name").value = user.name || "";
+        document.getElementById("pf-angel").value = user.angel_name || "";
+        document.getElementById("pf-email").value = user.email || "";
+        renderAvatar(user);
+      }
+
+      /* ── Activity feed ─────────────────────────────────── */
+      function statusPill(status) {
+        return '<span class="status-pill status-' + esc(status) + '">' + esc(status) + "</span>";
+      }
+
+      async function loadActivity() {
+        try {
+          const res = await fetch("/api/auth/activity", { credentials: "same-origin", cache: "no-store" });
+          const data = await res.json();
+          if (!res.ok || !data.success) throw new Error();
+
+          const reqEl = document.getElementById("activity-requests");
+          reqEl.innerHTML = data.requests.length
+            ? data.requests.map((r) =>
+                '<div class="activity-row">' +
+                '<div><p class="font-medium text-cream">' + esc(r.angel_name) + "</p>" +
+                '<p class="text-xs text-cream/40">' + esc(r.graphic_code || "—") + " · " + fmtDate(r.created_at) + "</p></div>" +
+                statusPill(r.status) +
+                "</div>"
+              ).join("")
+            : '<p class="py-3 text-cream/40">No requests yet — <a href="/form" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">make your first one</a>.</p>';
+
+          const ordEl = document.getElementById("activity-orders");
+          ordEl.innerHTML = data.orders.length
+            ? data.orders.map((o) =>
+                '<div class="activity-row">' +
+                '<div><p class="font-medium text-cream">' + esc(o.angel_name) + "</p>" +
+                '<p class="text-xs text-cream/40">' + esc(o.graphic_code) + " · $" + (o.amount_cents / 100).toFixed(2) + " · " + fmtDate(o.created_at) + "</p></div>" +
+                statusPill(o.status) +
+                "</div>"
+              ).join("")
+            : '<p class="py-3 text-cream/40">No orders yet — <a href="/shop" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">browse the archive</a>.</p>';
+        } catch {
+          document.getElementById("activity-requests").innerHTML =
+            '<p class="py-3 text-rose-300/80">Couldn’t load your activity. Refresh to try again.</p>';
+          document.getElementById("activity-orders").innerHTML = "";
+        }
+      }
+
+      /* ── Photo upload with preview ─────────────────────── */
+      let pendingPhoto = null;
+
+      document.getElementById("photo-pick").addEventListener("click", () => {
+        document.getElementById("photo-input").click();
+      });
+
+      document.getElementById("photo-input").addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+          note("photo-note", "That photo is over 5 MB — pick a smaller one.");
+          return;
+        }
+        pendingPhoto = file;
+        renderAvatar(AAGAuth.getUser(), URL.createObjectURL(file));
+        document.getElementById("photo-upload").classList.remove("hidden");
+        note("photo-note", "Preview only — click “Save new photo” to keep it.", true);
+      });
+
+      document.getElementById("photo-upload").addEventListener("click", async () => {
+        if (!pendingPhoto) return;
+        const btn = document.getElementById("photo-upload");
+        btn.disabled = true;
+        btn.textContent = "Uploading…";
+        try {
+          const body = new FormData();
+          body.append("photo", pendingPhoto);
+          const res = await fetch("/api/auth/profile/photo", {
+            method: "POST", credentials: "same-origin", body,
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            note("photo-note", detailText(data, "Upload failed. Try a different image."));
+            return;
+          }
+          pendingPhoto = null;
+          btn.classList.add("hidden");
+          await AAGAuth.refresh();
+          renderUser(AAGAuth.getUser());
+          note("photo-note", "Photo saved!", true);
+        } catch {
+          note("photo-note", "Network glitch — try again.");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Save new photo";
+        }
+      });
+
+      document.getElementById("photo-remove").addEventListener("click", async () => {
+        try {
+          const res = await fetch("/api/auth/profile/photo", {
+            method: "DELETE", credentials: "same-origin",
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            pendingPhoto = null;
+            document.getElementById("photo-upload").classList.add("hidden");
+            await AAGAuth.refresh();
+            renderUser(AAGAuth.getUser());
+            note("photo-note", "Photo removed.", true);
+          }
+        } catch {}
+      });
+
+      /* ── Profile save ──────────────────────────────────── */
+      document.getElementById("profile-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        note("profile-note", "");
+        const body = {
+          name: document.getElementById("pf-name").value.trim(),
+          email: document.getElementById("pf-email").value.trim(),
+          angel_name: document.getElementById("pf-angel").value.trim(),
+        };
+        try {
+          const res = await fetch("/api/auth/profile", {
+            method: "PUT",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            note("profile-note", detailText(data, "Couldn’t save your profile."));
+            return;
+          }
+          await AAGAuth.refresh();
+          renderUser(AAGAuth.getUser());
+          note("profile-note", "Profile saved!", true);
+        } catch {
+          note("profile-note", "Network glitch — try again.");
+        }
+      });
+
+      /* ── Password change ───────────────────────────────── */
+      document.getElementById("password-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        note("password-note", "");
+        try {
+          const res = await fetch("/api/auth/password", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              current_password: document.getElementById("pw-current").value,
+              new_password: document.getElementById("pw-new").value,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            note("password-note", detailText(data, "Couldn’t change your password."));
+            return;
+          }
+          document.getElementById("pw-current").value = "";
+          document.getElementById("pw-new").value = "";
+          note("password-note", data.message || "Password updated.", true);
+        } catch {
+          note("password-note", "Network glitch — try again.");
+        }
+      });
+
+      document.getElementById("logout-btn").addEventListener("click", () => AAGAuth.logout());
+      document.getElementById("signed-out-login").addEventListener("click", async () => {
+        try {
+          await AAGAuth.requireAuth({ title: "Log in to your profile" });
+          location.reload();
+        } catch {}
+      });
+
+      /* ── Boot: require a session for this page ─────────── */
+      (async () => {
+        try {
+          const user = await AAGAuth.requireAuth({
+            title: "Log in to your profile",
+            message: "Your profile keeps your angel’s name, photo, and all your requests and orders together.",
+          });
+          renderUser(user);
+          portal.classList.remove("hidden");
+          loadActivity();
+        } catch {
+          signedOut.classList.remove("hidden");
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -81,6 +81,7 @@ import {
   stripeConfigured,
   stripePublishableKey,
 } from "./stripe";
+import { attachUserIfPresent, type UserRequest } from "./userAuth";
 import { upsertFacebookUser } from "./db/facebook";
 import {
   facebookAppId,
@@ -521,7 +522,8 @@ apiRouter.post(
   "/submit",
   submitLimiter,
   rejectHoneypot,
-  asyncHandler(async (req, res) => {
+  attachUserIfPresent,
+  asyncHandler(async (req: UserRequest, res) => {
     const parsed = submitSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
@@ -573,6 +575,9 @@ apiRouter.post(
       angel_name,
       email,
       graphic_code,
+      // Link the request to the logged-in account so it shows up in the
+      // profile portal's activity feed.
+      user_id: req.user?.id ?? null,
     });
 
     logger.info("Entry created", {
@@ -926,7 +931,8 @@ apiRouter.post(
   "/shop/checkout",
   checkoutLimiter,
   rejectHoneypot,
-  asyncHandler(async (req, res) => {
+  attachUserIfPresent,
+  asyncHandler(async (req: UserRequest, res) => {
     if (!stripeConfigured()) {
       res.status(503).json({
         success: false,
@@ -980,6 +986,7 @@ apiRouter.post(
       amount_cents: amount,
       currency: SHOP_CURRENCY,
       stripe_payment_intent_id: intent.id,
+      user_id: req.user?.id ?? null,
     });
 
     logger.info("Shop checkout started", {

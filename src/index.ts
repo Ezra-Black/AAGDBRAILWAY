@@ -13,7 +13,10 @@ import { migrate } from "./db/migrate";
 import { closePool } from "./db/pool";
 import { markPurchaseStatusByIntent } from "./db/shop";
 import { logger } from "./logger";
+import { authRouter } from "./authRoutes";
 import { apiRouter } from "./routes";
+import { deleteExpiredUserSessions } from "./db/users";
+import { ensureUploadDir, uploadDir } from "./uploads";
 import { globalLimiter } from "./security";
 import { getStripe, stripeConfigured } from "./stripe";
 
@@ -94,6 +97,9 @@ app.use(
     origin: corsOrigin
       ? corsOrigin.split(",").map((o) => o.trim())
       : true,
+    // Session cookies only travel cross-origin when an explicit allow-list
+    // is configured — never with the wildcard default.
+    credentials: Boolean(corsOrigin),
   })
 );
 
@@ -154,10 +160,25 @@ app.use((_req, res, next) => {
   next();
 });
 
+app.use("/api/auth", authRouter);
 app.use(apiRouter);
 
 const publicDir = path.join(__dirname, "..", "public");
 app.use(express.static(publicDir));
+
+// Profile photos. Content-Disposition + nosniff keep any hostile upload that
+// slipped past magic-byte checks from executing in the page context.
+app.use(
+  "/uploads",
+  express.static(uploadDir(), {
+    maxAge: "7d",
+    immutable: true,
+    setHeaders: (res) => {
+      res.setHeader("Content-Disposition", "inline");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+    },
+  })
+);
 
 app.get("/", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
@@ -181,6 +202,14 @@ app.get("/shop", (_req, res) => {
 
 app.get("/newsletter", (_req, res) => {
   res.sendFile(path.join(publicDir, "newsletter.html"));
+});
+
+app.get("/profile", (_req, res) => {
+  res.sendFile(path.join(publicDir, "profile.html"));
+});
+
+app.get("/reset-password", (_req, res) => {
+  res.sendFile(path.join(publicDir, "reset-password.html"));
 });
 
 app.get("/admin", (_req, res) => {
@@ -216,6 +245,7 @@ async function start() {
   }
 
   await migrate();
+  ensureUploadDir();
 
   // Vault sweep: close limited-time graphic offers whose countdown hit zero.
   // Listings also filter expired offers on read, so this is belt-and-braces
@@ -233,6 +263,18 @@ async function start() {
   await sweepVault();
   const vaultTimer = setInterval(sweepVault, 60_000);
   vaultTimer.unref();
+
+  // Hourly cleanup of expired user sessions and spent reset tokens.
+  const sweepSessions = async () => {
+    try {
+      await deleteExpiredUserSessions();
+    } catch (err) {
+      logger.error("Session sweep failed", { error: String(err) });
+    }
+  };
+  await sweepSessions();
+  const sessionTimer = setInterval(sweepSessions, 60 * 60 * 1000);
+  sessionTimer.unref();
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     logger.info(`Server listening on port ${PORT}`, {

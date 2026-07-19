@@ -385,6 +385,7 @@
     </footer>
 
     <script src="/assets/site.js"></script>
+    <script src="/assets/auth.js"></script>
     <script>
       document.getElementById("year").textContent = new Date().getFullYear();
 
@@ -515,8 +516,28 @@
         return true;
       }
 
-      btnNext.addEventListener("click", () => {
+      btnNext.addEventListener("click", async () => {
         if (!validateStep(currentStep)) return;
+
+        // Purchases are tracked per account: gate the payment step behind
+        // login. The wizard state is untouched, so after signing in the
+        // visitor lands straight on review & pay.
+        if (currentStep === 3) {
+          try {
+            await AAGAuth.requireAuth({
+              title: "Log in to complete your order",
+              message:
+                "An account lets us tie this order to you so you can track it from your profile. Your order details are saved — checkout continues right after.",
+            });
+          } catch {
+            showError(
+              3,
+              "Please log in (or create a free account) to continue to payment — your order details are still here."
+            );
+            return;
+          }
+        }
+
         setStep(currentStep + 1);
       });
       btnBack.addEventListener("click", () => {
@@ -778,6 +799,18 @@
         } catch {}
         return false;
       }
+
+      // Prefill checkout fields from the logged-in account.
+      document.addEventListener("aag:auth", (e) => {
+        const user = e.detail.user;
+        if (!user) return;
+        const emailInput = document.getElementById("shop_email");
+        const realName = document.getElementById("shop_real_name");
+        const angelName = document.getElementById("shop_angel_name");
+        if (!emailInput.value && user.email) emailInput.value = user.email;
+        if (!realName.value && user.name) realName.value = user.name;
+        if (!angelName.value && user.angel_name) angelName.value = user.angel_name;
+      });
 
       (async () => {
         await loadShop();
