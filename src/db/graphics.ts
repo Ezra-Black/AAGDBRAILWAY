@@ -8,6 +8,7 @@ export interface GraphicOption {
   sort_order: number;
   expires_at: string | null;
   vaulted_at: string | null;
+  image_url?: string | null;
 }
 
 function toIso(value: unknown): string | null {
@@ -21,6 +22,11 @@ function mapGraphic(row: Record<string, unknown>): GraphicOption | null {
   const label = String(row.label ?? "").trim() || code;
   if (!code) return null;
 
+  const image =
+    row.image_url == null || row.image_url === ""
+      ? null
+      : String(row.image_url);
+
   return {
     id: String(row.id),
     code,
@@ -29,6 +35,7 @@ function mapGraphic(row: Record<string, unknown>): GraphicOption | null {
     sort_order: Number(row.sort_order ?? 0),
     expires_at: toIso(row.expires_at),
     vaulted_at: toIso(row.vaulted_at),
+    image_url: image,
   };
 }
 
@@ -39,13 +46,41 @@ const OFFER_OPEN_CLAUSE = `
   AND (expires_at IS NULL OR expires_at > NOW())
 `;
 
-/** Dropdown / offer-card options — open offers only. */
+/** Dropdown / offer-card options — open offers only.
+ *  image_url comes from archive_graphics when a matching sample exists. */
 export async function listActiveGraphics(): Promise<GraphicOption[]> {
   const result = await query(
-    `SELECT id, code, label, active, sort_order, expires_at, vaulted_at
-     FROM graphic_options
-     WHERE ${OFFER_OPEN_CLAUSE}
-     ORDER BY sort_order ASC NULLS LAST, label ASC NULLS LAST`
+    `SELECT
+       g.id,
+       g.code,
+       g.label,
+       g.active,
+       g.sort_order,
+       g.expires_at,
+       g.vaulted_at,
+       COALESCE(
+         (
+           SELECT a.image_url
+           FROM archive_graphics a
+           WHERE lower(trim(a.code)) = lower(trim(g.code))
+             AND a.image_url IS NOT NULL
+             AND trim(a.image_url) <> ''
+           LIMIT 1
+         ),
+         (
+           SELECT a.image_url
+           FROM archive_graphics a
+           WHERE lower(trim(a.label)) = lower(trim(g.label))
+             AND a.image_url IS NOT NULL
+             AND trim(a.image_url) <> ''
+           LIMIT 1
+         )
+       ) AS image_url
+     FROM graphic_options g
+     WHERE COALESCE(g.active, true) = true
+       AND g.vaulted_at IS NULL
+       AND (g.expires_at IS NULL OR g.expires_at > NOW())
+     ORDER BY g.sort_order ASC NULLS LAST, g.label ASC NULLS LAST`
   );
 
   return result.rows

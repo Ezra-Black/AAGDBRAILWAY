@@ -29,6 +29,45 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/assets/site.css" />
+    <style>
+      @keyframes stepIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .graphic-preview {
+        display: none;
+        position: relative;
+        overflow: hidden;
+        aspect-ratio: 3 / 2;
+        border-radius: 1.35rem;
+        border: 1px solid rgba(240, 196, 92, 0.24);
+        background: rgba(12, 9, 5, 0.55);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+      }
+      .graphic-preview.visible {
+        display: block;
+        animation: stepIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+      .graphic-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .graphic-preview-label {
+        position: absolute;
+        inset: auto 0 0;
+        padding: 2.5rem 1.1rem 1rem;
+        background: linear-gradient(transparent, rgba(7, 5, 3, 0.92));
+        color: var(--cream);
+        font-weight: 650;
+      }
+    </style>
   </head>
   <body>
     <div class="orb" style="width:300px;height:300px;background:#f0c45c;top:8%;left:8%;opacity:0.15"></div>
@@ -149,6 +188,10 @@
           <p class="mt-1.5 text-xs text-cream/45">
             Styles come straight from our live collection — new ones appear as they’re added.
           </p>
+          <div id="graphic-preview" class="graphic-preview mt-4">
+            <img id="graphic-preview-image" src="" alt="" />
+            <p id="graphic-preview-label" class="graphic-preview-label"></p>
+          </div>
         </div>
 
         <button type="submit" id="submit-btn" class="btn-primary mt-2 w-full">
@@ -200,6 +243,10 @@
       const btn = document.getElementById("submit-btn");
       const message = document.getElementById("message");
       const graphicSelect = document.getElementById("graphic_code");
+      const graphicPreview = document.getElementById("graphic-preview");
+      const graphicPreviewImage = document.getElementById("graphic-preview-image");
+      const graphicPreviewLabel = document.getElementById("graphic-preview-label");
+      let graphicsCache = [];
 
       function showMessage(text, ok) {
         message.hidden = false;
@@ -218,6 +265,26 @@
         return String(opt.value || "").trim();
       }
 
+      function updateGraphicPreview() {
+        const graphic = graphicsCache.find(
+          (item) => item.code === graphicSelect.value
+        );
+        if (!graphic || !graphic.image_url) {
+          graphicPreview.classList.remove("visible");
+          graphicPreviewImage.removeAttribute("src");
+          graphicPreviewImage.alt = "";
+          graphicPreviewLabel.textContent = "";
+          return;
+        }
+
+        graphicPreviewImage.src = graphic.image_url;
+        graphicPreviewImage.alt = (graphic.label || graphic.code) + " graphic preview";
+        graphicPreviewLabel.textContent = graphic.label || graphic.code;
+        graphicPreview.classList.add("visible");
+      }
+
+      graphicSelect.addEventListener("change", updateGraphicPreview);
+
       async function loadGraphics(options = {}) {
         const keepMessage = Boolean(options.keepMessage);
         try {
@@ -230,12 +297,14 @@
           }
 
           graphicSelect.innerHTML = "";
+          graphicsCache = [];
 
           if (!res.ok || !data?.success) {
             const opt = document.createElement("option");
             opt.value = "";
             opt.textContent = "Couldn’t load graphics";
             graphicSelect.appendChild(opt);
+            updateGraphicPreview();
             if (!keepMessage) {
               showMessage(
                 (data && data.error) ||
@@ -247,11 +316,13 @@
           }
 
           const graphics = Array.isArray(data.graphics) ? data.graphics : [];
+          graphicsCache = graphics;
           if (!graphics.length) {
             const opt = document.createElement("option");
             opt.value = "";
             opt.textContent = "No graphics available yet";
             graphicSelect.appendChild(opt);
+            updateGraphicPreview();
             if (!keepMessage) {
               showMessage(
                 "No graphics available yet — please check back soon.",
@@ -296,12 +367,15 @@
               false
             );
           }
+          updateGraphicPreview();
         } catch {
           graphicSelect.innerHTML = "";
+          graphicsCache = [];
           const opt = document.createElement("option");
           opt.value = "";
           opt.textContent = "Couldn’t load graphics";
           graphicSelect.appendChild(opt);
+          updateGraphicPreview();
           if (!keepMessage) {
             showMessage("Couldn’t load graphics. Refresh and try again.", false);
           }
