@@ -326,6 +326,30 @@ export async function migrate(): Promise<void> {
           active = true
   `);
 
+  // Cover Photo / Celestial Angel — on the request form and in the archive shop.
+  await query(`
+    INSERT INTO graphic_options (code, label, active, sort_order)
+    VALUES ('cover-photo', 'Celestial Angel', true, 1)
+    ON CONFLICT (code) DO UPDATE
+      SET label = EXCLUDED.label,
+          active = true
+  `);
+
+  await query(`
+    INSERT INTO archive_graphics (code, label, image_url, active, sort_order)
+    VALUES (
+      'cover-photo',
+      'Celestial Angel',
+      '/assets/shop/coverphoto.jpg',
+      true,
+      1
+    )
+    ON CONFLICT (code) DO UPDATE
+      SET label = EXCLUDED.label,
+          image_url = EXCLUDED.image_url,
+          active = true
+  `);
+
   // Hide label duplicates (e.g. a hand-added "Fairy Ring" without an image)
   // so the shop dropdown only shows the canonical entry with artwork.
   await query(`
