@@ -12,6 +12,13 @@ import {
   updateUserPasswordHash,
   updateUserProfile,
 } from "./db/users";
+import {
+  addMessageToThread,
+  getThreadById,
+  listMessagesForThread,
+  listThreadsForUser,
+  markThreadRead,
+} from "./db/messages";
 import { sendPasswordResetEmail } from "./email";
 import { logger } from "./logger";
 import {
@@ -32,12 +39,14 @@ import {
 } from "./userAuth";
 import {
   PASSWORD_RULES,
+  threadReplySchema,
   userChangePasswordSchema,
   userForgotPasswordSchema,
   userLoginSchema,
   userProfileUpdateSchema,
   userRegisterSchema,
   userResetPasswordSchema,
+  uuidSchema,
 } from "./validation";
 
 /**
@@ -413,5 +422,91 @@ authRouter.get(
   asyncHandler(async (req: UserRequest, res) => {
     const activity = await getUserActivity(req.user!.id, req.user!.email);
     res.json({ success: true, ...activity });
+  })
+);
+
+/* ═══════════ Inbox ═══════════ */
+
+/** GET /api/auth/inbox — conversation list for the signed-in user. */
+authRouter.get(
+  "/inbox",
+  requireUser,
+  asyncHandler(async (req: UserRequest, res) => {
+    const threads = await listThreadsForUser(req.user!.id);
+    res.json({ success: true, threads });
+  })
+);
+
+/** GET /api/auth/inbox/:threadId — open a thread (marks admin replies read). */
+authRouter.get(
+  "/inbox/:threadId",
+  requireUser,
+  asyncHandler(async (req: UserRequest, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.threadId);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid thread id" });
+      return;
+    }
+    const thread = await getThreadById(idCheck.data);
+    if (!thread || thread.user_id !== req.user!.id) {
+      res.status(404).json({ success: false, error: "Thread not found" });
+      return;
+    }
+    await markThreadRead({ thread_id: thread.id, sender: "admin" });
+    const messages = await listMessagesForThread(thread.id);
+    res.json({ success: true, thread, messages });
+  })
+);
+
+/** POST /api/auth/inbox/:threadId/messages — user reply. */
+authRouter.post(
+  "/inbox/:threadId/messages",
+  requireUser,
+  profileLimiter,
+  asyncHandler(async (req: UserRequest, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.threadId);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid thread id" });
+      return;
+    }
+    const parsed = threadReplySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const thread = await getThreadById(idCheck.data);
+    if (!thread || thread.user_id !== req.user!.id) {
+      res.status(404).json({ success: false, error: "Thread not found" });
+      return;
+    }
+    if (thread.status === "closed") {
+      res.status(400).json({
+        success: false,
+        error: "This conversation is closed.",
+      });
+      return;
+    }
+
+    const message = await addMessageToThread({
+      thread_id: thread.id,
+      sender: "user",
+      body: parsed.data.body,
+    });
+    if (!message) {
+      res.status(400).json({ success: false, error: "Could not send reply" });
+      return;
+    }
+
+    logger.info("User replied to thread", {
+      thread_id: thread.id,
+      user_id: req.user!.id,
+      message_id: message.id,
+    });
+    res.status(201).json({ success: true, message });
   })
 );

@@ -542,6 +542,8 @@
         <button type="button" id="tab-contact" class="tab-btn">
           Contact messages<span id="tab-contact-badge" class="tab-badge hidden">0</span>
         </button>
+        <button type="button" id="tab-messages" class="tab-btn">Messages</button>
+        <button type="button" id="tab-reviews" class="tab-btn">Reviews</button>
         <button type="button" id="tab-newsletter" class="tab-btn">Newsletter</button>
       </nav>
 
@@ -1059,6 +1061,80 @@
           Archiving tucks a message away without deleting it; restore it anytime from the Archived tab.
         </p>
       </div><!-- /view-contact -->
+
+      <!-- ═══════════ Messages view ═══════════ -->
+      <div id="view-messages" class="hidden">
+        <div class="mb-6">
+          <h2 class="text-lg font-semibold text-cream">Messages</h2>
+          <p class="mt-1 text-xs text-cream/45">
+            Conversations from the contact form. Replies land in the user’s profile inbox.
+          </p>
+        </div>
+        <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+          <div class="glass-panel rounded-[1.5rem] p-3 sm:p-4">
+            <div id="thread-list" class="max-h-[32rem] space-y-2 overflow-y-auto"></div>
+            <p id="threads-empty" class="hidden px-2 py-6 text-sm text-cream/40">
+              No conversations yet.
+            </p>
+            <p id="threads-error" class="mt-2 hidden text-sm text-rose-400"></p>
+          </div>
+          <div class="glass-panel rounded-[1.5rem] p-4 sm:p-5">
+            <div id="thread-pane-empty" class="py-16 text-center text-sm text-cream/40">
+              Select a conversation to read and reply.
+            </div>
+            <div id="thread-pane" class="hidden">
+              <div class="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-4">
+                <div>
+                  <p id="thread-user-name" class="font-semibold text-cream"></p>
+                  <p id="thread-user-email" class="mt-0.5 text-xs text-cream/45"></p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span id="thread-status-pill" class="status-pending">open</span>
+                  <button type="button" id="thread-toggle-status" class="btn-secondary" style="padding:0.35rem 0.8rem;font-size:0.72rem">
+                    Close
+                  </button>
+                </div>
+              </div>
+              <div id="thread-messages" class="mt-4 max-h-[20rem] space-y-3 overflow-y-auto pr-1"></div>
+              <form id="thread-reply-form" class="mt-4 space-y-3">
+                <div class="field">
+                  <label for="thread-reply-body">Reply</label>
+                  <textarea id="thread-reply-body" rows="3" maxlength="2000" placeholder="Write a reply…" style="padding:0.7rem 0.9rem;font-size:0.875rem;min-height:90px"></textarea>
+                </div>
+                <div class="flex items-center justify-between gap-3">
+                  <p id="thread-reply-error" class="hidden text-sm text-rose-400"></p>
+                  <button type="submit" id="thread-reply-btn" class="btn-primary ml-auto" style="padding:0.55rem 1.4rem;font-size:0.875rem">
+                    Send reply
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div><!-- /view-messages -->
+
+      <!-- ═══════════ Reviews view ═══════════ -->
+      <div id="view-reviews" class="hidden">
+        <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-cream">Reviews</h2>
+            <p class="mt-1 text-xs text-cream/45">
+              Approve reviews before they appear on
+              <a href="/reviews" target="_blank" rel="noopener" class="text-amber-300 underline decoration-amber-300/40 underline-offset-2">What our subscribers think</a>.
+            </p>
+          </div>
+          <div class="inline-flex items-center gap-2" role="group" aria-label="Review filter">
+            <button type="button" class="range-btn active" data-review-status="pending">Pending</button>
+            <button type="button" class="range-btn" data-review-status="approved">Approved</button>
+            <button type="button" class="range-btn" data-review-status="rejected">Rejected</button>
+          </div>
+        </div>
+        <div id="admin-reviews" class="space-y-3"></div>
+        <p id="admin-reviews-empty" class="mt-2 hidden text-sm text-cream/40">
+          Nothing in this queue.
+        </p>
+        <p id="admin-reviews-error" class="mt-2 hidden text-sm text-rose-400"></p>
+      </div><!-- /view-reviews -->
 
       <!-- ═══════════ Newsletter view ═══════════ -->
       <div id="view-newsletter" class="hidden">
@@ -2131,11 +2207,22 @@
       const tabContact = document.getElementById("tab-contact");
       let messagesLoaded = false;
 
+      const viewMessages = document.getElementById("view-messages");
+      const tabMessages = document.getElementById("tab-messages");
+      const viewReviews = document.getElementById("view-reviews");
+      const tabReviews = document.getElementById("tab-reviews");
+      let threadsLoaded = false;
+      let reviewsLoaded = false;
+      let reviewFilter = "pending";
+      let selectedThreadId = null;
+
       const VIEW_TITLES = {
         dashboard: "Dashboard",
         requests: "Requests",
         orders: "Orders",
         contact: "Contact messages",
+        messages: "Messages",
+        reviews: "Reviews",
         newsletter: "Newsletter",
       };
 
@@ -2144,22 +2231,30 @@
         viewRequests.classList.toggle("hidden", view !== "requests");
         viewOrders.classList.toggle("hidden", view !== "orders");
         viewContact.classList.toggle("hidden", view !== "contact");
+        viewMessages.classList.toggle("hidden", view !== "messages");
+        viewReviews.classList.toggle("hidden", view !== "reviews");
         viewNewsletter.classList.toggle("hidden", view !== "newsletter");
         tabDashboard.classList.toggle("active", view === "dashboard");
         tabRequests.classList.toggle("active", view === "requests");
         tabOrders.classList.toggle("active", view === "orders");
         tabContact.classList.toggle("active", view === "contact");
+        tabMessages.classList.toggle("active", view === "messages");
+        tabReviews.classList.toggle("active", view === "reviews");
         tabNewsletter.classList.toggle("active", view === "newsletter");
         document.getElementById("page-title").textContent = VIEW_TITLES[view];
         if (view === "orders" && !ordersLoaded) loadOrders();
         if (view === "contact" && !messagesLoaded) loadContactMessages();
         if (view === "newsletter" && !postsLoaded) loadAdminPosts();
+        if (view === "messages") loadThreads();
+        if (view === "reviews") loadAdminReviews();
       }
 
       tabDashboard.addEventListener("click", () => switchView("dashboard"));
       tabRequests.addEventListener("click", () => switchView("requests"));
       tabOrders.addEventListener("click", () => switchView("orders"));
       tabContact.addEventListener("click", () => switchView("contact"));
+      tabMessages.addEventListener("click", () => switchView("messages"));
+      tabReviews.addEventListener("click", () => switchView("reviews"));
       tabNewsletter.addEventListener("click", () => switchView("newsletter"));
 
       /* ═══════════ Contact messages inbox ═══════════ */
@@ -2391,6 +2486,324 @@
           msgError.classList.remove("hidden");
         }
       }
+
+      /* ═══════════ Reviews moderation ═══════════ */
+
+      document.querySelectorAll("[data-review-status]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          reviewFilter = btn.getAttribute("data-review-status");
+          document.querySelectorAll("[data-review-status]").forEach((b) => {
+            b.classList.toggle("active", b === btn);
+          });
+          loadAdminReviews();
+        });
+      });
+
+      async function loadAdminReviews() {
+        const list = document.getElementById("admin-reviews");
+        const emptyEl = document.getElementById("admin-reviews-empty");
+        const errEl = document.getElementById("admin-reviews-error");
+        errEl.classList.add("hidden");
+        try {
+          const res = await fetch(
+            "/admin/reviews?status=" + encodeURIComponent(reviewFilter),
+            { credentials: "include", cache: "no-store" }
+          );
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            errEl.textContent = data.error || "Could not load reviews";
+            errEl.classList.remove("hidden");
+            return;
+          }
+          reviewsLoaded = true;
+          const reviews = data.reviews || [];
+          list.innerHTML = "";
+          emptyEl.classList.toggle("hidden", reviews.length > 0);
+          for (const r of reviews) {
+            const card = document.createElement("article");
+            card.className = "glass-panel rounded-2xl p-4 sm:p-5";
+            const stars = "★".repeat(r.rating) + "☆".repeat(5 - r.rating);
+            card.innerHTML =
+              '<div class="flex flex-wrap items-start justify-between gap-3">' +
+              '<div class="min-w-0 flex-1">' +
+              '<p class="text-amber-300 tracking-widest">' + escapeHtml(stars) + "</p>" +
+              '<p class="mt-2 text-[15px] font-light leading-relaxed text-cream/80">' +
+              escapeHtml(r.body) +
+              "</p>" +
+              '<p class="mt-3 text-xs text-cream/45">' +
+              escapeHtml(r.display_name) +
+              (r.is_anonymous ? " (anonymous)" : "") +
+              " · " +
+              escapeHtml(r.user_email || "") +
+              " · " +
+              escapeHtml(r.source || "") +
+              " · " +
+              escapeHtml(formatRelativeAge(r.created_at)) +
+              "</p>" +
+              "</div>" +
+              (reviewFilter === "pending"
+                ? '<div class="flex shrink-0 gap-2">' +
+                  '<button type="button" class="btn-primary" data-approve style="padding:0.4rem 0.9rem;font-size:0.75rem">Approve</button>' +
+                  '<button type="button" class="btn-secondary" data-reject style="padding:0.4rem 0.9rem;font-size:0.75rem">Reject</button>' +
+                  "</div>"
+                : '<span class="' +
+                  (r.status === "approved" ? "status-complete" : "dup-yes") +
+                  '">' +
+                  escapeHtml(r.status) +
+                  "</span>") +
+              "</div>";
+            const approveBtn = card.querySelector("[data-approve]");
+            const rejectBtn = card.querySelector("[data-reject]");
+            if (approveBtn) {
+              approveBtn.addEventListener("click", () =>
+                moderateReview(r.id, "approved", approveBtn)
+              );
+            }
+            if (rejectBtn) {
+              rejectBtn.addEventListener("click", () =>
+                moderateReview(r.id, "rejected", rejectBtn)
+              );
+            }
+            list.appendChild(card);
+          }
+        } catch {
+          errEl.textContent = "Network error loading reviews";
+          errEl.classList.remove("hidden");
+        }
+      }
+
+      async function moderateReview(id, status, btn) {
+        btn.disabled = true;
+        try {
+          const res = await fetch("/admin/reviews/" + id, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status }),
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          await loadAdminReviews();
+        } catch {
+          document.getElementById("admin-reviews-error").textContent =
+            "Could not update review";
+          document.getElementById("admin-reviews-error").classList.remove("hidden");
+          btn.disabled = false;
+        }
+      }
+
+      /* ═══════════ Message threads ═══════════ */
+
+      async function loadThreads() {
+        const list = document.getElementById("thread-list");
+        const emptyEl = document.getElementById("threads-empty");
+        const errEl = document.getElementById("threads-error");
+        errEl.classList.add("hidden");
+        try {
+          const res = await fetch("/admin/threads", {
+            credentials: "include",
+            cache: "no-store",
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            errEl.textContent = data.error || "Could not load messages";
+            errEl.classList.remove("hidden");
+            return;
+          }
+          threadsLoaded = true;
+          const threads = data.threads || [];
+          list.innerHTML = "";
+          emptyEl.classList.toggle("hidden", threads.length > 0);
+          for (const t of threads) {
+            const row = document.createElement("button");
+            row.type = "button";
+            row.className =
+              "w-full rounded-xl px-3 py-3 text-left transition " +
+              (selectedThreadId === t.id
+                ? "bg-amber-500/15 border border-amber-400/30"
+                : "hover:bg-white/5 border border-transparent");
+            const preview = (t.last_message_body || "").slice(0, 80);
+            const unread = Number(t.unread_count) || 0;
+            row.innerHTML =
+              '<div class="flex items-center justify-between gap-2">' +
+              '<p class="truncate text-sm font-medium text-cream">' +
+              escapeHtml(t.user_name || "Customer") +
+              "</p>" +
+              (unread
+                ? '<span class="rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] font-semibold text-amber-200">' +
+                  unread +
+                  "</span>"
+                : "") +
+              "</div>" +
+              '<p class="mt-1 truncate text-xs text-cream/45">' +
+              escapeHtml(preview) +
+              "</p>" +
+              '<p class="mt-1 text-[10px] text-cream/30">' +
+              escapeHtml(formatRelativeAge(t.updated_at)) +
+              " · " +
+              escapeHtml(t.status) +
+              "</p>";
+            row.addEventListener("click", () => openThread(t.id));
+            list.appendChild(row);
+          }
+        } catch {
+          errEl.textContent = "Network error loading messages";
+          errEl.classList.remove("hidden");
+        }
+      }
+
+      async function openThread(id) {
+        selectedThreadId = id;
+        const pane = document.getElementById("thread-pane");
+        const emptyPane = document.getElementById("thread-pane-empty");
+        const errEl = document.getElementById("thread-reply-error");
+        errEl.classList.add("hidden");
+        try {
+          const res = await fetch("/admin/threads/" + id, {
+            credentials: "include",
+            cache: "no-store",
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            errEl.textContent = data.error || "Could not open conversation";
+            errEl.classList.remove("hidden");
+            return;
+          }
+          emptyPane.classList.add("hidden");
+          pane.classList.remove("hidden");
+          const t = data.thread;
+          document.getElementById("thread-user-name").textContent =
+            t.user_name || "Customer";
+          document.getElementById("thread-user-email").textContent =
+            t.user_email || "";
+          const pill = document.getElementById("thread-status-pill");
+          pill.textContent = t.status;
+          pill.className =
+            t.status === "open" ? "status-pending" : "status-complete";
+          const toggleBtn = document.getElementById("thread-toggle-status");
+          toggleBtn.textContent = t.status === "open" ? "Close" : "Reopen";
+          toggleBtn.dataset.status = t.status;
+          const replyForm = document.getElementById("thread-reply-form");
+          replyForm.classList.toggle("hidden", t.status === "closed");
+
+          const box = document.getElementById("thread-messages");
+          box.innerHTML = "";
+          for (const m of data.messages || []) {
+            const bubble = document.createElement("div");
+            const fromAdmin = m.sender === "admin";
+            bubble.className =
+              "rounded-2xl px-3.5 py-2.5 text-sm " +
+              (fromAdmin
+                ? "ml-8 bg-amber-500/15 text-cream border border-amber-400/20"
+                : "mr-8 bg-white/5 text-cream/85 border border-white/10");
+            bubble.innerHTML =
+              '<p class="text-[10px] uppercase tracking-wider text-cream/40">' +
+              (fromAdmin ? "You" : "Customer") +
+              " · " +
+              escapeHtml(formatRelativeAge(m.created_at)) +
+              "</p>" +
+              '<p class="mt-1 whitespace-pre-wrap font-light leading-relaxed">' +
+              escapeHtml(m.body) +
+              "</p>";
+            box.appendChild(bubble);
+          }
+          box.scrollTop = box.scrollHeight;
+          loadThreads();
+        } catch {
+          errEl.textContent = "Network error opening conversation";
+          errEl.classList.remove("hidden");
+        }
+      }
+
+      document
+        .getElementById("thread-reply-form")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          if (!selectedThreadId) return;
+          const body = document.getElementById("thread-reply-body").value.trim();
+          const errEl = document.getElementById("thread-reply-error");
+          const btn = document.getElementById("thread-reply-btn");
+          errEl.classList.add("hidden");
+          if (!body) {
+            errEl.textContent = "Write a reply first.";
+            errEl.classList.remove("hidden");
+            return;
+          }
+          btn.disabled = true;
+          btn.textContent = "Sending…";
+          try {
+            const res = await fetch(
+              "/admin/threads/" + selectedThreadId + "/messages",
+              {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ body }),
+              }
+            );
+            if (res.status === 401) {
+              window.location.href = "/admin/login";
+              return;
+            }
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+              errEl.textContent = data.error || "Could not send reply";
+              errEl.classList.remove("hidden");
+              return;
+            }
+            document.getElementById("thread-reply-body").value = "";
+            await openThread(selectedThreadId);
+          } catch {
+            errEl.textContent = "Network error sending reply";
+            errEl.classList.remove("hidden");
+          } finally {
+            btn.disabled = false;
+            btn.textContent = "Send reply";
+          }
+        });
+
+      document
+        .getElementById("thread-toggle-status")
+        .addEventListener("click", async () => {
+          if (!selectedThreadId) return;
+          const current = document.getElementById("thread-toggle-status").dataset
+            .status;
+          const next = current === "open" ? "closed" : "open";
+          try {
+            const res = await fetch("/admin/threads/" + selectedThreadId, {
+              method: "PATCH",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status: next }),
+            });
+            if (res.status === 401) {
+              window.location.href = "/admin/login";
+              return;
+            }
+            await openThread(selectedThreadId);
+          } catch {
+            document.getElementById("thread-reply-error").textContent =
+              "Could not update status";
+            document
+              .getElementById("thread-reply-error")
+              .classList.remove("hidden");
+          }
+        });
+
 
       /* ═══════════ Newsletter posts ═══════════ */
 

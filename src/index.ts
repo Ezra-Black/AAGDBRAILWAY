@@ -196,6 +196,10 @@ app.get("/contact", (_req, res) => {
   res.sendFile(path.join(publicDir, "contact.html"));
 });
 
+app.get("/reviews", (_req, res) => {
+  res.sendFile(path.join(publicDir, "reviews.html"));
+});
+
 app.get("/shop", (_req, res) => {
   res.sendFile(path.join(publicDir, "shop.html"));
 });

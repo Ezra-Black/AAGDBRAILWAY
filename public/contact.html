@@ -53,6 +53,7 @@
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
           <a href="/shop" class="nav-link">Shop</a>
+          <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link active">Contact</a>
           <a href="/form" class="nav-cta">Request yours</a>
         </div>
@@ -75,6 +76,7 @@
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
           <a href="/shop" class="nav-link">Shop</a>
+          <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link active">Contact</a>
           <a href="/form" class="nav-cta justify-center">Request yours</a>
         </div>
@@ -90,7 +92,8 @@
         </h1>
         <p class="mx-auto mt-6 max-w-2xl text-base font-light leading-relaxed text-cream/60 sm:text-lg">
           A question about your request, an idea for a new graphic style, or
-          just a hello — drop it below and we’ll get back to you.
+          just a hello — drop it below. You’ll need a free account so our reply
+          can land in your profile inbox.
         </p>
       </section>
 
@@ -104,9 +107,11 @@
                 <path d="M3.5 7l8.5 6 8.5-6" />
               </svg>
             </div>
-            <h2 class="mt-4 text-base font-semibold text-cream">Replies by email</h2>
+            <h2 class="mt-4 text-base font-semibold text-cream">Replies in your inbox</h2>
             <p class="mt-1.5 text-sm font-light leading-relaxed text-cream/55">
-              We answer every message personally, usually within a couple of days.
+              Sign in to send a message — our reply shows up in your
+              <a href="/profile#inbox" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">profile inbox</a>
+              so you can keep the conversation going.
             </p>
           </div>
           <div class="reveal glass-card p-6" style="--reveal-delay:0.15s">
@@ -232,7 +237,9 @@
             <a href="/about" class="footer-link" style="font-size:11px">About</a>
             <a href="/newsletter" class="footer-link" style="font-size:11px">Newsletter</a>
             <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
+            <a href="/reviews" class="footer-link" style="font-size:11px">Reviews</a>
             <a href="/form" class="footer-link" style="font-size:11px">Request form</a>
+            <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
             <a href="/admin/login" class="footer-link" style="font-size:11px">Admin</a>
           </div>
           <p>
@@ -273,8 +280,26 @@
         e.preventDefault();
         statusEl.hidden = true;
 
-        const name = document.getElementById("contact_name").value.trim();
-        const email = document.getElementById("contact_email").value.trim();
+        let user;
+        try {
+          user = await AAGAuth.requireAuth({
+            title: "Sign in to send a message",
+            message: "Create a free account so our reply can reach your inbox.",
+          });
+        } catch {
+          showStatus("Please sign in or create an account to send a message.", false);
+          return;
+        }
+
+        const nameInput = document.getElementById("contact_name");
+        const emailInput = document.getElementById("contact_email");
+        if (user) {
+          if (!nameInput.value.trim()) nameInput.value = user.name || "";
+          if (!emailInput.value.trim()) emailInput.value = user.email || "";
+        }
+
+        const name = nameInput.value.trim();
+        const email = emailInput.value.trim();
         const message = messageInput.value.trim();
 
         if (!name) {
@@ -297,6 +322,7 @@
           const website = document.getElementById("website").value;
           const res = await fetch("/contact", {
             method: "POST",
+            credentials: "same-origin",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name, email, message, website }),
           });
@@ -313,7 +339,8 @@
           contactForm.reset();
           charCount.textContent = "0";
           showStatus(
-            data.message || "Message sent! We’ll get back to you soon.",
+            data.message ||
+              "Message sent! You’ll see our reply in your profile inbox.",
             true
           );
         } catch {
@@ -323,6 +350,16 @@
           contactBtn.textContent = "Send message";
         }
       });
+
+      (async () => {
+        await AAGAuth.ready;
+        const user = AAGAuth.getUser();
+        if (!user) return;
+        const nameInput = document.getElementById("contact_name");
+        const emailInput = document.getElementById("contact_email");
+        if (!nameInput.value) nameInput.value = user.name || "";
+        if (!emailInput.value) emailInput.value = user.email || "";
+      })();
     </script>
   </body>
 </html>

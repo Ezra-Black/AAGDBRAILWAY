@@ -484,3 +484,112 @@ body {
   border: 0;
   background: linear-gradient(90deg, transparent, rgba(240, 196, 92, 0.35), transparent);
 }
+
+/* ── Review modal ─────────────────────────────────────────── */
+.review-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(6, 5, 4, 0.72);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease;
+}
+
+.review-modal-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.review-modal {
+  position: relative;
+  width: min(100%, 28rem);
+  max-height: min(90vh, 40rem);
+  overflow-y: auto;
+  border-radius: 1.75rem;
+  padding: 1.75rem 1.5rem 1.5rem;
+  transform: translateY(12px);
+  transition: transform 0.28s ease;
+}
+
+.review-modal-backdrop.open .review-modal {
+  transform: translateY(0);
+}
+
+.review-modal-close {
+  position: absolute;
+  top: 0.85rem;
+  right: 1rem;
+  border: 0;
+  background: none;
+  color: rgba(255, 246, 228, 0.55);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.review-modal-close:hover {
+  color: var(--cream);
+}
+
+.review-stars {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.review-star {
+  border: 0;
+  background: none;
+  color: rgba(255, 246, 228, 0.22);
+  font-size: 1.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+  padding: 0.1rem;
+}
+
+.review-star:hover,
+.review-star.active {
+  color: var(--gold);
+}
+
+.review-star:hover {
+  transform: scale(1.08);
+}
+
+/* ── Public review cards ──────────────────────────────────── */
+.review-card {
+  border-radius: 1.5rem;
+  padding: 1.5rem 1.4rem;
+  background: rgba(255, 246, 228, 0.03);
+  border: 1px solid rgba(255, 246, 228, 0.08);
+}
+
+.review-card-stars {
+  color: var(--gold);
+  letter-spacing: 0.08em;
+  font-size: 1rem;
+}
+
+.review-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  object-fit: cover;
+  border: 1px solid rgba(240, 196, 92, 0.4);
+  background: rgba(240, 196, 92, 0.12);
+}
+
+.review-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--gold);
+}

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>What our subscribers think — Audrey’s Angel Graphics</title>
+    <meta
+      name="description"
+      content="Read what families say about their Audrey’s Angel Graphics experience — and leave a review of your own."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              dusk: "#0a0806",
+              honey: "#f0c45c",
+              cream: "#fff6e4",
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/site.css" />
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7362424039626637"
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <div class="orb" style="width:300px;height:300px;background:#f0c45c;top:10%;left:6%;opacity:0.14"></div>
+    <div class="orb" style="width:320px;height:320px;background:#e8a838;bottom:10%;right:5%;opacity:0.1;animation-delay:1.3s"></div>
+
+    <header class="fixed inset-x-0 top-0 z-40 px-4 pt-4">
+      <nav class="glass-nav mx-auto flex max-w-5xl items-center justify-between rounded-full px-5 py-3">
+        <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-wide" style="color:var(--cream);text-decoration:none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" fill="#f0c45c" />
+          </svg>
+          Audrey’s Angel Graphics
+        </a>
+        <div class="hidden items-center gap-7 text-sm sm:flex">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/newsletter" class="nav-link">Newsletter</a>
+          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/reviews" class="nav-link active">Reviews</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta">Request yours</a>
+        </div>
+        <button
+          id="menu-toggle"
+          type="button"
+          class="sm:hidden"
+          aria-label="Open menu"
+          aria-expanded="false"
+          style="background:none;border:0;color:var(--cream);cursor:pointer;padding:0.25rem"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+      </nav>
+      <div id="mobile-menu" class="mobile-menu glass-nav mx-auto mt-2 max-w-5xl rounded-3xl p-5 sm:hidden">
+        <div class="flex flex-col gap-4 text-sm">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/newsletter" class="nav-link">Newsletter</a>
+          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/reviews" class="nav-link active">Reviews</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta justify-center">Request yours</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="relative z-10 mx-auto max-w-4xl px-5 pb-20 pt-36 sm:pt-44">
+      <section class="reveal text-center">
+        <p class="eyebrow">Reviews</p>
+        <h1 class="headline mt-5 text-4xl font-bold text-cream sm:text-6xl">
+          What our subscribers <span class="gold-text">think</span>
+        </h1>
+        <p class="mx-auto mt-6 max-w-2xl text-base font-light leading-relaxed text-cream/60 sm:text-lg">
+          Real notes from families who requested a graphic or picked something
+          up from the archive. If we’ve made one for you, we’d love to hear how
+          it felt.
+        </p>
+        <button type="button" id="leave-review-btn" class="btn-primary mt-8">
+          Leave a review
+        </button>
+      </section>
+
+      <section class="mt-16">
+        <div id="reviews-empty" class="reveal glass-panel rounded-[1.75rem] px-6 py-14 text-center" hidden>
+          <p class="text-base font-light text-cream/55">
+            No reviews are live yet — be the first to share yours.
+          </p>
+        </div>
+        <div id="reviews-list" class="grid gap-4 sm:grid-cols-2"></div>
+      </section>
+    </main>
+
+    <div class="relative z-10 mx-auto max-w-5xl px-5 py-8">
+      <ins
+        class="adsbygoogle"
+        style="display: block"
+        data-ad-client="ca-pub-7362424039626637"
+        data-ad-slot="1156003258"
+        data-ad-format="auto"
+        data-full-width-responsive="true"
+      ></ins>
+      <script>
+        (adsbygoogle = window.adsbygoogle || []).push({});
+      </script>
+    </div>
+
+    <footer class="relative z-10 mt-8 px-5 pb-10">
+      <div class="mx-auto max-w-5xl">
+        <hr class="divider-glow" />
+        <div class="mt-8 flex flex-wrap items-center justify-between gap-3 text-[11px] text-cream/30">
+          <p>© <span id="year"></span> Audrey’s Angel Graphics</p>
+          <div class="flex items-center gap-4">
+            <a href="/" class="footer-link" style="font-size:11px">Home</a>
+            <a href="/about" class="footer-link" style="font-size:11px">About</a>
+            <a href="/newsletter" class="footer-link" style="font-size:11px">Newsletter</a>
+            <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
+            <a href="/reviews" class="footer-link" style="font-size:11px">Reviews</a>
+            <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
+            <a href="/admin/login" class="footer-link" style="font-size:11px">Admin</a>
+          </div>
+          <p>
+            built by
+            <a href="https://buymeacoffee.com/ezrablack" target="_blank" rel="noopener noreferrer" class="underline decoration-honey/30 underline-offset-2 hover:text-cream/50">ezra black</a>
+          </p>
+        </div>
+      </div>
+    </footer>
+
+    <script src="/assets/site.js"></script>
+    <script src="/assets/auth.js"></script>
+    <script src="/assets/reviews.js"></script>
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      document.getElementById("leave-review-btn").addEventListener("click", () => {
+        window.AAGReviews.open({ source: "reviews_page" });
+      });
+
+      function starsHtml(n) {
+        const filled = "★".repeat(Math.max(0, Math.min(5, n)));
+        const empty = "☆".repeat(5 - filled.length);
+        return filled + empty;
+      }
+
+      function escapeHtml(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function avatarHtml(review) {
+        const name = review.display_name || "Anonymous";
+        if (review.profile_photo_url) {
+          return (
+            '<img class="review-avatar" src="' +
+            escapeHtml(review.profile_photo_url) +
+            '" alt="" width="40" height="40" />'
+          );
+        }
+        const initial = (name.trim().charAt(0) || "?").toUpperCase();
+        return (
+          '<div class="review-avatar review-avatar-fallback" aria-hidden="true">' +
+          escapeHtml(initial) +
+          "</div>"
+        );
+      }
+
+      async function loadReviews() {
+        const list = document.getElementById("reviews-list");
+        const empty = document.getElementById("reviews-empty");
+        try {
+          const res = await fetch("/api/reviews");
+          const data = await res.json();
+          const reviews = (data && data.reviews) || [];
+          if (!reviews.length) {
+            empty.hidden = false;
+            return;
+          }
+          empty.hidden = true;
+          list.innerHTML = reviews
+            .map(
+              (r) =>
+                '<article class="review-card reveal">' +
+                '<div class="flex items-center gap-3">' +
+                avatarHtml(r) +
+                "<div>" +
+                '<p class="text-sm font-medium text-cream">' +
+                escapeHtml(r.display_name) +
+                "</p>" +
+                '<p class="review-card-stars" aria-label="' +
+                r.rating +
+                ' out of 5 stars">' +
+                starsHtml(r.rating) +
+                "</p>" +
+                "</div></div>" +
+                '<p class="mt-4 text-[15px] font-light leading-relaxed text-cream/70">' +
+                escapeHtml(r.body) +
+                "</p>" +
+                "</article>"
+            )
+            .join("");
+        } catch {
+          empty.hidden = false;
+          empty.querySelector("p").textContent =
+            "Couldn’t load reviews right now. Refresh in a moment.";
+        }
+      }
+
+      loadReviews();
+    </script>
+  </body>
+</html>

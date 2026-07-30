@@ -114,6 +114,7 @@
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
           <a href="/shop" class="nav-link">Shop</a>
+          <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta">Request yours</a>
         </div>
@@ -136,6 +137,7 @@
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
           <a href="/shop" class="nav-link">Shop</a>
+          <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta justify-center">Request yours</a>
         </div>
@@ -249,6 +251,15 @@
         ></div>
       </form>
 
+      <div id="review-prompt" class="reveal mt-6 text-center" style="--reveal-delay:0.2s" hidden>
+        <button type="button" id="leave-review-btn" class="btn-primary">
+          Leave a review
+        </button>
+        <p class="mt-3 text-xs font-light text-cream/40">
+          Optional — a short note helps other families. We’ll read it before it goes live.
+        </p>
+      </div>
+
       <p class="reveal mt-8 text-center text-xs text-cream/40" style="--reveal-delay:0.2s">
         Requests land as pending and are handled personally, in order.
       </p>
@@ -280,6 +291,7 @@
             <a href="/about" class="footer-link" style="font-size:11px">About</a>
             <a href="/newsletter" class="footer-link" style="font-size:11px">Newsletter</a>
             <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
+            <a href="/reviews" class="footer-link" style="font-size:11px">Reviews</a>
             <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
             <a href="/admin/login" class="footer-link" style="font-size:11px">Admin</a>
           </div>
@@ -293,8 +305,12 @@
 
     <script src="/assets/site.js"></script>
     <script src="/assets/auth.js"></script>
+    <script src="/assets/reviews.js"></script>
     <script>
       document.getElementById("year").textContent = new Date().getFullYear();
+      document.getElementById("leave-review-btn")?.addEventListener("click", () => {
+        window.AAGReviews.open({ source: "form" });
+      });
 
       const form = document.getElementById("submit-form");
       const btn = document.getElementById("submit-btn");
@@ -597,6 +613,8 @@
           customerPhotoName.classList.add("hidden");
           await loadGraphics({ keepMessage: true });
           showMessage(successText, true);
+          const reviewPrompt = document.getElementById("review-prompt");
+          if (reviewPrompt) reviewPrompt.hidden = false;
         } catch {
           showMessage("Network glitch. Try again in a sec.", false);
         } finally {

@@ -402,3 +402,71 @@ export const newsletterReactionSchema = z
     }),
   })
   .strict();
+
+const reviewBodyField = z
+  .string()
+  .transform(sanitizeText)
+  .pipe(
+    z
+      .string()
+      .min(20, "Please write at least a short sentence (20 characters)")
+      .max(500, "Keep it under 500 characters")
+  );
+
+/** POST /api/reviews — logged-in customer review (pending moderation). */
+export const createReviewSchema = z
+  .object({
+    rating: z.coerce
+      .number()
+      .int("Pick a whole-star rating")
+      .min(1, "Rating must be 1–5")
+      .max(5, "Rating must be 1–5"),
+    body: reviewBodyField,
+    display_name: z
+      .string()
+      .transform(sanitizeText)
+      .pipe(z.string().max(80, "Name is too long"))
+      .optional()
+      .default(""),
+    is_anonymous: z.boolean().optional().default(false),
+    source: z.enum(["shop", "form", "reviews_page"]).optional().default("reviews_page"),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (!data.is_anonymous && !data.display_name.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter a display name, or choose anonymous",
+        path: ["display_name"],
+      });
+    }
+  });
+
+/** PATCH /admin/reviews/:id — approve or reject. */
+export const moderateReviewSchema = z
+  .object({
+    status: z.enum(["approved", "rejected"]),
+  })
+  .strict();
+
+/** POST /admin/threads/:id/messages and user inbox reply. */
+export const threadReplySchema = z
+  .object({
+    body: z
+      .string()
+      .transform(sanitizeText)
+      .pipe(
+        z
+          .string()
+          .min(1, "Please write a message")
+          .max(2000, "Message is too long (2000 characters max)")
+      ),
+  })
+  .strict();
+
+/** PATCH /admin/threads/:id — open/close. */
+export const threadStatusSchema = z
+  .object({
+    status: z.enum(["open", "closed"]),
+  })
+  .strict();

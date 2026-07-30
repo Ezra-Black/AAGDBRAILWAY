@@ -238,6 +238,51 @@ export async function sendPipelineFailureEmail(input: {
 }
 
 /**
+ * Notify a user that Audrey replied in their profile inbox.
+ */
+export async function sendInboxReplyEmail(input: {
+  to: string;
+  name: string;
+  inboxUrl: string;
+  preview: string;
+}): Promise<boolean> {
+  if (!mailerConfigured()) {
+    logger.warn(
+      "SMTP not configured — inbox reply email not sent. Set SMTP_HOST/SMTP_USER/SMTP_PASS."
+    );
+    return false;
+  }
+
+  const first = input.name.trim().split(/\s+/)[0] || "there";
+  const preview =
+    input.preview.length > 200
+      ? `${input.preview.slice(0, 200)}…`
+      : input.preview;
+
+  try {
+    await sendMailWithTimeout({
+      from: fromAddress(),
+      to: input.to,
+      subject: "New reply from Audrey’s Angel Graphics",
+      text:
+        `Hi ${first},\n\n` +
+        `You’ve got a new reply in your Audrey’s Angel Graphics inbox.\n\n` +
+        `Preview:\n${preview}\n\n` +
+        `Open your inbox to read and reply:\n${input.inboxUrl}\n\n` +
+        `With love,\n` +
+        `Audrey\n`,
+    });
+    return true;
+  } catch (err) {
+    logger.error("Failed to send inbox reply email", {
+      error: String(err),
+      to: input.to,
+    });
+    return false;
+  }
+}
+
+/**
  * Forward a contact-page message to the studio inbox (ProtonMail).
  * Returns true when the email was handed to the SMTP server. The message is
  * always stored in Postgres first, so a mail failure never loses it.

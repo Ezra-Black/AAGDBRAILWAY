@@ -94,6 +94,7 @@
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
           <a href="/shop" class="nav-link">Shop</a>
+          <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta">Request yours</a>
         </div>
@@ -116,6 +117,7 @@
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
           <a href="/shop" class="nav-link">Shop</a>
+          <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta justify-center">Request yours</a>
         </div>
@@ -209,6 +211,46 @@
           </form>
         </section>
 
+        <!-- Inbox -->
+        <section id="inbox" class="glass-panel mt-6 rounded-[2rem] p-6 sm:p-8">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="headline text-xl font-semibold text-cream">Inbox</h2>
+              <p class="mt-2 text-sm font-light text-cream/55">
+                Messages with Audrey’s Angel Graphics — start one from
+                <a href="/contact" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">Contact</a>.
+              </p>
+            </div>
+            <span id="inbox-unread" class="hidden rounded-full bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-semibold text-amber-200"></span>
+          </div>
+
+          <div id="inbox-list" class="mt-5 space-y-2"></div>
+          <p id="inbox-empty" class="mt-4 hidden text-sm text-cream/40">
+            No messages yet.
+          </p>
+
+          <div id="inbox-thread" class="mt-6 hidden border-t border-white/10 pt-5">
+            <button type="button" id="inbox-back" class="text-xs text-cream/50 hover:text-cream">
+              ← Back to inbox
+            </button>
+            <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p id="inbox-thread-subject" class="text-sm font-medium text-cream"></p>
+              <span id="inbox-thread-status" class="status-pill status-pending">open</span>
+            </div>
+            <div id="inbox-messages" class="mt-4 max-h-80 space-y-3 overflow-y-auto"></div>
+            <form id="inbox-reply-form" class="mt-4 space-y-3">
+              <div class="field">
+                <label for="inbox-reply-body">Your reply</label>
+                <textarea id="inbox-reply-body" rows="3" maxlength="2000" placeholder="Write a reply…"></textarea>
+              </div>
+              <button type="submit" id="inbox-reply-btn" class="btn-primary" style="padding:0.55rem 1.3rem;font-size:0.8125rem">
+                Send reply
+              </button>
+              <p id="inbox-reply-note" role="status" aria-live="polite" class="min-h-[1.1rem] text-xs text-cream/50"></p>
+            </form>
+          </div>
+        </section>
+
         <!-- Activity -->
         <section class="glass-panel mt-6 rounded-[2rem] p-6 sm:p-8">
           <h2 class="headline text-xl font-semibold text-cream">Your activity</h2>
@@ -250,6 +292,7 @@
             <a href="/about" class="footer-link" style="font-size:11px">About</a>
             <a href="/newsletter" class="footer-link" style="font-size:11px">Newsletter</a>
             <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
+            <a href="/reviews" class="footer-link" style="font-size:11px">Reviews</a>
             <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
           </div>
           <p>
@@ -316,6 +359,190 @@
         document.getElementById("pf-email").value = user.email || "";
         renderAvatar(user);
       }
+
+      /* ── Inbox ─────────────────────────────────────────── */
+      let inboxThreadId = null;
+
+      function fmtShort(value) {
+        try {
+          return new Date(value).toLocaleString(undefined, {
+            month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+          });
+        } catch { return "—"; }
+      }
+
+      async function loadInbox() {
+        const list = document.getElementById("inbox-list");
+        const empty = document.getElementById("inbox-empty");
+        const unreadBadge = document.getElementById("inbox-unread");
+        try {
+          const res = await fetch("/api/auth/inbox", {
+            credentials: "same-origin",
+            cache: "no-store",
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) throw new Error();
+          const threads = data.threads || [];
+          const unreadTotal = threads.reduce(
+            (n, t) => n + (Number(t.unread_count) || 0),
+            0
+          );
+          if (unreadTotal > 0) {
+            unreadBadge.hidden = false;
+            unreadBadge.classList.remove("hidden");
+            unreadBadge.textContent =
+              unreadTotal + " unread";
+          } else {
+            unreadBadge.classList.add("hidden");
+          }
+
+          if (!threads.length) {
+            list.innerHTML = "";
+            empty.classList.remove("hidden");
+            return;
+          }
+          empty.classList.add("hidden");
+          list.innerHTML = threads
+            .map((t) => {
+              const preview = (t.last_message_body || "").slice(0, 90);
+              const unread = Number(t.unread_count) || 0;
+              return (
+                '<button type="button" class="activity-row w-full text-left hover:bg-white/[0.03] rounded-xl px-2 -mx-2" data-thread="' +
+                esc(t.id) +
+                '">' +
+                "<div>" +
+                '<p class="font-medium text-cream">' +
+                esc(t.subject || "Contact message") +
+                (unread
+                  ? ' <span class="text-amber-300">· ' + unread + " new</span>"
+                  : "") +
+                "</p>" +
+                '<p class="text-xs text-cream/40">' +
+                esc(preview) +
+                " · " +
+                fmtShort(t.updated_at) +
+                "</p>" +
+                "</div>" +
+                '<span class="status-pill status-' +
+                (t.status === "open" ? "pending" : "processed") +
+                '">' +
+                esc(t.status) +
+                "</span>" +
+                "</button>"
+              );
+            })
+            .join("");
+          list.querySelectorAll("[data-thread]").forEach((btn) => {
+            btn.addEventListener("click", () =>
+              openInboxThread(btn.getAttribute("data-thread"))
+            );
+          });
+        } catch {
+          list.innerHTML =
+            '<p class="py-3 text-rose-300/80">Couldn’t load your inbox. Refresh to try again.</p>';
+          empty.classList.add("hidden");
+        }
+      }
+
+      async function openInboxThread(id) {
+        inboxThreadId = id;
+        const noteEl = document.getElementById("inbox-reply-note");
+        noteEl.textContent = "";
+        try {
+          const res = await fetch("/api/auth/inbox/" + id, {
+            credentials: "same-origin",
+            cache: "no-store",
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            note("inbox-reply-note", detailText(data, "Couldn’t open this conversation."));
+            return;
+          }
+          document.getElementById("inbox-list").classList.add("hidden");
+          document.getElementById("inbox-empty").classList.add("hidden");
+          document.getElementById("inbox-thread").classList.remove("hidden");
+          document.getElementById("inbox-thread-subject").textContent =
+            data.thread.subject || "Contact message";
+          const statusEl = document.getElementById("inbox-thread-status");
+          statusEl.textContent = data.thread.status;
+          statusEl.className =
+            "status-pill status-" +
+            (data.thread.status === "open" ? "pending" : "processed");
+
+          const box = document.getElementById("inbox-messages");
+          box.innerHTML = (data.messages || [])
+            .map((m) => {
+              const fromUs = m.sender === "user";
+              return (
+                '<div class="rounded-2xl px-3.5 py-2.5 text-sm ' +
+                (fromUs
+                  ? "ml-6 bg-amber-500/15 border border-amber-400/20"
+                  : "mr-6 bg-white/5 border border-white/10") +
+                '">' +
+                '<p class="text-[10px] uppercase tracking-wider text-cream/40">' +
+                (fromUs ? "You" : "Audrey’s Angel Graphics") +
+                " · " +
+                fmtShort(m.created_at) +
+                "</p>" +
+                '<p class="mt-1 whitespace-pre-wrap font-light leading-relaxed text-cream/80">' +
+                esc(m.body) +
+                "</p></div>"
+              );
+            })
+            .join("");
+          box.scrollTop = box.scrollHeight;
+
+          const replyForm = document.getElementById("inbox-reply-form");
+          replyForm.classList.toggle("hidden", data.thread.status === "closed");
+          loadInbox();
+        } catch {
+          note("inbox-reply-note", "Network glitch — try again.");
+        }
+      }
+
+      document.getElementById("inbox-back").addEventListener("click", () => {
+        inboxThreadId = null;
+        document.getElementById("inbox-thread").classList.add("hidden");
+        document.getElementById("inbox-list").classList.remove("hidden");
+        loadInbox();
+      });
+
+      document.getElementById("inbox-reply-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!inboxThreadId) return;
+        const body = document.getElementById("inbox-reply-body").value.trim();
+        if (!body) {
+          note("inbox-reply-note", "Write a reply first.");
+          return;
+        }
+        const btn = document.getElementById("inbox-reply-btn");
+        btn.disabled = true;
+        btn.textContent = "Sending…";
+        try {
+          const res = await fetch(
+            "/api/auth/inbox/" + inboxThreadId + "/messages",
+            {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ body }),
+            }
+          );
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            note("inbox-reply-note", detailText(data, "Couldn’t send reply."));
+            return;
+          }
+          document.getElementById("inbox-reply-body").value = "";
+          note("inbox-reply-note", "Reply sent.", true);
+          await openInboxThread(inboxThreadId);
+        } catch {
+          note("inbox-reply-note", "Network glitch — try again.");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Send reply";
+        }
+      });
 
       /* ── Activity feed ─────────────────────────────────── */
       function statusPill(status) {
@@ -494,7 +721,11 @@
           });
           renderUser(user);
           portal.classList.remove("hidden");
+          loadInbox();
           loadActivity();
+          if (location.hash === "#inbox") {
+            document.getElementById("inbox").scrollIntoView({ behavior: "smooth" });
+          }
         } catch {
           signedOut.classList.remove("hidden");
         }

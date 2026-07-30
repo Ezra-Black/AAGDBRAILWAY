@@ -352,6 +352,63 @@ export async function migrate(): Promise<void> {
       WHERE user_id IS NOT NULL;
   `);
 
+  // Customer reviews (moderated) + contact conversation inbox.
+  await query(`
+    CREATE TABLE IF NOT EXISTS reviews (
+      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      rating         SMALLINT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+      body           TEXT NOT NULL,
+      display_name   TEXT NOT NULL,
+      is_anonymous   BOOLEAN NOT NULL DEFAULT false,
+      source         TEXT NOT NULL
+                     CHECK (source IN ('shop', 'form', 'reviews_page')),
+      status         TEXT NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending', 'approved', 'rejected')),
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      moderated_at   TIMESTAMPTZ,
+      moderated_by   UUID REFERENCES admins(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_reviews_status_created
+      ON reviews (status, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_reviews_user
+      ON reviews (user_id);
+
+    CREATE TABLE IF NOT EXISTS message_threads (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      subject     TEXT NOT NULL DEFAULT 'Contact message',
+      status      TEXT NOT NULL DEFAULT 'open'
+                  CHECK (status IN ('open', 'closed')),
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_message_threads_user
+      ON message_threads (user_id, updated_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_message_threads_updated
+      ON message_threads (updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS thread_messages (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      thread_id   UUID NOT NULL REFERENCES message_threads(id) ON DELETE CASCADE,
+      sender      TEXT NOT NULL CHECK (sender IN ('user', 'admin')),
+      body        TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      read_at     TIMESTAMPTZ
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_thread_messages_thread
+      ON thread_messages (thread_id, created_at ASC);
+
+    CREATE INDEX IF NOT EXISTS idx_thread_messages_unread
+      ON thread_messages (thread_id, sender)
+      WHERE read_at IS NULL;
+  `);
+
   // Keep the archive in sync: any option currently offered (or offered at any
   // boot since this feature shipped) is recorded forever.
   await query(`

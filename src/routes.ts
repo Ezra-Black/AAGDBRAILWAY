@@ -98,6 +98,21 @@ import {
   setPurchaseStatus,
 } from "./db/shop";
 import {
+  createReview,
+  listApprovedReviews,
+  listReviewsForAdmin,
+  setReviewStatus,
+} from "./db/reviews";
+import {
+  addMessageToThread,
+  createThreadWithMessage,
+  getThreadById,
+  listMessagesForThread,
+  listThreadsForAdmin,
+  markThreadRead,
+  setThreadStatus,
+} from "./db/messages";
+import {
   getStripe,
   SHOP_CURRENCY,
   SHOP_PRODUCT_NAME,
@@ -116,7 +131,7 @@ import {
   facebookConfigured,
   verifyFacebookToken,
 } from "./facebook";
-import { sendContactEmail } from "./email";
+import { sendContactEmail, sendInboxReplyEmail } from "./email";
 import { isAiWorkerEnabled, setAiWorkerEnabled } from "./db/settings";
 import {
   adminGraphicCreateSchema,
@@ -126,8 +141,10 @@ import {
   adminJoinSchema,
   adminLoginSchema,
   contactSchema,
+  createReviewSchema,
   facebookAuthSchema,
   lookupQuerySchema,
+  moderateReviewSchema,
   newsletterPostSchema,
   newsletterReactionSchema,
   newsletterSubscribeSchema,
@@ -137,6 +154,8 @@ import {
   shopConfirmSchema,
   statusSchema,
   submitSchema,
+  threadReplySchema,
+  threadStatusSchema,
   uuidSchema,
 } from "./validation";
 
@@ -1280,12 +1299,21 @@ apiRouter.delete(
   })
 );
 
-/** POST /contact — message from the contact page. */
+/** POST /contact — start a conversation (requires login). */
 apiRouter.post(
   "/contact",
   contactLimiter,
   rejectHoneypot,
-  asyncHandler(async (req, res) => {
+  attachUserIfPresent,
+  asyncHandler(async (req: UserRequest, res) => {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: "Please sign in or create an account to send a message.",
+      });
+      return;
+    }
+
     const parsed = contactSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
@@ -1296,18 +1324,280 @@ apiRouter.post(
       return;
     }
 
-    const saved = await createContactMessage(parsed.data);
+    const { thread } = await createThreadWithMessage({
+      user_id: req.user.id,
+      subject: "Contact message",
+      body: parsed.data.message,
+    });
 
-    // Forward to the studio ProtonMail inbox. The message is already stored,
-    // so an SMTP hiccup never loses it.
-    const emailed = await sendContactEmail(parsed.data);
-    logger.info("Contact message received", { id: saved.id, emailed });
+    // Keep a legacy row + email ping so ProtonMail still gets notified.
+    await createContactMessage({
+      name: parsed.data.name || req.user.name,
+      email: parsed.data.email || req.user.email,
+      message: parsed.data.message,
+    });
+    const emailed = await sendContactEmail({
+      name: parsed.data.name || req.user.name,
+      email: parsed.data.email || req.user.email,
+      message: parsed.data.message,
+    });
+    logger.info("Contact thread started", {
+      thread_id: thread.id,
+      user_id: req.user.id,
+      emailed,
+    });
 
     res.status(201).json({
       success: true,
+      thread_id: thread.id,
       message:
-        "Message sent! Thanks for reaching out — we’ll get back to you soon.",
+        "Message sent! You’ll see our reply in your profile inbox.",
     });
+  })
+);
+
+/* ═══════════ Reviews ═══════════ */
+
+/** GET /api/reviews — approved reviews for the public page. */
+apiRouter.get(
+  "/api/reviews",
+  readLimiter,
+  asyncHandler(async (_req, res) => {
+    const reviews = await listApprovedReviews(100);
+    res.json({ success: true, reviews });
+  })
+);
+
+/** POST /api/reviews — submit a review (pending moderation). */
+apiRouter.post(
+  "/api/reviews",
+  requireUser,
+  contactLimiter,
+  asyncHandler(async (req: UserRequest, res) => {
+    const parsed = createReviewSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const isAnonymous = parsed.data.is_anonymous === true;
+    const displayName = isAnonymous
+      ? "Anonymous"
+      : parsed.data.display_name.trim() || req.user!.name;
+
+    const review = await createReview({
+      user_id: req.user!.id,
+      rating: parsed.data.rating,
+      body: parsed.data.body,
+      display_name: displayName,
+      is_anonymous: isAnonymous,
+      source: parsed.data.source,
+    });
+
+    logger.info("Review submitted", {
+      review_id: review.id,
+      user_id: req.user!.id,
+      rating: review.rating,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Thanks — we’ll review it shortly before it goes live.",
+      review: {
+        id: review.id,
+        status: review.status,
+      },
+    });
+  })
+);
+
+/** GET /admin/reviews — moderation queue. */
+apiRouter.get(
+  "/admin/reviews",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const statusRaw = String(req.query.status || "").trim();
+    const status =
+      statusRaw === "pending" ||
+      statusRaw === "approved" ||
+      statusRaw === "rejected"
+        ? statusRaw
+        : undefined;
+    const reviews = await listReviewsForAdmin({ status });
+    res.json({ success: true, count: reviews.length, reviews });
+  })
+);
+
+/** PATCH /admin/reviews/:id — approve or reject. */
+apiRouter.patch(
+  "/admin/reviews/:id",
+  requireAdmin,
+  asyncHandler(async (req: AdminRequest, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid review id" });
+      return;
+    }
+    const parsed = moderateReviewSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const updated = await setReviewStatus({
+      id: idCheck.data,
+      status: parsed.data.status,
+      admin_id: req.admin!.id,
+    });
+    if (!updated) {
+      res.status(404).json({ success: false, error: "Review not found" });
+      return;
+    }
+
+    logger.info("Review moderated", {
+      review_id: updated.id,
+      status: updated.status,
+      admin_id: req.admin!.id,
+    });
+    res.json({ success: true, review: updated });
+  })
+);
+
+/* ═══════════ Message threads (admin) ═══════════ */
+
+/** GET /admin/threads — conversation list. */
+apiRouter.get(
+  "/admin/threads",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const threads = await listThreadsForAdmin(200);
+    res.json({ success: true, count: threads.length, threads });
+  })
+);
+
+/** GET /admin/threads/:id — full thread + mark user messages read. */
+apiRouter.get(
+  "/admin/threads/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid thread id" });
+      return;
+    }
+    const thread = await getThreadById(idCheck.data);
+    if (!thread) {
+      res.status(404).json({ success: false, error: "Thread not found" });
+      return;
+    }
+    await markThreadRead({ thread_id: thread.id, sender: "user" });
+    const messages = await listMessagesForThread(thread.id);
+    res.json({ success: true, thread, messages });
+  })
+);
+
+/** POST /admin/threads/:id/messages — admin reply. */
+apiRouter.post(
+  "/admin/threads/:id/messages",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid thread id" });
+      return;
+    }
+    const parsed = threadReplySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const thread = await getThreadById(idCheck.data);
+    if (!thread) {
+      res.status(404).json({ success: false, error: "Thread not found" });
+      return;
+    }
+    if (thread.status === "closed") {
+      res.status(400).json({
+        success: false,
+        error: "This conversation is closed.",
+      });
+      return;
+    }
+
+    const message = await addMessageToThread({
+      thread_id: thread.id,
+      sender: "admin",
+      body: parsed.data.body,
+    });
+    if (!message) {
+      res.status(400).json({ success: false, error: "Could not send reply" });
+      return;
+    }
+
+    const configured = process.env.PUBLIC_BASE_URL?.trim();
+    const base = configured
+      ? configured.replace(/\/+$/, "")
+      : `${req.protocol}://${req.get("host")}`;
+    const inboxUrl = `${base}/profile#inbox`;
+    if (thread.user_email) {
+      await sendInboxReplyEmail({
+        to: thread.user_email,
+        name: thread.user_name || "there",
+        inboxUrl,
+        preview: parsed.data.body,
+      });
+    }
+
+    logger.info("Admin replied to thread", {
+      thread_id: thread.id,
+      message_id: message.id,
+    });
+    res.status(201).json({ success: true, message });
+  })
+);
+
+/** PATCH /admin/threads/:id — open/close. */
+apiRouter.patch(
+  "/admin/threads/:id",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid thread id" });
+      return;
+    }
+    const parsed = threadStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const updated = await setThreadStatus({
+      id: idCheck.data,
+      status: parsed.data.status,
+    });
+    if (!updated) {
+      res.status(404).json({ success: false, error: "Thread not found" });
+      return;
+    }
+    res.json({ success: true, thread: updated });
   })
 );
 
