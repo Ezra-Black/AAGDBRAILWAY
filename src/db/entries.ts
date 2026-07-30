@@ -408,19 +408,31 @@ export async function reclaimStuckProcessing(
  *
  * When minCreatedAt is set, only rows created at/after that instant are
  * eligible — keeps pre-automation backlog from being emailed again.
+ *
+ * Entries whose graphic has requires_photo=true are never claimed — those
+ * are manual (customer photo attached); the AI worker must not touch them.
  */
 export async function claimNextPending(
   minCreatedAt?: Date | null
 ): Promise<Entry | null> {
   const result = await query(
     `WITH candidate AS (
-       SELECT id
-       FROM entries
-       WHERE status = 'pending'
-         AND archived_at IS NULL
-         AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz)
-       ORDER BY created_at ASC
-       FOR UPDATE SKIP LOCKED
+       SELECT e.id
+       FROM entries e
+       WHERE e.status = 'pending'
+         AND e.archived_at IS NULL
+         AND ($1::timestamptz IS NULL OR e.created_at >= $1::timestamptz)
+         AND NOT EXISTS (
+           SELECT 1
+           FROM graphic_options g
+           WHERE g.requires_photo = true
+             AND (
+               lower(trim(g.code)) = lower(trim(coalesce(e.graphic_code, '')))
+               OR lower(trim(g.label)) = lower(trim(coalesce(e.graphic_code, '')))
+             )
+         )
+       ORDER BY e.created_at ASC
+       FOR UPDATE OF e SKIP LOCKED
        LIMIT 1
      )
      UPDATE entries AS e
@@ -432,6 +444,34 @@ export async function claimNextPending(
     [minCreatedAt ?? null]
   );
   return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+/**
+ * Release any requires_photo jobs stuck in processing back to pending
+ * so admins can handle them manually (worker must not finish these).
+ */
+export async function releaseRequiresPhotoProcessing(): Promise<number> {
+  const result = await query(
+    `UPDATE entries e
+     SET status = 'pending',
+         updated_at = NOW(),
+         metadata = e.metadata || jsonb_build_object(
+           'released_at', NOW()::text,
+           'release_reason', 'requires_photo_manual_only'
+         )
+     WHERE e.status = 'processing'
+       AND e.archived_at IS NULL
+       AND EXISTS (
+         SELECT 1
+         FROM graphic_options g
+         WHERE g.requires_photo = true
+           AND (
+             lower(trim(g.code)) = lower(trim(coalesce(e.graphic_code, '')))
+             OR lower(trim(g.label)) = lower(trim(coalesce(e.graphic_code, '')))
+           )
+       )`
+  );
+  return result.rowCount ?? 0;
 }
 
 /**

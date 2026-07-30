@@ -17,11 +17,12 @@ import {
   closeLegacyFailedBefore,
   findDeliveredDuplicate,
   reclaimStuckProcessing,
+  releaseRequiresPhotoProcessing,
   skipLegacyPendingBefore,
   updateEntryStatus,
   type Entry,
 } from "../db/entries";
-import { getGraphicImageUrl } from "../db/graphics";
+import { getGraphicImageUrl, graphicRequiresPhoto } from "../db/graphics";
 import {
   sendGraphicDeliveryEmail,
   sendPipelineFailureEmail,
@@ -104,6 +105,19 @@ async function failEntry(entry: Entry, error: string): Promise<void> {
 }
 
 async function processEntry(entry: Entry): Promise<void> {
+  // Safety net: never run AI on graphics that require a customer photo.
+  if (entry.graphic_code && (await graphicRequiresPhoto(entry.graphic_code))) {
+    await updateEntryStatus(entry.id, "pending", {
+      skipped_requires_photo: "true",
+      note: "Manual-only graphic (requires customer photo) — worker ignored",
+    });
+    logger.info("Skipped requires_photo entry (manual only)", {
+      id: entry.id,
+      graphic_code: entry.graphic_code,
+    });
+    return;
+  }
+
   const email = entry.email?.trim();
   if (!email) {
     await failEntry(entry, "Entry has no customer email");
@@ -227,6 +241,13 @@ async function processEntry(entry: Entry): Promise<void> {
 }
 
 async function tick(cutoff: Date): Promise<void> {
+  const released = await releaseRequiresPhotoProcessing();
+  if (released > 0) {
+    logger.info("Released requires_photo jobs back to pending", {
+      count: released,
+    });
+  }
+
   const reclaimed = await reclaimStuckProcessing(8, cutoff);
   if (reclaimed > 0) {
     logger.warn("Reclaimed stuck processing entries", { count: reclaimed });
