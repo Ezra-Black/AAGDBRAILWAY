@@ -26,7 +26,6 @@ export interface PublicReview {
   rating: number;
   body: string;
   display_name: string;
-  profile_photo_url: string | null;
   created_at: Date;
 }
 
@@ -83,35 +82,35 @@ export async function createReview(input: {
   return mapReview(result.rows[0]);
 }
 
-/** Approved reviews for the public page — never expose user_id/email. */
+/**
+ * Approved reviews for the public page.
+ * Never selects or returns user_id / email / profile photos — admin-only.
+ */
 export async function listApprovedReviews(
   limit = 100
 ): Promise<PublicReview[]> {
   const result = await query(
     `SELECT r.id, r.rating, r.body, r.display_name, r.is_anonymous,
-            r.created_at, u.profile_photo_url
+            r.created_at
      FROM reviews r
-     JOIN users u ON u.id = r.user_id
      WHERE r.status = 'approved'
      ORDER BY r.created_at DESC
      LIMIT $1`,
     [limit]
   );
-  return result.rows.map((row) => {
-    const anonymous = Boolean(row.is_anonymous);
-    return {
-      id: row.id as string,
-      rating: Number(row.rating),
-      body: row.body as string,
-      display_name: anonymous
-        ? "Anonymous"
-        : (row.display_name as string),
-      profile_photo_url: anonymous
-        ? null
-        : ((row.profile_photo_url as string) ?? null),
-      created_at: row.created_at as Date,
-    };
-  });
+  return result.rows.map((row) => toPublicReview(row));
+}
+
+/** Explicit public shape — no email, user_id, photos, or moderation fields. */
+export function toPublicReview(row: Record<string, unknown>): PublicReview {
+  const anonymous = Boolean(row.is_anonymous);
+  return {
+    id: row.id as string,
+    rating: Number(row.rating),
+    body: row.body as string,
+    display_name: anonymous ? "Anonymous" : (row.display_name as string),
+    created_at: row.created_at as Date,
+  };
 }
 
 export async function listReviewsForAdmin(options?: {

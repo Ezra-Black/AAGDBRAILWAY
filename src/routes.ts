@@ -1348,13 +1348,23 @@ apiRouter.post(
 
 /* ═══════════ Reviews ═══════════ */
 
-/** GET /api/reviews — approved reviews for the public page. */
+/** GET /api/reviews — approved reviews for the public page (no emails). */
 apiRouter.get(
   "/api/reviews",
   readLimiter,
   asyncHandler(async (_req, res) => {
     const reviews = await listApprovedReviews(100);
-    res.json({ success: true, reviews });
+    // Allowlist only — never leak account email / user_id / photos to the site.
+    res.json({
+      success: true,
+      reviews: reviews.map((r) => ({
+        id: r.id,
+        rating: r.rating,
+        body: r.body,
+        display_name: r.display_name,
+        created_at: r.created_at,
+      })),
+    });
   })
 );
 

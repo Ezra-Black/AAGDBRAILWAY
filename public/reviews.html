@@ -168,23 +168,6 @@
           .replace(/"/g, "&quot;");
       }
 
-      function avatarHtml(review) {
-        const name = review.display_name || "Anonymous";
-        if (review.profile_photo_url) {
-          return (
-            '<img class="review-avatar" src="' +
-            escapeHtml(review.profile_photo_url) +
-            '" alt="" width="40" height="40" />'
-          );
-        }
-        const initial = (name.trim().charAt(0) || "?").toUpperCase();
-        return (
-          '<div class="review-avatar review-avatar-fallback" aria-hidden="true">' +
-          escapeHtml(initial) +
-          "</div>"
-        );
-      }
-
       async function loadReviews() {
         const list = document.getElementById("reviews-list");
         const empty = document.getElementById("reviews-empty");
@@ -203,18 +186,14 @@
             .map(
               (r) =>
                 '<article class="review-card">' +
-                '<div class="flex items-center gap-3">' +
-                avatarHtml(r) +
-                "<div>" +
                 '<p class="text-sm font-medium text-cream">' +
                 escapeHtml(r.display_name) +
                 "</p>" +
-                '<p class="review-card-stars" aria-label="' +
+                '<p class="review-card-stars mt-1" aria-label="' +
                 r.rating +
                 ' out of 5 stars">' +
                 starsHtml(r.rating) +
                 "</p>" +
-                "</div></div>" +
                 '<p class="mt-4 text-[15px] font-light leading-relaxed text-cream/70">' +
                 escapeHtml(r.body) +
                 "</p>" +
