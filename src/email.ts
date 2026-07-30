@@ -4,6 +4,12 @@ import { logger } from "./logger";
 /** Contact messages are forwarded here. Override with CONTACT_EMAIL_TO. */
 const DEFAULT_CONTACT_TO = "aaggraphics@protonmail.com";
 
+/** Overall cap for any single sendMail attempt (connect + send). */
+function smtpSendTimeoutMs(): number {
+  const n = Number(process.env.SMTP_TIMEOUT_MS);
+  return Number.isFinite(n) && n >= 5_000 ? n : 25_000;
+}
+
 let transporter: Transporter | null = null;
 
 export function mailerConfigured(): boolean {
@@ -17,6 +23,7 @@ export function mailerConfigured(): boolean {
 function getTransporter(): Transporter {
   if (!transporter) {
     const port = Number(process.env.SMTP_PORT) || 587;
+    const connectMs = Math.min(15_000, smtpSendTimeoutMs());
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST!.trim(),
       port,
@@ -25,9 +32,50 @@ function getTransporter(): Transporter {
         user: process.env.SMTP_USER!.trim(),
         pass: process.env.SMTP_PASS!.trim(),
       },
+      // Fail fast — default connectionTimeout is 2 minutes, which blocks the worker.
+      connectionTimeout: connectMs,
+      greetingTimeout: Math.min(10_000, connectMs),
+      socketTimeout: smtpSendTimeoutMs(),
+      dnsTimeout: 5_000,
     });
   }
   return transporter;
+}
+
+/** Drop a bad/hung transporter so the next send opens a fresh connection. */
+function resetTransporter(): void {
+  const current = transporter;
+  transporter = null;
+  if (current) {
+    try {
+      current.close();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function sendMailWithTimeout(
+  options: Parameters<Transporter["sendMail"]>[0]
+): Promise<void> {
+  const ms = smtpSendTimeoutMs();
+  const mailer = getTransporter();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      mailer.sendMail(options),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`SMTP send timed out after ${ms}ms`));
+        }, ms);
+      }),
+    ]);
+  } catch (err) {
+    resetTransporter();
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export function contactInboxAddress(): string {
@@ -51,7 +99,7 @@ export async function sendPasswordResetEmail(
   }
 
   try {
-    await getTransporter().sendMail({
+    await sendMailWithTimeout({
       from:
         process.env.SMTP_FROM?.trim() ||
         `"Audrey's Angel Graphics" <${process.env.SMTP_USER!.trim()}>`,
@@ -108,7 +156,7 @@ export async function sendGraphicDeliveryEmail(input: {
     process.env.GRAPHIC_REPLY_TO?.trim() || contactInboxAddress();
 
   try {
-    await getTransporter().sendMail({
+    await sendMailWithTimeout({
       from: fromAddress(),
       to: input.to,
       replyTo,
@@ -155,7 +203,7 @@ export async function sendPipelineFailureEmail(input: {
   }
 
   try {
-    await getTransporter().sendMail({
+    await sendMailWithTimeout({
       from: fromAddress(),
       to: failureAlertAddress(),
       subject: `[AAGDB] Graphic pipeline failed — ${input.angelName}`,
@@ -166,7 +214,8 @@ export async function sendPipelineFailureEmail(input: {
         `Customer email: ${input.email || "(none)"}\n` +
         `Graphic code: ${input.graphicCode || "(none)"}\n\n` +
         `Error:\n${input.error}\n\n` +
-        `Check the admin portal for the failure banner / Requests → Failed.\n`,
+        `Check the admin portal for the failure banner / Requests → Failed.\n` +
+        `If a graphic was generated, download it from Admin → Requests → Generated.\n`,
     });
     return true;
   } catch (err) {
@@ -195,7 +244,7 @@ export async function sendContactEmail(input: {
   }
 
   try {
-    await getTransporter().sendMail({
+    await sendMailWithTimeout({
       from:
         process.env.SMTP_FROM?.trim() ||
         `"Audrey's Angel Graphics" <${process.env.SMTP_USER!.trim()}>`,
