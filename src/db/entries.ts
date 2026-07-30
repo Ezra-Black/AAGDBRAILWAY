@@ -355,7 +355,8 @@ export async function listPending(limit = 50): Promise<Entry[]> {
  * Returns how many rows were moved back to pending.
  */
 export async function reclaimStuckProcessing(
-  olderThanMinutes = 10
+  olderThanMinutes = 10,
+  minCreatedAt?: Date | null
 ): Promise<number> {
   const minutes = Math.max(2, olderThanMinutes);
   const result = await query(
@@ -368,8 +369,9 @@ export async function reclaimStuckProcessing(
          )
      WHERE status = 'processing'
        AND archived_at IS NULL
-       AND updated_at < NOW() - ($1::text || ' minutes')::interval`,
-    [String(minutes)]
+       AND updated_at < NOW() - ($1::text || ' minutes')::interval
+       AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)`,
+    [String(minutes), minCreatedAt ?? null]
   );
   return result.rowCount ?? 0;
 }
@@ -377,14 +379,20 @@ export async function reclaimStuckProcessing(
 /**
  * Atomically claim the oldest pending entry for the graphic worker.
  * Returns null when the queue is empty.
+ *
+ * When minCreatedAt is set, only rows created at/after that instant are
+ * eligible — keeps pre-automation backlog from being emailed again.
  */
-export async function claimNextPending(): Promise<Entry | null> {
+export async function claimNextPending(
+  minCreatedAt?: Date | null
+): Promise<Entry | null> {
   const result = await query(
     `WITH candidate AS (
        SELECT id
        FROM entries
        WHERE status = 'pending'
          AND archived_at IS NULL
+         AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz)
        ORDER BY created_at ASC
        FOR UPDATE SKIP LOCKED
        LIMIT 1
@@ -394,9 +402,59 @@ export async function claimNextPending(): Promise<Entry | null> {
          updated_at = NOW()
      FROM candidate
      WHERE e.id = candidate.id
-     RETURNING e.*`
+     RETURNING e.*`,
+    [minCreatedAt ?? null]
   );
   return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+/**
+ * Close old pending rows that were fulfilled manually before automation.
+ * Does not send email — marks processed + skipped_pre_automation.
+ */
+export async function skipLegacyPendingBefore(
+  before: Date
+): Promise<number> {
+  const result = await query(
+    `UPDATE entries
+     SET status = 'processed',
+         updated_at = NOW(),
+         metadata = metadata || jsonb_build_object(
+           'skipped_pre_automation', 'true',
+           'photo_sent', 'false',
+           'note', 'Closed as pre-automation backlog; do not auto-email'
+         )
+     WHERE status IN ('pending', 'processing')
+       AND archived_at IS NULL
+       AND created_at < $1::timestamptz`,
+    [before]
+  );
+  return result.rowCount ?? 0;
+}
+
+/**
+ * Ack + close failed automation rows created before cutoff (manual backlog
+ * that the worker already attempted). Hides them from the failure banner.
+ */
+export async function closeLegacyFailedBefore(
+  before: Date
+): Promise<number> {
+  const result = await query(
+    `UPDATE entries
+     SET status = 'processed',
+         updated_at = NOW(),
+         metadata = metadata || jsonb_build_object(
+           'failure_acked', 'true',
+           'skipped_pre_automation', 'true',
+           'photo_sent', 'false',
+           'note', 'Pre-automation request; closed after worker SMTP/backlog attempt'
+         )
+     WHERE status = 'failed'
+       AND archived_at IS NULL
+       AND created_at < $1::timestamptz`,
+    [before]
+  );
+  return result.rowCount ?? 0;
 }
 
 /** True if this email + angel name + graphic already got a delivered graphic. */

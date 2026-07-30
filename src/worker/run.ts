@@ -14,8 +14,10 @@ import fs from "fs/promises";
 import path from "path";
 import {
   claimNextPending,
+  closeLegacyFailedBefore,
   findDeliveredDuplicate,
   reclaimStuckProcessing,
+  skipLegacyPendingBefore,
   updateEntryStatus,
   type Entry,
 } from "../db/entries";
@@ -35,6 +37,26 @@ const POLL_SECONDS = Math.max(
   2,
   Number(process.env.POLL_SECONDS) || 10
 );
+
+/** Worker boot time — used when WORKER_MIN_CREATED_AT is unset. */
+const WORKER_STARTED_AT = new Date();
+
+/**
+ * Only automate entries created at/after this time.
+ * Set WORKER_MIN_CREATED_AT (ISO) on Railway to freeze the cutoff across redeploys.
+ * Default: this process start time (ignores older pending backlog).
+ */
+function automationCutoff(): Date {
+  const raw = process.env.WORKER_MIN_CREATED_AT?.trim();
+  if (raw) {
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+    logger.warn("Invalid WORKER_MIN_CREATED_AT — using worker start time", {
+      value: raw,
+    });
+  }
+  return WORKER_STARTED_AT;
+}
 
 function uploadRoot(): string {
   return process.env.UPLOAD_DIR?.trim() || path.join(process.cwd(), "uploads");
@@ -183,19 +205,20 @@ async function processEntry(entry: Entry): Promise<void> {
   });
 }
 
-async function tick(): Promise<void> {
-  const reclaimed = await reclaimStuckProcessing(8);
+async function tick(cutoff: Date): Promise<void> {
+  const reclaimed = await reclaimStuckProcessing(8, cutoff);
   if (reclaimed > 0) {
     logger.warn("Reclaimed stuck processing entries", { count: reclaimed });
   }
 
-  const entry = await claimNextPending();
+  const entry = await claimNextPending(cutoff);
   if (!entry) return;
 
   logger.info("Claimed pending entry", {
     id: entry.id,
     angel_name: entry.angel_name,
     graphic_code: entry.graphic_code,
+    created_at: entry.created_at,
   });
 
   try {
@@ -215,16 +238,24 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const cutoff = automationCutoff();
+
+  // Close manually-handled backlog so the worker never emails those again.
+  const skippedPending = await skipLegacyPendingBefore(cutoff);
+  const closedFailed = await closeLegacyFailedBefore(cutoff);
   logger.info("Graphic worker starting", {
     poll_seconds: POLL_SECONDS,
     has_smtp: Boolean(
       process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
     ),
+    automation_cutoff: cutoff.toISOString(),
+    skipped_legacy_pending: skippedPending,
+    closed_legacy_failed: closedFailed,
   });
 
   for (;;) {
     try {
-      await tick();
+      await tick(cutoff);
     } catch (err) {
       logger.error("Worker tick crashed", { error: String(err) });
     }
