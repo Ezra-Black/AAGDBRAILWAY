@@ -1,3 +1,4 @@
+import type { PoolClient } from "pg";
 import { query, withTransaction } from "./pool";
 import { claimDelivery, deliveryKey, type DeliveryRecord } from "./deliveries";
 
@@ -50,6 +51,22 @@ export interface CreateEntryInput {
   /** Account that made the request, when logged in. */
   user_id?: string | null;
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * Run writes with an identity attached, so entry_transitions records who moved
+ * a request rather than an anonymous 'system'.
+ */
+async function asActor<T>(
+  actor: string,
+  reason: string,
+  fn: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  return withTransaction(async (client) => {
+    await client.query(`SELECT set_config('aagdb.actor', $1, true)`, [actor]);
+    await client.query(`SELECT set_config('aagdb.reason', $1, true)`, [reason]);
+    return fn(client);
+  });
 }
 
 function mapRow(row: Record<string, unknown>): Entry {
@@ -324,8 +341,12 @@ export async function archiveCompletedEntries(): Promise<number> {
 export async function markAngelNameComplete(
   angelName: string
 ): Promise<number> {
-  const result = await query(
-    `UPDATE entries
+  const result = await asActor(
+    "admin",
+    "closed by hand from the admin portal",
+    (client) =>
+      client.query(
+        `UPDATE entries
      SET status = 'processed',
          next_retry_at = NULL,
          updated_at = NOW(),
@@ -336,7 +357,8 @@ export async function markAngelNameComplete(
          )
      WHERE lower(angel_name) = lower($1)
        AND status <> 'processed'`,
-    [angelName]
+        [angelName]
+      )
   );
   return result.rowCount ?? 0;
 }
@@ -425,8 +447,12 @@ export async function reclaimStuckProcessing(
   minCreatedAt?: Date | null
 ): Promise<number> {
   const minutes = Math.max(2, olderThanMinutes);
-  const result = await query(
-    `UPDATE entries
+  const result = await asActor(
+    "worker:sweeper",
+    "requeued a claim the worker never finished",
+    (client) =>
+      client.query(
+        `UPDATE entries
      SET status = 'pending',
          updated_at = NOW(),
          metadata = metadata || jsonb_build_object(
@@ -437,7 +463,8 @@ export async function reclaimStuckProcessing(
        AND archived_at IS NULL
        AND updated_at < NOW() - ($1::text || ' minutes')::interval
        AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)`,
-    [String(minutes), minCreatedAt ?? null]
+        [String(minutes), minCreatedAt ?? null]
+      )
   );
   return result.rowCount ?? 0;
 }
@@ -455,7 +482,11 @@ export async function reclaimStuckProcessing(
 export async function claimNextPending(
   minCreatedAt?: Date | null
 ): Promise<Entry | null> {
-  const result = await query(
+  const result = await asActor(
+    "worker:generate",
+    "claimed the oldest eligible request",
+    (client) =>
+      client.query(
     `WITH candidate AS (
        SELECT e.id
        FROM entries e
@@ -482,7 +513,8 @@ export async function claimNextPending(
      FROM candidate
      WHERE e.id = candidate.id
      RETURNING e.*`,
-    [minCreatedAt ?? null]
+        [minCreatedAt ?? null]
+      )
   );
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }
@@ -492,8 +524,12 @@ export async function claimNextPending(
  * so admins can handle them manually (worker must not finish these).
  */
 export async function releaseRequiresPhotoProcessing(): Promise<number> {
-  const result = await query(
-    `UPDATE entries e
+  const result = await asActor(
+    "worker:sweeper",
+    "returned a manual-only graphic to the queue",
+    (client) =>
+      client.query(
+        `UPDATE entries e
      SET status = 'pending',
          updated_at = NOW(),
          metadata = e.metadata || jsonb_build_object(
@@ -511,6 +547,7 @@ export async function releaseRequiresPhotoProcessing(): Promise<number> {
              OR lower(trim(g.label)) = lower(trim(coalesce(e.graphic_code, '')))
            )
        )`
+      )
   );
   return result.rowCount ?? 0;
 }
@@ -522,8 +559,12 @@ export async function releaseRequiresPhotoProcessing(): Promise<number> {
 export async function skipLegacyPendingBefore(
   before: Date
 ): Promise<number> {
-  const result = await query(
-    `UPDATE entries
+  const result = await asActor(
+    "worker:startup",
+    "closed pre-automation backlog without emailing",
+    (client) =>
+      client.query(
+        `UPDATE entries
      SET status = 'processed',
          updated_at = NOW(),
          metadata = metadata || jsonb_build_object(
@@ -534,7 +575,8 @@ export async function skipLegacyPendingBefore(
      WHERE status IN ('pending', 'processing', 'validated', 'applied')
        AND archived_at IS NULL
        AND created_at < $1::timestamptz`,
-    [before]
+        [before]
+      )
   );
   return result.rowCount ?? 0;
 }
@@ -546,8 +588,12 @@ export async function skipLegacyPendingBefore(
 export async function closeLegacyFailedBefore(
   before: Date
 ): Promise<number> {
-  const result = await query(
-    `UPDATE entries
+  const result = await asActor(
+    "worker:startup",
+    "closed pre-automation failures",
+    (client) =>
+      client.query(
+        `UPDATE entries
      SET status = 'processed',
          updated_at = NOW(),
          metadata = metadata || jsonb_build_object(
@@ -559,7 +605,8 @@ export async function closeLegacyFailedBefore(
      WHERE status = 'failed'
        AND archived_at IS NULL
        AND created_at < $1::timestamptz`,
-    [before]
+        [before]
+      )
   );
   return result.rowCount ?? 0;
 }
@@ -655,16 +702,12 @@ export async function transitionEntry(
   options: TransitionOptions = {}
 ): Promise<Entry | null> {
   const fromStatuses = Array.isArray(from) ? from : [from];
-  return withTransaction(async (client) => {
-    await client.query(`SELECT set_config('aagdb.actor', $1, true)`, [
-      options.actor ?? "worker",
-    ]);
-    await client.query(`SELECT set_config('aagdb.reason', $1, true)`, [
-      options.reason ?? "",
-    ]);
-
-    const result = await client.query(
-      `UPDATE entries
+  const result = await asActor(
+    options.actor ?? "worker",
+    options.reason ?? "",
+    (client) =>
+      client.query(
+        `UPDATE entries
        SET status = $3,
            version = CASE WHEN $5 THEN version + 1 ELSE version END,
            next_retry_at = CASE WHEN $6 THEN NULL ELSE next_retry_at END,
@@ -677,18 +720,18 @@ export async function transitionEntry(
          AND status = ANY($2::text[])
          AND version = $4
        RETURNING *`,
-      [
-        id,
-        fromStatuses,
-        to,
-        expectedVersion,
-        options.bumpVersion ?? false,
-        options.clearRetry ?? false,
-        options.metadata ? JSON.stringify(options.metadata) : null,
-      ]
-    );
-    return result.rows[0] ? mapRow(result.rows[0]) : null;
-  });
+        [
+          id,
+          fromStatuses,
+          to,
+          expectedVersion,
+          options.bumpVersion ?? false,
+          options.clearRetry ?? false,
+          options.metadata ? JSON.stringify(options.metadata) : null,
+        ]
+      )
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
 }
 
 export type FailureClass = "transient" | "permanent";
@@ -722,16 +765,12 @@ export async function recordFailure(input: {
     ...(input.metadata ?? {}),
   };
 
-  return withTransaction(async (client) => {
-    await client.query(`SELECT set_config('aagdb.actor', $1, true)`, [
-      `worker:${input.stage}`,
-    ]);
-    await client.query(`SELECT set_config('aagdb.reason', $1, true)`, [
-      input.error.slice(0, 300),
-    ]);
-
-    const result = await client.query(
-      `UPDATE entries
+  return asActor(
+    `worker:${input.stage}`,
+    input.error.slice(0, 300),
+    async (client) => {
+      const result = await client.query(
+        `UPDATE entries
        SET status = $2,
            attempt_count = $3,
            next_retry_at = $4,
@@ -757,16 +796,17 @@ export async function recordFailure(input: {
               }
             : metadata
         ),
-        input.entry.version,
-      ]
-    );
+          input.entry.version,
+        ]
+      );
 
-    return {
-      entry: result.rows[0] ? mapRow(result.rows[0]) : null,
-      escalated: escalate,
-      retryInMinutes: escalate ? null : backoff,
-    };
-  });
+      return {
+        entry: result.rows[0] ? mapRow(result.rows[0]) : null,
+        escalated: escalate,
+        retryInMinutes: escalate ? null : backoff,
+      };
+    }
+  );
 }
 
 /**
@@ -777,8 +817,12 @@ export async function recordFailure(input: {
 export async function requeueDueRetries(
   minCreatedAt?: Date | null
 ): Promise<number> {
-  const result = await query(
-    `UPDATE entries
+  const result = await asActor(
+    "worker:sweeper",
+    "retry backoff elapsed",
+    (client) =>
+      client.query(
+        `UPDATE entries
      SET status = 'pending',
          next_retry_at = NULL,
          updated_at = NOW(),
@@ -792,7 +836,8 @@ export async function requeueDueRetries(
        AND next_retry_at <= NOW()
        AND attempt_count < $1
        AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)`,
-    [MAX_ATTEMPTS, minCreatedAt ?? null]
+        [MAX_ATTEMPTS, minCreatedAt ?? null]
+      )
   );
   return result.rowCount ?? 0;
 }
@@ -806,8 +851,12 @@ export async function escalateStuckApplied(
   olderThanMinutes = 15
 ): Promise<number> {
   const minutes = Math.max(5, olderThanMinutes);
-  const result = await query(
-    `UPDATE entries
+  const result = await asActor(
+    "worker:sweeper",
+    "delivery outcome never confirmed",
+    (client) =>
+      client.query(
+        `UPDATE entries
      SET status = 'escalated',
          updated_at = NOW(),
          metadata = metadata || jsonb_build_object(
@@ -819,7 +868,8 @@ export async function escalateStuckApplied(
      WHERE status = 'applied'
        AND archived_at IS NULL
        AND updated_at < NOW() - ($1::text || ' minutes')::interval`,
-    [String(minutes)]
+        [String(minutes)]
+      )
   );
   return result.rowCount ?? 0;
 }
@@ -830,13 +880,12 @@ export async function escalateStuckApplied(
  * delivery key and gives the request a fresh set of retries.
  */
 export async function reopenForResend(id: string): Promise<Entry | null> {
-  return withTransaction(async (client) => {
-    await client.query(`SELECT set_config('aagdb.actor', $1, true)`, ["admin"]);
-    await client.query(`SELECT set_config('aagdb.reason', $1, true)`, [
-      "admin authorised one more send",
-    ]);
-    const result = await client.query(
-      `UPDATE entries
+  const result = await asActor(
+    "admin",
+    "admin authorised one more send",
+    (client) =>
+      client.query(
+        `UPDATE entries
        SET status = 'pending',
            attempt_count = 0,
            next_retry_at = NULL,
@@ -849,10 +898,10 @@ export async function reopenForResend(id: string): Promise<Entry | null> {
        WHERE id = $1
          AND status IN ('failed', 'escalated')
        RETURNING *`,
-      [id]
-    );
-    return result.rows[0] ? mapRow(result.rows[0]) : null;
-  });
+        [id]
+      )
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
 }
 
 /** The delivery identity for this entry, when it has enough detail to send. */
@@ -1003,13 +1052,19 @@ export async function claimValidatedForDelivery(
   });
 }
 
+/**
+ * Unguarded status write for admin and external-automation callers. The worker
+ * uses transitionEntry instead, so that its writes carry a version check.
+ */
 export async function updateEntryStatus(
   id: string,
   status: EntryStatus,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  actor = "api"
 ): Promise<Entry | null> {
-  const result = await query(
-    `UPDATE entries
+  const result = await asActor(actor, "direct status write", (client) =>
+    client.query(
+      `UPDATE entries
      SET status = $2,
          updated_at = NOW(),
          metadata = CASE
@@ -1018,7 +1073,8 @@ export async function updateEntryStatus(
          END
      WHERE id = $1
      RETURNING *`,
-    [id, status, metadata ? JSON.stringify(metadata) : null]
+      [id, status, metadata ? JSON.stringify(metadata) : null]
+    )
   );
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }

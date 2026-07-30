@@ -1,7 +1,16 @@
 import { logger } from "../logger";
 
-const XAI_EDITS_URL = "https://api.x.ai/v1/images/edits";
+const DEFAULT_XAI_BASE_URL = "https://api.x.ai/v1";
 const DEFAULT_TIMEOUT_MS = 180_000;
+
+/** Override with XAI_BASE_URL to point at a staging or stub endpoint. */
+function editsUrl(): string {
+  const base = (process.env.XAI_BASE_URL?.trim() || DEFAULT_XAI_BASE_URL).replace(
+    /\/$/,
+    ""
+  );
+  return `${base}/images/edits`;
+}
 
 export interface ImagineEditResult {
   buffer: Buffer;
@@ -54,7 +63,7 @@ export async function editAngelGraphic(input: {
 
   let res: Response;
   try {
-    res = await fetch(XAI_EDITS_URL, {
+    res = await fetch(editsUrl(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,

@@ -347,6 +347,23 @@ Schema is created/updated on startup. You can also run:
 npm run db:migrate
 ```
 
+### 4. Tests
+
+Both suites need a throwaway Postgres database, never a production one.
+
+```bash
+export DATABASE_URL=postgresql://user:pass@localhost:5432/aagdb_test
+
+npm run test:pipeline   # status machine, version guards, backoff, escalation
+npm run test:e2e        # spawns the real worker against stub xAI and SMTP
+```
+
+`test:e2e` is the one that matters for delivery: it counts message bodies at a
+stub SMTP server, so a duplicate customer email cannot pass. It covers the
+happy path, a relay that never confirms, a worker killed after the message was
+accepted, and a repeat of an already-delivered request. Set `E2E_VERBOSE=1` to
+see the worker's own logs.
+
 ---
 
 ## Deploy on Railway
