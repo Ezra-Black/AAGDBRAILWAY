@@ -41,6 +41,8 @@ Migrations run automatically on app boot.
 | `DELETE` | `/admin/newsletter/posts/:id` | Delete a post (admin session required) |
 | `GET` | `/admin/graphics/vault-alerts` | Offers auto-vaulted since last dismissal — powers the portal bell (admin) |
 | `POST` | `/admin/graphics/vault-alerts/ack` | Dismiss all vault notifications (admin) |
+| `GET` | `/admin/pipeline-alerts` | Unacked graphic-worker failures (admin banner + bell) |
+| `POST` | `/admin/pipeline-alerts/ack` | Dismiss pipeline failure alerts (admin) |
 | `PATCH` | `/admin/graphics/:id/vault` | Vault an offer immediately, before its timer ends (admin) |
 | `POST` | `/newsletter/subscribe` | `{ "email" }` → mailing-list opt-in (popup / footer forms) |
 | `POST` | `/contact` | `{ "name", "email", "message" }` → save message + forward to the ProtonMail inbox |
@@ -203,7 +205,48 @@ curl -X PATCH https://YOUR_APP.up.railway.app/entry/ENTRY_UUID/status \
   -d '{"status":"processed","metadata":{"photo_url":"https://..."}}'
 ```
 
-A ready-made poller lives at [`scripts/poll_pending.py`](scripts/poll_pending.py).
+A ready-made poller lives at [`scripts/poll_pending.py`](scripts/poll_pending.py). Prefer the built-in Node worker below for production.
+
+### Graphic worker (xAI Imagine + Resend)
+
+Unattended pipeline for Audrey’s Angel Graphics:
+
+1. Form submit inserts `entries` with `status = pending`
+2. Worker atomically claims the oldest pending row → `processing`
+3. Loads the placeholder from `archive_graphics.image_url` (never mutates originals)
+4. Calls **xAI** `POST /v1/images/edits` to replace the sample name with `angel_name`
+5. Emails the customer via **Resend SMTP** with Audrey’s soft-tone copy + attachment
+6. Marks `processed` (or `failed` + email `FAILURE_ALERT_EMAIL` + admin banner)
+
+Local:
+
+```bash
+npm run worker
+```
+
+Railway: add a **second service** from the same repo. Build stays `npm install && npm run build`. Start command:
+
+```bash
+npm run worker:start
+```
+
+Give that service the same `DATABASE_URL` reference as web, plus:
+
+| Variable | Example |
+|----------|---------|
+| `XAI_API_KEY` | from console.x.ai (never commit) |
+| `SMTP_HOST` | `smtp.resend.com` |
+| `SMTP_PORT` | `465` |
+| `SMTP_USER` | `resend` |
+| `SMTP_PASS` | Resend API key |
+| `SMTP_FROM` | verified domain From, or Resend onboarding for tests |
+| `FAILURE_ALERT_EMAIL` | `allaudrey22@gmail.com` |
+| `PUBLIC_BASE_URL` | public site URL (helps resolve `/assets/...` placeholders) |
+| `UPLOAD_DIR` | `/data/uploads` if you attach a volume for generated files |
+
+Optional: `XAI_IMAGE_MODEL` (default `grok-imagine-image-quality`), `POLL_SECONDS` (default `10`), `GRAPHIC_REPLY_TO`.
+
+Duplicate deliveries are skipped: same email + angel name + graphic with `photo_sent=true` is not emailed again.
 
 ---
 
@@ -285,6 +328,12 @@ npm run db:migrate
    - Without a volume, uploads still work but photos are lost on redeploy
      (the container filesystem is ephemeral). Alternatively swap
      `src/uploads.ts` for S3/R2 later — the API routes won't change.
+
+9. **Graphic worker service** (production automation)
+   - **New** → **GitHub Repo** (same repo) → set start command to `npm run worker:start`.
+   - Link the same Postgres `DATABASE_URL`.
+   - Set `XAI_API_KEY`, Resend `SMTP_*`, `FAILURE_ALERT_EMAIL`, and `PUBLIC_BASE_URL`
+     (see **Graphic worker** above). Do not put secrets in the repo.
 
 Optional: use the included [`Dockerfile`](Dockerfile) by setting the service builder to Dockerfile in Railway settings.
 

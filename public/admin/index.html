@@ -388,7 +388,7 @@
               id="bell-btn"
               type="button"
               class="bell-btn"
-              aria-label="Vault notifications"
+              aria-label="Notifications"
               aria-expanded="false"
             >
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -399,7 +399,7 @@
             </button>
             <div id="bell-panel" class="bell-panel hidden">
               <div class="mb-2 flex items-center justify-between gap-3">
-                <p class="text-sm font-semibold text-cream">Vaulted offers</p>
+                <p class="text-sm font-semibold text-cream">Notifications</p>
                 <button
                   id="bell-dismiss"
                   type="button"
@@ -411,7 +411,7 @@
               </div>
               <div id="bell-list" class="max-h-72 space-y-2 overflow-y-auto"></div>
               <p id="bell-empty" class="text-xs text-cream/40">
-                All clear — offers whose timer runs out get auto-vaulted and show up here.
+                All clear — vaulted offers and graphic pipeline failures show up here.
               </p>
             </div>
           </div>
@@ -425,6 +425,28 @@
           </button>
         </div>
       </header>
+
+      <div
+        id="pipeline-banner"
+        class="mb-6 hidden rounded-2xl border px-4 py-3"
+        style="border-color:rgba(248,113,113,0.35);background:rgba(248,113,113,0.08)"
+        role="alert"
+      >
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold text-cream">Graphic pipeline failed</p>
+            <p id="pipeline-banner-text" class="mt-1 text-xs text-cream/60"></p>
+          </div>
+          <button
+            id="pipeline-banner-dismiss"
+            type="button"
+            class="archive-btn"
+            style="font-size:0.7rem"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
 
       <!-- View tabs -->
       <nav class="mb-8 inline-flex items-center gap-1 rounded-full border border-white/10 p-1" style="background:rgba(255,255,255,0.03)">
@@ -1930,22 +1952,75 @@
       const bellEmpty = document.getElementById("bell-empty");
       const bellDismiss = document.getElementById("bell-dismiss");
 
+      const pipelineBanner = document.getElementById("pipeline-banner");
+      const pipelineBannerText = document.getElementById("pipeline-banner-text");
+      const pipelineBannerDismiss = document.getElementById(
+        "pipeline-banner-dismiss"
+      );
+
       async function loadVaultAlerts() {
         try {
-          const res = await fetch("/admin/graphics/vault-alerts", {
-            credentials: "include",
-          });
-          if (!res.ok) return;
-          const data = await res.json();
+          const [vaultRes, pipeRes] = await Promise.all([
+            fetch("/admin/graphics/vault-alerts", { credentials: "include" }),
+            fetch("/admin/pipeline-alerts", { credentials: "include" }),
+          ]);
+          if (!vaultRes.ok) return;
+          const data = await vaultRes.json();
           if (!data.success) return;
 
+          let pipeEntries = [];
+          if (pipeRes.ok) {
+            const pipeData = await pipeRes.json();
+            if (pipeData.success) {
+              pipeEntries = pipeData.entries || [];
+              pipelineBanner.classList.toggle("hidden", pipeEntries.length === 0);
+              if (pipeEntries.length > 0) {
+                const first = pipeEntries[0];
+                const err =
+                  typeof first.error === "string" && first.error
+                    ? first.error
+                    : "Unknown error";
+                const more =
+                  pipeEntries.length > 1
+                    ? " (+" + (pipeEntries.length - 1) + " more)"
+                    : "";
+                pipelineBannerText.textContent =
+                  (first.angel_name || "Request") +
+                  " — " +
+                  err.slice(0, 180) +
+                  more +
+                  ". Audrey was emailed at the failure alert address.";
+              } else {
+                pipelineBannerText.textContent = "";
+              }
+            }
+          }
+
           const alerts = data.graphics || [];
-          bellBadge.classList.toggle("hidden", alerts.length === 0);
-          bellBadge.textContent = alerts.length > 99 ? "99+" : String(alerts.length);
-          bellDismiss.classList.toggle("hidden", alerts.length === 0);
-          bellEmpty.classList.toggle("hidden", alerts.length > 0);
+          const total = alerts.length + pipeEntries.length;
+          bellBadge.classList.toggle("hidden", total === 0);
+          bellBadge.textContent = total > 99 ? "99+" : String(total);
+          bellDismiss.classList.toggle("hidden", total === 0);
+          bellEmpty.classList.toggle("hidden", total > 0);
 
           bellList.innerHTML = "";
+          for (const e of pipeEntries) {
+            const item = document.createElement("div");
+            item.className =
+              "rounded-xl border px-3 py-2.5";
+            item.style.borderColor = "rgba(248,113,113,0.35)";
+            item.style.background = "rgba(248,113,113,0.08)";
+            const err =
+              typeof e.error === "string" && e.error ? e.error : "Unknown error";
+            item.innerHTML =
+              '<p class="text-sm font-medium text-cream">Pipeline failed — ' +
+              escapeHtml(e.angel_name || "request") +
+              "</p>" +
+              '<p class="mt-0.5 text-xs text-cream/45">' +
+              escapeHtml(err.slice(0, 220)) +
+              "</p>";
+            bellList.appendChild(item);
+          }
           for (const g of alerts) {
             const item = document.createElement("div");
             item.className =
@@ -1981,10 +2056,37 @@
         }
       });
 
+      async function dismissAllAlerts() {
+        const [vaultAck, pipeAck] = await Promise.all([
+          fetch("/admin/graphics/vault-alerts/ack", {
+            method: "POST",
+            credentials: "include",
+          }),
+          fetch("/admin/pipeline-alerts/ack", {
+            method: "POST",
+            credentials: "include",
+          }),
+        ]);
+        if (vaultAck.status === 401 || pipeAck.status === 401) {
+          window.location.href = "/admin/login";
+          return;
+        }
+        await loadVaultAlerts();
+      }
+
       bellDismiss.addEventListener("click", async () => {
         bellDismiss.disabled = true;
         try {
-          const res = await fetch("/admin/graphics/vault-alerts/ack", {
+          await dismissAllAlerts();
+        } finally {
+          bellDismiss.disabled = false;
+        }
+      });
+
+      pipelineBannerDismiss.addEventListener("click", async () => {
+        pipelineBannerDismiss.disabled = true;
+        try {
+          const res = await fetch("/admin/pipeline-alerts/ack", {
             method: "POST",
             credentials: "include",
           });
@@ -1994,7 +2096,7 @@
           }
           await loadVaultAlerts();
         } finally {
-          bellDismiss.disabled = false;
+          pipelineBannerDismiss.disabled = false;
         }
       });
 

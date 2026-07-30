@@ -9,6 +9,7 @@ import {
 } from "./auth";
 import { photoUpload, saveGraphicSample, deleteGraphicSample } from "./uploads";
 import {
+  ackFailedPipelineAlerts,
   archiveCompletedEntries,
   createEntry,
   emailExistsInEntries,
@@ -18,6 +19,7 @@ import {
   getEntryByRealName,
   listAngelGroupsForAdmin,
   listEntries,
+  listFailedPipelineAlerts,
   listPending,
   markAngelNameComplete,
   setAngelNameArchived,
@@ -384,6 +386,37 @@ apiRouter.post(
   requireAdmin,
   asyncHandler(async (_req, res) => {
     const updated = await acknowledgeVaultedGraphics();
+    res.json({ success: true, updated });
+  })
+);
+
+/** GET /admin/pipeline-alerts — graphic worker failures not yet dismissed */
+apiRouter.get(
+  "/admin/pipeline-alerts",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const entries = await listFailedPipelineAlerts();
+    res.json({
+      success: true,
+      count: entries.length,
+      entries: entries.map((e) => ({
+        id: e.id,
+        angel_name: e.angel_name,
+        email: e.email,
+        graphic_code: e.graphic_code,
+        error: e.metadata?.error ?? null,
+        updated_at: e.updated_at,
+      })),
+    });
+  })
+);
+
+/** POST /admin/pipeline-alerts/ack — dismiss pipeline failure banners */
+apiRouter.post(
+  "/admin/pipeline-alerts/ack",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const updated = await ackFailedPipelineAlerts();
     res.json({ success: true, updated });
   })
 );

@@ -350,6 +350,78 @@ export async function listPending(limit = 50): Promise<Entry[]> {
   return result.rows.map(mapRow);
 }
 
+/**
+ * Atomically claim the oldest pending entry for the graphic worker.
+ * Returns null when the queue is empty.
+ */
+export async function claimNextPending(): Promise<Entry | null> {
+  const result = await query(
+    `WITH candidate AS (
+       SELECT id
+       FROM entries
+       WHERE status = 'pending'
+         AND archived_at IS NULL
+       ORDER BY created_at ASC
+       FOR UPDATE SKIP LOCKED
+       LIMIT 1
+     )
+     UPDATE entries AS e
+     SET status = 'processing',
+         updated_at = NOW()
+     FROM candidate
+     WHERE e.id = candidate.id
+     RETURNING e.*`
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+/** True if this email + angel name + graphic already got a delivered graphic. */
+export async function findDeliveredDuplicate(
+  email: string,
+  angelName: string,
+  graphicCode: string
+): Promise<Entry | null> {
+  const result = await query(
+    `SELECT * FROM entries
+     WHERE status = 'processed'
+       AND archived_at IS NULL
+       AND lower(email) = lower($1)
+       AND lower(angel_name) = lower($2)
+       AND lower(coalesce(graphic_code, '')) = lower($3)
+       AND coalesce(metadata->>'photo_sent', '') = 'true'
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+    [email, angelName, graphicCode]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+export async function listFailedPipelineAlerts(
+  limit = 50
+): Promise<Entry[]> {
+  const result = await query(
+    `SELECT * FROM entries
+     WHERE status = 'failed'
+       AND archived_at IS NULL
+       AND coalesce(metadata->>'failure_acked', 'false') <> 'true'
+     ORDER BY updated_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return result.rows.map(mapRow);
+}
+
+export async function ackFailedPipelineAlerts(): Promise<number> {
+  const result = await query(
+    `UPDATE entries
+     SET metadata = metadata || '{"failure_acked":"true"}'::jsonb,
+         updated_at = NOW()
+     WHERE status = 'failed'
+       AND coalesce(metadata->>'failure_acked', 'false') <> 'true'`
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function updateEntryStatus(
   id: string,
   status: EntryStatus,

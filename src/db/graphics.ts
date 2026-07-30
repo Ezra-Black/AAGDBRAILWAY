@@ -128,6 +128,48 @@ export async function listAllGraphics(): Promise<GraphicOption[]> {
     .filter((g): g is GraphicOption => g !== null);
 }
 
+/** Resolve the placeholder / sample image URL for a graphic code. */
+export async function getGraphicImageUrl(
+  code: string
+): Promise<string | null> {
+  const trimmed = code.trim();
+  if (!trimmed) return null;
+  const result = await query(
+    `SELECT
+       COALESCE(
+         (
+           SELECT a.image_url
+           FROM archive_graphics a
+           WHERE lower(trim(a.code)) = lower(trim($1))
+             AND a.image_url IS NOT NULL
+             AND trim(a.image_url) <> ''
+           LIMIT 1
+         ),
+         (
+           SELECT a.image_url
+           FROM archive_graphics a
+           WHERE lower(trim(a.label)) = lower(trim($1))
+             AND a.image_url IS NOT NULL
+             AND trim(a.image_url) <> ''
+           LIMIT 1
+         ),
+         (
+           SELECT a.image_url
+           FROM archive_graphics a
+           JOIN graphic_options g
+             ON lower(trim(g.code)) = lower(trim($1))
+            AND lower(trim(a.label)) = lower(trim(g.label))
+           WHERE a.image_url IS NOT NULL
+             AND trim(a.image_url) <> ''
+           LIMIT 1
+         )
+       ) AS image_url`,
+    [trimmed]
+  );
+  const url = result.rows[0]?.image_url;
+  return url == null || String(url).trim() === "" ? null : String(url).trim();
+}
+
 export async function graphicCodeExists(code: string): Promise<boolean> {
   const result = await query(
     `SELECT 1 FROM graphic_options
