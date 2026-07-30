@@ -1,4 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
+import multer from "multer";
 import {
   loginAdmin,
   logoutAdmin,
@@ -6,6 +7,7 @@ import {
   setSessionCookie,
   type AdminRequest,
 } from "./auth";
+import { photoUpload, saveGraphicSample, deleteGraphicSample } from "./uploads";
 import {
   archiveCompletedEntries,
   createEntry,
@@ -32,6 +34,7 @@ import {
   listActiveGraphics,
   listAllGraphics,
   listUnacknowledgedVaulted,
+  updateGraphicOptionExpires,
   vaultExpiredGraphics,
   vaultGraphicOption,
 } from "./db/graphics";
@@ -91,6 +94,7 @@ import {
 import { sendContactEmail } from "./email";
 import {
   adminGraphicCreateSchema,
+  adminGraphicTimerSchema,
   adminJoinCheckSchema,
   adminJoinSchema,
   adminLoginSchema,
@@ -403,10 +407,29 @@ apiRouter.patch(
   })
 );
 
-/** POST /admin/graphics — add a graphic option */
+/** POST /admin/graphics — add a graphic option.
+ *  Accepts JSON or multipart/form-data. Optional file field "sample"
+ *  (jpeg/png/webp/gif, max 5 MB) becomes the form/shop preview image.
+ */
 apiRouter.post(
   "/admin/graphics",
   requireAdmin,
+  (req: Request, res: Response, next: NextFunction) => {
+    photoUpload.single("sample")(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({
+          success: false,
+          error: "Sample photo is too large — 5 MB max.",
+        });
+        return;
+      }
+      if (err) {
+        next(err);
+        return;
+      }
+      next();
+    });
+  },
   asyncHandler(async (req, res) => {
     const parsed = adminGraphicCreateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -416,6 +439,20 @@ apiRouter.post(
         details: parsed.error.flatten().fieldErrors,
       });
       return;
+    }
+
+    const file = (req as Request & { file?: { buffer?: Buffer } }).file;
+    let imageUrl: string | null = null;
+    if (file?.buffer?.length) {
+      imageUrl = await saveGraphicSample(file.buffer);
+      if (!imageUrl) {
+        res.status(400).json({
+          success: false,
+          error:
+            "That file doesn’t look like an image. Use JPEG, PNG, WebP, or GIF.",
+        });
+        return;
+      }
     }
 
     const { duration_hours, ...option } = parsed.data;
@@ -429,14 +466,22 @@ apiRouter.post(
         expires_at: expiresAt,
       });
       // Every option ever offered is tracked in the archive for the shop.
-      await archiveGraphicOption(graphic);
+      await archiveGraphicOption({
+        ...graphic,
+        image_url: imageUrl,
+      });
       logger.info("Admin created graphic option", {
         id: graphic.id,
         code: graphic.code,
         expires_at: graphic.expires_at,
+        image_url: imageUrl,
       });
-      res.status(201).json({ success: true, graphic });
+      res.status(201).json({
+        success: true,
+        graphic: { ...graphic, image_url: imageUrl },
+      });
     } catch (err) {
+      await deleteGraphicSample(imageUrl);
       const pgCode =
         err && typeof err === "object" && "code" in err
           ? String((err as { code: unknown }).code)
@@ -450,6 +495,52 @@ apiRouter.post(
       }
       throw err;
     }
+  })
+);
+
+/** PATCH /admin/graphics/:id/timer — set or clear the vault countdown on an open offer.
+ *  Days are counted from now; updating expires_at is what powers newsletter countdowns.
+ */
+apiRouter.patch(
+  "/admin/graphics/:id/timer",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid graphic ID" });
+      return;
+    }
+
+    const parsed = adminGraphicTimerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const expiresAt = parsed.data.clear_timer
+      ? null
+      : new Date(Date.now() + (parsed.data.duration_days as number) * 24 * 60 * 60 * 1000);
+
+    const graphic = await updateGraphicOptionExpires(idCheck.data, expiresAt);
+    if (!graphic) {
+      res.status(404).json({
+        success: false,
+        error: "Graphic not found or already vaulted",
+      });
+      return;
+    }
+
+    logger.info("Admin updated graphic offer timer", {
+      id: graphic.id,
+      code: graphic.code,
+      expires_at: graphic.expires_at,
+      cleared: parsed.data.clear_timer,
+    });
+    res.json({ success: true, graphic });
   })
 );
 

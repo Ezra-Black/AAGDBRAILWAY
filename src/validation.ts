@@ -295,12 +295,15 @@ export const adminGraphicCreateSchema = z
     code: z.string().max(64).optional(),
     sort_order: z.coerce.number().int().min(0).max(100000).optional(),
     // Offer countdown: hours until the graphic is vaulted into the archive.
-    // Omit (or null) for an offer with no deadline.
-    duration_hours: z.coerce
-      .number()
-      .positive("Duration must be positive")
-      .max(24 * 365, "Duration is too long (1 year max)")
-      .optional(),
+    // Omit (or null / empty string from multipart) for an offer with no deadline.
+    duration_hours: z.preprocess(
+      (v) => (v === "" || v === null || v === undefined ? undefined : v),
+      z.coerce
+        .number()
+        .positive("Duration must be positive")
+        .max(24 * 365, "Duration is too long (1 year max)")
+        .optional()
+    ),
   })
   .strict()
   .transform((data) => {
@@ -315,6 +318,32 @@ export const adminGraphicCreateSchema = z
       duration_hours: data.duration_hours ?? null,
     };
   });
+
+/** Set or clear a vault countdown on an existing open offer (days from now). */
+export const adminGraphicTimerSchema = z
+  .object({
+    duration_days: z.coerce
+      .number()
+      .int("Duration must be a whole number of days")
+      .min(1, "Duration must be at least 1 day")
+      .max(365, "Duration is too long (1 year max)")
+      .optional(),
+    clear_timer: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      (data.clear_timer === true && data.duration_days == null) ||
+      (data.clear_timer !== true && data.duration_days != null),
+    {
+      message: "Provide duration_days, or clear_timer: true",
+      path: ["duration_days"],
+    }
+  )
+  .transform((data) => ({
+    duration_days: data.clear_timer ? null : (data.duration_days as number),
+    clear_timer: data.clear_timer === true,
+  }));
 
 /** Admin newsletter post — subject title, author display name, body. */
 export const newsletterPostSchema = z

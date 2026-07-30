@@ -259,6 +259,62 @@
         background: rgba(110, 231, 183, 0.08);
         border: 1px solid rgba(110, 231, 183, 0.3);
       }
+      .offer-timer-edit {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+      }
+      .offer-timer-edit select {
+        padding: 0.2rem 0.5rem;
+        font-size: 0.75rem;
+        font-family: inherit;
+        color: var(--cream, #fff6e4);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 9999px;
+        outline: none;
+        cursor: pointer;
+      }
+      .offer-timer-edit select:focus {
+        border-color: rgba(240, 196, 92, 0.5);
+      }
+      .offer-thumb {
+        width: 2.75rem;
+        height: 2.75rem;
+        border-radius: 0.55rem;
+        object-fit: cover;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        flex-shrink: 0;
+      }
+      .offer-thumb.placeholder {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.65rem;
+        color: rgba(255, 246, 228, 0.35);
+      }
+      #graphic_sample {
+        color: rgba(255, 246, 228, 0.7);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 0.75rem;
+        width: 100%;
+        cursor: pointer;
+      }
+      #graphic_sample::file-selector-button {
+        margin-right: 0.75rem;
+        padding: 0.35rem 0.7rem;
+        border: none;
+        border-radius: 9999px;
+        background: rgba(240, 196, 92, 0.15);
+        color: var(--cream, #fff6e4);
+        font: inherit;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
       /* Notification bell */
       .bell-btn {
         position: relative;
@@ -534,14 +590,14 @@
           <div>
             <h2 class="text-lg font-semibold text-cream">Graphic options</h2>
             <p class="mt-1 text-xs text-cream/45">
-              Add or remove options on the public form. Each new option becomes a
-              countdown offer card on the newsletter page — when its timer runs out
-              it’s auto-vaulted into the archive shop.
+              Add or remove options on the public form. Set or adjust a timer (in days)
+              on any open offer — it shows as a live countdown on the newsletter page,
+              and when it hits zero the offer is auto-vaulted into the archive shop.
             </p>
           </div>
         </div>
 
-        <form id="graphic-form" class="mb-4 grid gap-3 sm:grid-cols-[1.2fr_0.85fr_1fr_auto]">
+        <form id="graphic-form" class="mb-4 grid gap-3 sm:grid-cols-[1.1fr_0.75fr_0.95fr_1.1fr_auto]" enctype="multipart/form-data">
           <div class="field">
             <label for="graphic_label">Label</label>
             <input
@@ -590,6 +646,27 @@
               <option value="336">14 days</option>
               <option value="720">30 days</option>
             </select>
+          </div>
+          <div class="field">
+            <label for="graphic_sample">
+              Sample photo
+              <span class="help-tip" tabindex="0" role="button" aria-label="What is the sample photo for?" style="margin-left:0.25rem">
+                ?
+                <span class="help-bubble" role="tooltip">
+                  Preview shown on the request form and in the archive shop.
+                  JPEG, PNG, WebP, or GIF — 5 MB max. Optional, but without it
+                  visitors won’t see artwork for this graphic.
+                </span>
+              </span>
+            </label>
+            <input
+              id="graphic_sample"
+              name="sample"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+              style="padding:0.45rem 0.6rem;font-size:0.8rem"
+            />
+            <p id="graphic-sample-name" class="mt-1 hidden text-xs text-cream/40"></p>
           </div>
           <div class="flex items-end">
             <button
@@ -1001,6 +1078,71 @@
         return '<span class="offer-chip no-timer">No timer</span>';
       }
 
+      function offerTimerControls(g) {
+        if (g.vaulted_at) return "";
+        return (
+          '<span class="offer-timer-edit">' +
+          '<select data-timer-days="' +
+          escapeAttr(g.id) +
+          '" aria-label="Timer days for ' +
+          escapeAttr(g.label) +
+          '" title="Days until this offer vaults">' +
+          '<option value="1">1 day</option>' +
+          '<option value="2">2 days</option>' +
+          '<option value="3">3 days</option>' +
+          '<option value="7" selected>7 days</option>' +
+          '<option value="14">14 days</option>' +
+          '<option value="30">30 days</option>' +
+          "</select>" +
+          '<button type="button" data-set-timer="' +
+          escapeAttr(g.id) +
+          '" class="archive-btn" title="Set or replace the newsletter countdown from today">' +
+          (g.expires_at ? "Update timer" : "Set timer") +
+          "</button>" +
+          (g.expires_at
+            ? '<button type="button" data-clear-timer="' +
+              escapeAttr(g.id) +
+              '" class="archive-btn" title="Remove the countdown — offer stays open">' +
+              "Clear" +
+              "</button>"
+            : "") +
+          "</span>"
+        );
+      }
+
+      async function patchGraphicTimer(id, body, buttonEl) {
+        if (buttonEl) buttonEl.disabled = true;
+        errorEl.classList.add("hidden");
+        try {
+          const res = await fetch("/admin/graphics/" + id + "/timer", {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const payload = await res.json();
+          if (!res.ok || !payload.success) {
+            errorEl.textContent =
+              payload.error ||
+              (payload.details
+                ? Object.values(payload.details).flat().join(" ")
+                : "Could not update timer");
+            errorEl.classList.remove("hidden");
+            return;
+          }
+          await loadGraphics();
+        } catch {
+          errorEl.textContent = "Network error updating timer";
+          errorEl.classList.remove("hidden");
+        } finally {
+          if (buttonEl) buttonEl.disabled = false;
+        }
+      }
+
       async function loadGraphics() {
         const res = await fetch("/admin/graphics", { credentials: "include" });
         if (res.status === 401) {
@@ -1027,7 +1169,14 @@
           const row = document.createElement("div");
           row.className =
             "flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm";
+          const thumb = g.image_url
+            ? '<img class="offer-thumb" src="' +
+              escapeAttr(g.image_url) +
+              '" alt="" loading="lazy" />'
+            : '<span class="offer-thumb placeholder" title="No sample photo">—</span>';
           row.innerHTML =
+            '<div class="flex min-w-0 items-center gap-3">' +
+            thumb +
             '<div class="min-w-0">' +
             '<p class="font-medium text-cream' +
             (g.vaulted_at ? " opacity-60" : "") +
@@ -1038,8 +1187,10 @@
             escapeHtml(g.code) +
             "</p>" +
             "</div>" +
+            "</div>" +
             '<div class="flex flex-wrap items-center gap-2">' +
             offerChip(g) +
+            offerTimerControls(g) +
             (g.vaulted_at
               ? ""
               : '<button type="button" data-vault-graphic="' +
@@ -1059,6 +1210,33 @@
         tickGraphicChips();
         if (graphicsTickInterval) clearInterval(graphicsTickInterval);
         graphicsTickInterval = setInterval(tickGraphicChips, 1000);
+
+        graphicsList.querySelectorAll("[data-set-timer]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-set-timer");
+            if (!id) return;
+            const select = graphicsList.querySelector(
+              'select[data-timer-days="' + id + '"]'
+            );
+            const days = select ? Number(select.value) : 0;
+            if (!days) return;
+            await patchGraphicTimer(id, { duration_days: days }, btn);
+          });
+        });
+
+        graphicsList.querySelectorAll("[data-clear-timer]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-clear-timer");
+            if (!id) return;
+            if (
+              !confirm(
+                "Clear this offer’s timer? It stays open with no newsletter countdown."
+              )
+            )
+              return;
+            await patchGraphicTimer(id, { clear_timer: true }, btn);
+          });
+        });
 
         graphicsList.querySelectorAll("[data-vault-graphic]").forEach((btn) => {
           btn.addEventListener("click", async () => {
@@ -1126,6 +1304,22 @@
         });
       }
 
+      const graphicSampleInput = document.getElementById("graphic_sample");
+      const graphicSampleName = document.getElementById("graphic-sample-name");
+      if (graphicSampleInput && graphicSampleName) {
+        graphicSampleInput.addEventListener("change", () => {
+          const file = graphicSampleInput.files && graphicSampleInput.files[0];
+          if (!file) {
+            graphicSampleName.textContent = "";
+            graphicSampleName.classList.add("hidden");
+            return;
+          }
+          graphicSampleName.textContent =
+            file.name + " · " + Math.max(1, Math.round(file.size / 1024)) + " KB";
+          graphicSampleName.classList.remove("hidden");
+        });
+      }
+
       graphicForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         errorEl.classList.add("hidden");
@@ -1135,17 +1329,22 @@
         const label = document.getElementById("graphic_label").value.trim();
         const code = document.getElementById("graphic_code").value.trim();
         const duration = document.getElementById("graphic_duration").value;
+        const sampleFile =
+          graphicSampleInput && graphicSampleInput.files
+            ? graphicSampleInput.files[0]
+            : null;
+
+        const body = new FormData();
+        body.append("label", label);
+        if (code) body.append("code", code);
+        if (duration) body.append("duration_hours", duration);
+        if (sampleFile) body.append("sample", sampleFile);
 
         try {
           const res = await fetch("/admin/graphics", {
             method: "POST",
             credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              label,
-              code: code || undefined,
-              duration_hours: duration ? Number(duration) : undefined,
-            }),
+            body,
           });
           if (res.status === 401) {
             window.location.href = "/admin/login";
@@ -1160,6 +1359,10 @@
             return;
           }
           graphicForm.reset();
+          if (graphicSampleName) {
+            graphicSampleName.textContent = "";
+            graphicSampleName.classList.add("hidden");
+          }
           await loadGraphics();
         } catch {
           errorEl.textContent = "Network error adding graphic";

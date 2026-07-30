@@ -88,13 +88,39 @@ export async function listActiveGraphics(): Promise<GraphicOption[]> {
     .filter((g): g is GraphicOption => g !== null);
 }
 
-/** Admin list — every graphic option, including vaulted ones. */
+/** Admin list — every graphic option, including vaulted ones.
+ *  image_url comes from archive_graphics when a matching sample exists. */
 export async function listAllGraphics(): Promise<GraphicOption[]> {
   const result = await query(
-    `SELECT id, code, label, active, sort_order, expires_at, vaulted_at
-     FROM graphic_options
-     ORDER BY (vaulted_at IS NOT NULL) ASC,
-              sort_order ASC NULLS LAST, label ASC NULLS LAST`
+    `SELECT
+       g.id,
+       g.code,
+       g.label,
+       g.active,
+       g.sort_order,
+       g.expires_at,
+       g.vaulted_at,
+       COALESCE(
+         (
+           SELECT a.image_url
+           FROM archive_graphics a
+           WHERE lower(trim(a.code)) = lower(trim(g.code))
+             AND a.image_url IS NOT NULL
+             AND trim(a.image_url) <> ''
+           LIMIT 1
+         ),
+         (
+           SELECT a.image_url
+           FROM archive_graphics a
+           WHERE lower(trim(a.label)) = lower(trim(g.label))
+             AND a.image_url IS NOT NULL
+             AND trim(a.image_url) <> ''
+           LIMIT 1
+         )
+       ) AS image_url
+     FROM graphic_options g
+     ORDER BY (g.vaulted_at IS NOT NULL) ASC,
+              g.sort_order ASC NULLS LAST, g.label ASC NULLS LAST`
   );
 
   return result.rows
@@ -176,6 +202,23 @@ export async function vaultExpiredGraphics(): Promise<number> {
        AND expires_at <= NOW()`
   );
   return result.rowCount ?? 0;
+}
+
+/** Set or clear the vault countdown on an open (unvaulted) offer. */
+export async function updateGraphicOptionExpires(
+  id: string,
+  expiresAt: Date | null
+): Promise<GraphicOption | null> {
+  const result = await query(
+    `UPDATE graphic_options
+     SET expires_at = $2
+     WHERE id = $1
+       AND vaulted_at IS NULL
+     RETURNING id, code, label, active, sort_order, expires_at, vaulted_at`,
+    [id, expiresAt]
+  );
+  if (!result.rows[0]) return null;
+  return mapGraphic(result.rows[0] as Record<string, unknown>);
 }
 
 /** Admin action: vault an offer immediately, before its timer runs out. */

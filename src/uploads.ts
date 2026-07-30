@@ -27,8 +27,8 @@ export function uploadDir(): string {
 }
 
 export function ensureUploadDir(): void {
-  const dir = path.join(uploadDir(), "avatars");
-  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(path.join(uploadDir(), "avatars"), { recursive: true });
+  fs.mkdirSync(path.join(uploadDir(), "graphics"), { recursive: true });
 }
 
 export const photoUpload = multer({
@@ -102,5 +102,39 @@ export async function deleteProfilePhoto(urlPath: string | null): Promise<void> 
   } catch (err) {
     // Already gone (e.g. ephemeral disk after redeploy) — not an error.
     logger.info("Old profile photo not removed", { error: String(err) });
+  }
+}
+
+/**
+ * Persist a sample graphic for the request form / shop preview.
+ * Returns the public URL path or null when the file isn't a valid image.
+ */
+export async function saveGraphicSample(
+  buffer: Buffer
+): Promise<string | null> {
+  const kind = detectImageKind(buffer);
+  if (!kind) return null;
+
+  ensureUploadDir();
+  const name = `${crypto.randomBytes(16).toString("hex")}.${kind.ext}`;
+  const filePath = path.join(uploadDir(), "graphics", name);
+  await fs.promises.writeFile(filePath, buffer);
+  return `/uploads/graphics/${name}`;
+}
+
+/** Remove a previously stored graphic sample. Ignores paths outside our dir. */
+export async function deleteGraphicSample(
+  urlPath: string | null
+): Promise<void> {
+  if (!urlPath || !urlPath.startsWith("/uploads/graphics/")) return;
+
+  const name = path.basename(urlPath);
+  if (!/^[0-9a-f]+\.(jpg|png|webp|gif)$/i.test(name)) return;
+
+  const filePath = path.join(uploadDir(), "graphics", name);
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (err) {
+    logger.info("Old graphic sample not removed", { error: String(err) });
   }
 }

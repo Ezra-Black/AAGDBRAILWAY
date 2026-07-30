@@ -84,17 +84,28 @@ export async function getArchiveGraphicByCode(
   };
 }
 
-/** Record a graphic option in the archive forever (idempotent). */
+/** Record a graphic option in the archive forever (idempotent).
+ *  When image_url is provided, it is written (or replaced) on the archive row.
+ */
 export async function archiveGraphicOption(input: {
   code: string;
   label: string;
   sort_order?: number;
+  image_url?: string | null;
 }): Promise<void> {
+  const imageUrl =
+    input.image_url == null || String(input.image_url).trim() === ""
+      ? null
+      : String(input.image_url).trim();
+
   await query(
-    `INSERT INTO archive_graphics (code, label, sort_order)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (code) DO NOTHING`,
-    [input.code, input.label, input.sort_order ?? 0]
+    `INSERT INTO archive_graphics (code, label, image_url, sort_order)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (code) DO UPDATE
+       SET label = EXCLUDED.label,
+           image_url = COALESCE(EXCLUDED.image_url, archive_graphics.image_url),
+           sort_order = EXCLUDED.sort_order`,
+    [input.code, input.label, imageUrl, input.sort_order ?? 0]
   );
 }
 
