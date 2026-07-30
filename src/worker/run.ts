@@ -15,6 +15,7 @@ import path from "path";
 import {
   claimNextPending,
   findDeliveredDuplicate,
+  reclaimStuckProcessing,
   updateEntryStatus,
   type Entry,
 } from "../db/entries";
@@ -25,7 +26,10 @@ import {
 } from "../email";
 import { logger } from "../logger";
 import { editAngelGraphic } from "../xai/imagine";
-import { loadPlaceholderDataUri, safeAngelFilename } from "./placeholders";
+import {
+  resolvePlaceholderForXai,
+  safeAngelFilename,
+} from "./placeholders";
 
 const POLL_SECONDS = Math.max(
   2,
@@ -106,6 +110,10 @@ async function processEntry(entry: Entry): Promise<void> {
     return;
   }
 
+  logger.info("Resolving placeholder image", {
+    id: entry.id,
+    graphic_code: entry.graphic_code,
+  });
   const imageUrl = await getGraphicImageUrl(entry.graphic_code);
   if (!imageUrl) {
     await failEntry(
@@ -115,14 +123,23 @@ async function processEntry(entry: Entry): Promise<void> {
     return;
   }
 
-  const dataUri = await loadPlaceholderDataUri(
+  const placeholder = await resolvePlaceholderForXai(
     imageUrl,
     process.env.PUBLIC_BASE_URL
   );
+  logger.info("Placeholder ready for xAI", {
+    id: entry.id,
+    kind: placeholder.kind,
+    image_url: imageUrl,
+  });
 
   const edited = await editAngelGraphic({
     angelName: entry.angel_name,
-    imageDataUri: dataUri,
+    imageSource: placeholder.source,
+  });
+  logger.info("xAI edit complete", {
+    id: entry.id,
+    bytes: edited.buffer.length,
   });
 
   const storedPath = await saveGenerated(
@@ -132,6 +149,7 @@ async function processEntry(entry: Entry): Promise<void> {
   );
 
   const filename = safeAngelFilename(entry.angel_name);
+  logger.info("Sending delivery email", { id: entry.id, to: email });
   const sent = await sendGraphicDeliveryEmail({
     to: email,
     angelName: entry.angel_name,
@@ -166,6 +184,11 @@ async function processEntry(entry: Entry): Promise<void> {
 }
 
 async function tick(): Promise<void> {
+  const reclaimed = await reclaimStuckProcessing(8);
+  if (reclaimed > 0) {
+    logger.warn("Reclaimed stuck processing entries", { count: reclaimed });
+  }
+
   const entry = await claimNextPending();
   if (!entry) return;
 

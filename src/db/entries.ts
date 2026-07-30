@@ -351,6 +351,30 @@ export async function listPending(limit = 50): Promise<Entry[]> {
 }
 
 /**
+ * Re-queue entries stuck in processing (crashed / timed-out worker).
+ * Returns how many rows were moved back to pending.
+ */
+export async function reclaimStuckProcessing(
+  olderThanMinutes = 10
+): Promise<number> {
+  const minutes = Math.max(2, olderThanMinutes);
+  const result = await query(
+    `UPDATE entries
+     SET status = 'pending',
+         updated_at = NOW(),
+         metadata = metadata || jsonb_build_object(
+           'reclaimed_at', NOW()::text,
+           'reclaim_reason', 'stuck_processing'
+         )
+     WHERE status = 'processing'
+       AND archived_at IS NULL
+       AND updated_at < NOW() - ($1::text || ' minutes')::interval`,
+    [String(minutes)]
+  );
+  return result.rowCount ?? 0;
+}
+
+/**
  * Atomically claim the oldest pending entry for the graphic worker.
  * Returns null when the queue is empty.
  */
