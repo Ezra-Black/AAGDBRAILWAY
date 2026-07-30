@@ -91,6 +91,7 @@ import {
 } from "./db/shop";
 import {
   createReview,
+  deleteReview,
   listApprovedReviews,
   listReviewsForAdmin,
   setReviewStatus,
@@ -1421,7 +1422,7 @@ apiRouter.get(
   })
 );
 
-/** PATCH /admin/reviews/:id — approve or reject. */
+/** PATCH /admin/reviews/:id — set status (pending / approved / rejected). */
 apiRouter.patch(
   "/admin/reviews/:id",
   requireAdmin,
@@ -1457,6 +1458,29 @@ apiRouter.patch(
       admin_id: req.admin!.id,
     });
     res.json({ success: true, review: updated });
+  })
+);
+
+/** DELETE /admin/reviews/:id — permanently remove a review. */
+apiRouter.delete(
+  "/admin/reviews/:id",
+  requireAdmin,
+  asyncHandler(async (req: AdminRequest, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid review id" });
+      return;
+    }
+    const ok = await deleteReview(idCheck.data);
+    if (!ok) {
+      res.status(404).json({ success: false, error: "Review not found" });
+      return;
+    }
+    logger.info("Review deleted", {
+      review_id: idCheck.data,
+      admin_id: req.admin!.id,
+    });
+    res.json({ success: true });
   })
 );
 

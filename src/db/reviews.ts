@@ -158,7 +158,7 @@ export async function getReviewById(id: string): Promise<Review | null> {
 
 export async function setReviewStatus(input: {
   id: string;
-  status: "approved" | "rejected";
+  status: ReviewStatus;
   admin_id: string;
 }): Promise<Review | null> {
   const result = await query(
@@ -171,4 +171,9 @@ export async function setReviewStatus(input: {
     [input.id, input.status, input.admin_id]
   );
   return result.rows[0] ? mapReview(result.rows[0]) : null;
+}
+
+export async function deleteReview(id: string): Promise<boolean> {
+  const result = await query(`DELETE FROM reviews WHERE id = $1`, [id]);
+  return (result.rowCount ?? 0) > 0;
 }

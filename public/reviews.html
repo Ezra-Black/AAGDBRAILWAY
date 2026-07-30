@@ -197,10 +197,12 @@
             return;
           }
           empty.hidden = true;
+          // Don't use .reveal here — site.js only observes reveals on first
+          // paint, so dynamically injected cards would stay opacity:0.
           list.innerHTML = reviews
             .map(
               (r) =>
-                '<article class="review-card reveal">' +
+                '<article class="review-card">' +
                 '<div class="flex items-center gap-3">' +
                 avatarHtml(r) +
                 "<div>" +

@@ -442,10 +442,10 @@ export const createReviewSchema = z
     }
   });
 
-/** PATCH /admin/reviews/:id — approve or reject. */
+/** PATCH /admin/reviews/:id — set moderation status. */
 export const moderateReviewSchema = z
   .object({
-    status: z.enum(["approved", "rejected"]),
+    status: z.enum(["pending", "approved", "rejected"]),
   })
   .strict();
 
