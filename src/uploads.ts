@@ -29,6 +29,8 @@ export function uploadDir(): string {
 export function ensureUploadDir(): void {
   fs.mkdirSync(path.join(uploadDir(), "avatars"), { recursive: true });
   fs.mkdirSync(path.join(uploadDir(), "graphics"), { recursive: true });
+  fs.mkdirSync(path.join(uploadDir(), "customer"), { recursive: true });
+  fs.mkdirSync(path.join(uploadDir(), "generated"), { recursive: true });
 }
 
 export const photoUpload = multer({
@@ -137,4 +139,34 @@ export async function deleteGraphicSample(
   } catch (err) {
     logger.info("Old graphic sample not removed", { error: String(err) });
   }
+}
+
+/** JPG/PNG only — used for customer request-form uploads. */
+export function detectJpegOrPng(buffer: Buffer): ImageKind | null {
+  const kind = detectImageKind(buffer);
+  if (!kind) return null;
+  if (kind.ext !== "jpg" && kind.ext !== "png") return null;
+  return kind;
+}
+
+/**
+ * Persist a customer-uploaded photo for a request (separate from generated art).
+ * Returns the public path under /uploads/customer/ or null if not jpg/png.
+ */
+export async function saveCustomerPhoto(
+  entryId: string,
+  buffer: Buffer
+): Promise<{ path: string; contentType: string; ext: string } | null> {
+  const kind = detectJpegOrPng(buffer);
+  if (!kind) return null;
+
+  ensureUploadDir();
+  const name = `${entryId}-${crypto.randomBytes(8).toString("hex")}.${kind.ext}`;
+  const filePath = path.join(uploadDir(), "customer", name);
+  await fs.promises.writeFile(filePath, buffer);
+  return {
+    path: `/uploads/customer/${name}`,
+    contentType: kind.mime,
+    ext: kind.ext,
+  };
 }

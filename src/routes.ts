@@ -7,7 +7,13 @@ import {
   setSessionCookie,
   type AdminRequest,
 } from "./auth";
-import { photoUpload, saveGraphicSample, deleteGraphicSample } from "./uploads";
+import {
+  photoUpload,
+  saveGraphicSample,
+  deleteGraphicSample,
+  saveCustomerPhoto,
+} from "./uploads";
+import { getEntryPhoto, upsertEntryPhoto } from "./db/entryPhotos";
 import {
   ackFailedPipelineAlerts,
   archiveCompletedEntries,
@@ -33,10 +39,12 @@ import {
   createGraphicOption,
   deleteGraphicOption,
   graphicCodeExists,
+  graphicRequiresPhoto,
   listActiveGraphics,
   listAllGraphics,
   listUnacknowledgedVaulted,
   updateGraphicOptionExpires,
+  updateGraphicRequiresPhoto,
   vaultExpiredGraphics,
   vaultGraphicOption,
 } from "./db/graphics";
@@ -104,6 +112,7 @@ import {
 import { sendContactEmail } from "./email";
 import {
   adminGraphicCreateSchema,
+  adminGraphicRequiresPhotoSchema,
   adminGraphicTimerSchema,
   adminJoinCheckSchema,
   adminJoinSchema,
@@ -497,7 +506,7 @@ apiRouter.post(
       }
     }
 
-    const { duration_hours, ...option } = parsed.data;
+    const { duration_hours, requires_photo, ...option } = parsed.data;
     const expiresAt = duration_hours
       ? new Date(Date.now() + duration_hours * 60 * 60 * 1000)
       : null;
@@ -506,6 +515,7 @@ apiRouter.post(
       const graphic = await createGraphicOption({
         ...option,
         expires_at: expiresAt,
+        requires_photo,
       });
       // Every option ever offered is tracked in the archive for the shop.
       await archiveGraphicOption({
@@ -516,6 +526,7 @@ apiRouter.post(
         id: graphic.id,
         code: graphic.code,
         expires_at: graphic.expires_at,
+        requires_photo: graphic.requires_photo,
         image_url: imageUrl,
       });
       res.status(201).json({
@@ -537,6 +548,41 @@ apiRouter.post(
       }
       throw err;
     }
+  })
+);
+
+/** PATCH /admin/graphics/:id/requires-photo — toggle customer photo requirement */
+apiRouter.patch(
+  "/admin/graphics/:id/requires-photo",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid graphic ID" });
+      return;
+    }
+    const parsed = adminGraphicRequiresPhotoSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+    const graphic = await updateGraphicRequiresPhoto(
+      idCheck.data,
+      parsed.data.requires_photo
+    );
+    if (!graphic) {
+      res.status(404).json({ success: false, error: "Graphic not found" });
+      return;
+    }
+    logger.info("Admin set graphic requires_photo", {
+      id: graphic.id,
+      requires_photo: graphic.requires_photo,
+    });
+    res.json({ success: true, graphic });
   })
 );
 
@@ -650,10 +696,34 @@ apiRouter.get(
   })
 );
 
-/** POST /submit — save request with email + chosen graphic */
+/** POST /submit — save request with email + chosen graphic.
+ *  Accepts JSON or multipart/form-data. Field "customer_photo" (jpg/png)
+ *  is required when the selected graphic has requires_photo enabled.
+ */
 apiRouter.post(
   "/submit",
   submitLimiter,
+  (req: Request, res: Response, next: NextFunction) => {
+    const contentType = String(req.headers["content-type"] || "");
+    if (!contentType.includes("multipart/form-data")) {
+      next();
+      return;
+    }
+    photoUpload.single("customer_photo")(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({
+          success: false,
+          error: "Photo is too large — 5 MB max. Use JPG or PNG.",
+        });
+        return;
+      }
+      if (err) {
+        next(err);
+        return;
+      }
+      next();
+    });
+  },
   rejectHoneypot,
   attachUserIfPresent,
   asyncHandler(async (req: UserRequest, res) => {
@@ -675,6 +745,23 @@ apiRouter.post(
         success: false,
         error: "Unknown or inactive graphic code",
         details: { graphic_code: ["Select a valid graphic from the list"] },
+      });
+      return;
+    }
+
+    const needsPhoto = await graphicRequiresPhoto(graphic_code);
+    const file = (
+      req as Request & { file?: { buffer?: Buffer; originalname?: string } }
+    ).file;
+    if (needsPhoto && !file?.buffer?.length) {
+      res.status(400).json({
+        success: false,
+        error: "This graphic requires a photo upload (JPG or PNG).",
+        details: {
+          customer_photo: [
+            "Attach a JPG or PNG photo to complete this request",
+          ],
+        },
       });
       return;
     }
@@ -703,21 +790,54 @@ apiRouter.post(
 
     const existing = await getEntryByAngelName(angel_name);
 
+    let savedCustomer:
+      | { path: string; contentType: string; ext: string }
+      | null = null;
+
     const entry = await createEntry({
       real_name,
       angel_name,
       email,
       graphic_code,
-      // Link the request to the logged-in account so it shows up in the
-      // profile portal's activity feed.
       user_id: req.user?.id ?? null,
     });
 
+    if (file?.buffer?.length) {
+      savedCustomer = await saveCustomerPhoto(entry.id, file.buffer);
+      if (!savedCustomer) {
+        await updateEntryStatus(entry.id, "failed", {
+          error: "Invalid customer photo — JPG or PNG only",
+          failure_acked: "true",
+        });
+        res.status(400).json({
+          success: false,
+          error:
+            "That file doesn’t look like a JPG or PNG. Please upload one of those.",
+        });
+        return;
+      }
+      await upsertEntryPhoto({
+        entryId: entry.id,
+        kind: "customer",
+        contentType: savedCustomer.contentType,
+        originalFilename:
+          file.originalname || `customer.${savedCustomer.ext}`,
+        bytes: file.buffer,
+      });
+      await updateEntryStatus(entry.id, entry.status, {
+        customer_photo_path: savedCustomer.path,
+        customer_photo_uploaded_at: new Date().toISOString(),
+      });
+    }
+
+    const refreshed = (await getEntryById(entry.id)) || entry;
+
     logger.info("Entry created", {
-      id: entry.id,
-      angel_name: entry.angel_name,
-      graphic_code: entry.graphic_code,
-      status: entry.status,
+      id: refreshed.id,
+      angel_name: refreshed.angel_name,
+      graphic_code: refreshed.graphic_code,
+      status: refreshed.status,
+      has_customer_photo: Boolean(savedCustomer),
       name_already_claimed: Boolean(existing),
     });
 
@@ -727,7 +847,7 @@ apiRouter.post(
         duplicate: true,
         message:
           "Submitted! That angel name is already in our database. We’ll send you an update soon — please check your email.",
-        entry,
+        entry: refreshed,
       });
       return;
     }
@@ -737,8 +857,66 @@ apiRouter.post(
       duplicate: false,
       message:
         "Submitted! You’re on the list — keep an eye on your email for an update.",
-      entry,
+      entry: refreshed,
     });
+  })
+);
+
+/**
+ * GET /admin/entries/:id/photo/:kind — download generated or customer photo.
+ * kind = generated | customer
+ */
+apiRouter.get(
+  "/admin/entries/:id/photo/:kind",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid entry ID" });
+      return;
+    }
+    const kindRaw = String(req.params.kind || "").trim();
+    if (kindRaw !== "generated" && kindRaw !== "customer") {
+      res.status(400).json({
+        success: false,
+        error: "kind must be generated or customer",
+      });
+      return;
+    }
+
+    const entry = await getEntryById(idCheck.data);
+    if (!entry) {
+      res.status(404).json({ success: false, error: "Entry not found" });
+      return;
+    }
+
+    const photo = await getEntryPhoto(idCheck.data, kindRaw);
+    if (!photo) {
+      res.status(404).json({ success: false, error: "Photo not found" });
+      return;
+    }
+
+    const ext = photo.content_type.includes("png")
+      ? "png"
+      : photo.content_type.includes("webp")
+        ? "webp"
+        : "jpg";
+    const fallback =
+      kindRaw === "generated"
+        ? `${entry.angel_name || "angel"}-generated.${ext}`
+        : `${entry.angel_name || "angel"}-customer.${ext}`;
+    const filename = (photo.original_filename || fallback).replace(
+      /[^\w.\- ()]+/g,
+      "_"
+    );
+
+    res.setHeader("Content-Type", photo.content_type);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${filename}"`
+    );
+    res.setHeader("Content-Length", String(photo.bytes.length));
+    res.send(photo.bytes);
   })
 );
 

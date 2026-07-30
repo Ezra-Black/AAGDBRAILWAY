@@ -82,6 +82,28 @@ export async function migrate(): Promise<void> {
       ON graphic_options (expires_at)
       WHERE vaulted_at IS NULL;
 
+    -- When true, the request form requires a customer jpg/png upload.
+    ALTER TABLE graphic_options
+      ADD COLUMN IF NOT EXISTS requires_photo BOOLEAN NOT NULL DEFAULT false;
+
+    -- Separate photo blobs: generated (worker) vs customer (form upload).
+    -- Stored in Postgres so the web admin can download even when the worker
+    -- runs as a different Railway service / volume.
+    CREATE TABLE IF NOT EXISTS entry_photos (
+      id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      entry_id           UUID NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+      kind               TEXT NOT NULL
+                         CHECK (kind IN ('generated', 'customer')),
+      content_type       TEXT NOT NULL,
+      original_filename  TEXT,
+      bytes              BYTEA NOT NULL,
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (entry_id, kind)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_entry_photos_entry_id
+      ON entry_photos (entry_id);
+
     -- Newsletter: blog-style posts written by admins for the public page.
     CREATE TABLE IF NOT EXISTS newsletter_posts (
       id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),

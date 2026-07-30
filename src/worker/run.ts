@@ -28,6 +28,7 @@ import {
 } from "../email";
 import { logger } from "../logger";
 import { editAngelGraphic } from "../xai/imagine";
+import { upsertEntryPhoto } from "../db/entryPhotos";
 import {
   resolvePlaceholderForXai,
   safeAngelFilename,
@@ -169,8 +170,28 @@ async function processEntry(entry: Entry): Promise<void> {
     edited.buffer,
     edited.contentType
   );
-
   const filename = safeAngelFilename(entry.angel_name);
+
+  // Persist in Postgres so admins can download from the web service
+  // even when the worker uses a separate Railway volume.
+  await upsertEntryPhoto({
+    entryId: entry.id,
+    kind: "generated",
+    contentType: edited.contentType,
+    originalFilename: filename,
+    bytes: edited.buffer,
+  });
+  await updateEntryStatus(entry.id, "processing", {
+    photo_path: storedPath,
+    photo_url: edited.url || storedPath,
+    placeholder_url: imageUrl,
+    generated_at: new Date().toISOString(),
+  });
+  logger.info("Generated graphic stored in DB", {
+    id: entry.id,
+    bytes: edited.buffer.length,
+  });
+
   logger.info("Sending delivery email", { id: entry.id, to: email });
   const sent = await sendGraphicDeliveryEmail({
     to: email,
@@ -183,7 +204,7 @@ async function processEntry(entry: Entry): Promise<void> {
   if (!sent) {
     await failEntry(
       entry,
-      "Graphic was generated but SMTP delivery failed (check Resend/SMTP env)"
+      "Graphic was generated but SMTP delivery failed (check Resend/SMTP env). Download from admin Requests."
     );
     return;
   }

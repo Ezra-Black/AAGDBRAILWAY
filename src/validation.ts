@@ -304,6 +304,16 @@ export const adminGraphicCreateSchema = z
         .max(24 * 365, "Duration is too long (1 year max)")
         .optional()
     ),
+    // Multipart checkboxes arrive as "true" / "on" / "1".
+    requires_photo: z.preprocess((v) => {
+      if (v === true || v === "true" || v === "on" || v === "1" || v === 1) {
+        return true;
+      }
+      if (v === false || v === "false" || v === "0" || v === 0 || v === "" || v == null) {
+        return false;
+      }
+      return v;
+    }, z.boolean().optional()),
   })
   .strict()
   .transform((data) => {
@@ -316,8 +326,16 @@ export const adminGraphicCreateSchema = z
       code: code || `graphic-${Date.now().toString(36)}`,
       sort_order: data.sort_order ?? 0,
       duration_hours: data.duration_hours ?? null,
+      requires_photo: data.requires_photo === true,
     };
   });
+
+/** Toggle customer-photo requirement on an existing graphic option. */
+export const adminGraphicRequiresPhotoSchema = z
+  .object({
+    requires_photo: z.boolean(),
+  })
+  .strict();
 
 /** Set or clear a vault countdown on an existing open offer (days from now). */
 export const adminGraphicTimerSchema = z

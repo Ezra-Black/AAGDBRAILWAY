@@ -76,6 +76,8 @@ export interface AdminEntryListItem {
   email: string | null;
   status: EntryStatus;
   created_at: Date;
+  has_generated_photo: boolean;
+  has_customer_photo: boolean;
 }
 
 export interface AdminAngelGroup {
@@ -91,6 +93,12 @@ export interface AdminAngelGroup {
   created_at: Date;
   /** Most recent submission for this angel name. */
   latest_at: Date;
+  /** Per-entry photo availability for admin download links. */
+  photos: {
+    entry_id: string;
+    has_generated_photo: boolean;
+    has_customer_photo: boolean;
+  }[];
 }
 
 /** Raw admin rows (one per submission). */
@@ -121,7 +129,15 @@ export async function listEntriesForAdmin(
        e.real_name,
        e.email,
        e.status,
-       e.created_at
+       e.created_at,
+       EXISTS (
+         SELECT 1 FROM entry_photos p
+         WHERE p.entry_id = e.id AND p.kind = 'generated'
+       ) AS has_generated_photo,
+       EXISTS (
+         SELECT 1 FROM entry_photos p
+         WHERE p.entry_id = e.id AND p.kind = 'customer'
+       ) AS has_customer_photo
      FROM entries e
      LEFT JOIN graphic_options g ON g.code = e.graphic_code
      WHERE ${archivedClause}${searchClause}
@@ -139,6 +155,8 @@ export async function listEntriesForAdmin(
     email: (row.email as string) ?? null,
     status: row.status as EntryStatus,
     created_at: row.created_at as Date,
+    has_generated_photo: Boolean(row.has_generated_photo),
+    has_customer_photo: Boolean(row.has_customer_photo),
   }));
 }
 
@@ -182,11 +200,19 @@ export async function listAngelGroupsForAdmin(
         submission_count: 0,
         created_at: row.created_at,
         latest_at: row.created_at,
+        photos: [],
       };
       groups.set(key, group);
     }
 
     group.entry_ids.push(row.id);
+    if (row.has_generated_photo || row.has_customer_photo) {
+      group.photos.push({
+        entry_id: row.id,
+        has_generated_photo: row.has_generated_photo,
+        has_customer_photo: row.has_customer_photo,
+      });
+    }
     group.submission_count = group.entry_ids.length;
     group.duplicate = group.submission_count > 1;
     if (row.status === "pending" || row.status === "processing") {

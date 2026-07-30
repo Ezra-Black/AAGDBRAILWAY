@@ -43,6 +43,9 @@ Migrations run automatically on app boot.
 | `POST` | `/admin/graphics/vault-alerts/ack` | Dismiss all vault notifications (admin) |
 | `GET` | `/admin/pipeline-alerts` | Unacked graphic-worker failures (admin banner + bell) |
 | `POST` | `/admin/pipeline-alerts/ack` | Dismiss pipeline failure alerts (admin) |
+| `PATCH` | `/admin/graphics/:id/requires-photo` | Toggle customer photo requirement on a graphic (admin) |
+| `GET` | `/admin/entries/:id/photo/generated` | Download worker-generated graphic (admin) |
+| `GET` | `/admin/entries/:id/photo/customer` | Download customer form upload (admin) |
 | `PATCH` | `/admin/graphics/:id/vault` | Vault an offer immediately, before its timer ends (admin) |
 | `POST` | `/newsletter/subscribe` | `{ "email" }` → mailing-list opt-in (popup / footer forms) |
 | `POST` | `/contact` | `{ "name", "email", "message" }` → save message + forward to the ProtonMail inbox |

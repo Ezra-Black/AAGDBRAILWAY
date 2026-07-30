@@ -700,6 +700,28 @@
               Add
             </button>
           </div>
+          <div class="field sm:col-span-full">
+            <label class="flex items-start gap-2" style="cursor:pointer">
+              <input
+                id="graphic_requires_photo"
+                name="requires_photo"
+                type="checkbox"
+                value="true"
+                style="margin-top:0.2rem"
+              />
+              <span>
+                Requires photo to complete
+                <span class="help-tip" tabindex="0" role="button" aria-label="What does requires photo mean?" style="margin-left:0.25rem">
+                  ?
+                  <span class="help-bubble" role="tooltip">
+                    When checked, visitors who pick this graphic must upload a
+                    JPG or PNG with their request. That customer photo is stored
+                    separately from the generated angel graphic.
+                  </span>
+                </span>
+              </span>
+            </label>
+          </div>
         </form>
 
         <div id="graphics-list" class="divide-y divide-white/5 rounded-2xl border border-white/10"></div>
@@ -1212,6 +1234,16 @@
             "</div>" +
             '<div class="flex flex-wrap items-center gap-2">' +
             offerChip(g) +
+            (g.requires_photo
+              ? '<span class="offer-chip" title="Request form requires a customer JPG/PNG">Needs photo</span>'
+              : "") +
+            '<button type="button" data-toggle-requires-photo="' +
+            escapeAttr(g.id) +
+            '" data-requires-photo="' +
+            (g.requires_photo ? "1" : "0") +
+            '" class="archive-btn" title="Toggle whether this graphic needs a customer photo">' +
+            (g.requires_photo ? "Photo required ✓" : "Photo optional") +
+            "</button>" +
             offerTimerControls(g) +
             (g.vaulted_at
               ? ""
@@ -1232,6 +1264,43 @@
         tickGraphicChips();
         if (graphicsTickInterval) clearInterval(graphicsTickInterval);
         graphicsTickInterval = setInterval(tickGraphicChips, 1000);
+
+        graphicsList.querySelectorAll("[data-toggle-requires-photo]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-toggle-requires-photo");
+            if (!id) return;
+            const currently = btn.getAttribute("data-requires-photo") === "1";
+            btn.disabled = true;
+            try {
+              const res = await fetch(
+                "/admin/graphics/" + id + "/requires-photo",
+                {
+                  method: "PATCH",
+                  credentials: "include",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ requires_photo: !currently }),
+                }
+              );
+              if (res.status === 401) {
+                window.location.href = "/admin/login";
+                return;
+              }
+              const data = await res.json();
+              if (!res.ok || !data.success) {
+                errorEl.textContent =
+                  data.error || "Could not update photo requirement";
+                errorEl.classList.remove("hidden");
+                return;
+              }
+              await loadGraphics();
+            } catch {
+              errorEl.textContent = "Network error updating photo requirement";
+              errorEl.classList.remove("hidden");
+            } finally {
+              btn.disabled = false;
+            }
+          });
+        });
 
         graphicsList.querySelectorAll("[data-set-timer]").forEach((btn) => {
           btn.addEventListener("click", async () => {
@@ -1356,10 +1425,14 @@
             ? graphicSampleInput.files[0]
             : null;
 
+        const requiresPhoto = document.getElementById(
+          "graphic_requires_photo"
+        ).checked;
         const body = new FormData();
         body.append("label", label);
         if (code) body.append("code", code);
         if (duration) body.append("duration_hours", duration);
+        body.append("requires_photo", requiresPhoto ? "true" : "false");
         if (sampleFile) body.append("sample", sampleFile);
 
         try {
@@ -1530,6 +1603,35 @@
         );
       }
 
+      /** Download links for generated art vs customer uploads (separate stores). */
+      function renderPhotoLinks(group) {
+        const photos = Array.isArray(group.photos) ? group.photos : [];
+        if (!photos.length) return "";
+        const links = [];
+        for (const p of photos) {
+          if (p.has_generated_photo) {
+            links.push(
+              '<a class="archive-btn" style="text-decoration:none" href="/admin/entries/' +
+                escapeAttr(p.entry_id) +
+                '/photo/generated" download>Generated</a>'
+            );
+          }
+          if (p.has_customer_photo) {
+            links.push(
+              '<a class="archive-btn" style="text-decoration:none" href="/admin/entries/' +
+                escapeAttr(p.entry_id) +
+                '/photo/customer" download>Customer photo</a>'
+            );
+          }
+        }
+        if (!links.length) return "";
+        return (
+          '<div class="mt-2 flex flex-wrap items-center gap-2">' +
+          links.join("") +
+          "</div>"
+        );
+      }
+
       function updateStats(groups) {
         const pending = groups.filter((g) => g.has_pending).length;
         const duplicates = groups.filter((g) => isDuplicate(g)).length;
@@ -1619,6 +1721,7 @@
             renderStatus(group) +
             archiveBtn(group.angel_name) +
             "</div>" +
+            renderPhotoLinks(group) +
             "</div>" +
             '<div class="min-w-0 text-sm text-cream/70">' +
             '<p class="col-header mb-1 sm:hidden">Graphics</p>' +

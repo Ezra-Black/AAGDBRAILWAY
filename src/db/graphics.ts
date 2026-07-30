@@ -8,6 +8,8 @@ export interface GraphicOption {
   sort_order: number;
   expires_at: string | null;
   vaulted_at: string | null;
+  /** When true, request form requires a customer jpg/png upload. */
+  requires_photo: boolean;
   image_url?: string | null;
 }
 
@@ -35,6 +37,8 @@ function mapGraphic(row: Record<string, unknown>): GraphicOption | null {
     sort_order: Number(row.sort_order ?? 0),
     expires_at: toIso(row.expires_at),
     vaulted_at: toIso(row.vaulted_at),
+    requires_photo:
+      row.requires_photo === true || row.requires_photo === "true",
     image_url: image,
   };
 }
@@ -58,6 +62,7 @@ export async function listActiveGraphics(): Promise<GraphicOption[]> {
        g.sort_order,
        g.expires_at,
        g.vaulted_at,
+       g.requires_photo,
        COALESCE(
          (
            SELECT a.image_url
@@ -100,6 +105,7 @@ export async function listAllGraphics(): Promise<GraphicOption[]> {
        g.sort_order,
        g.expires_at,
        g.vaulted_at,
+       g.requires_photo,
        COALESCE(
          (
            SELECT a.image_url
@@ -184,21 +190,46 @@ export async function graphicCodeExists(code: string): Promise<boolean> {
   return result.rowCount !== null && result.rowCount > 0;
 }
 
+/** Whether an open graphic option requires a customer photo upload. */
+export async function graphicRequiresPhoto(code: string): Promise<boolean> {
+  const result = await query(
+    `SELECT requires_photo FROM graphic_options
+     WHERE ${OFFER_OPEN_CLAUSE}
+       AND (
+         lower(trim(code)) = lower(trim($1))
+         OR lower(trim(label)) = lower(trim($1))
+       )
+     LIMIT 1`,
+    [code]
+  );
+  const row = result.rows[0] as { requires_photo?: unknown } | undefined;
+  return row?.requires_photo === true || row?.requires_photo === "true";
+}
+
 export async function createGraphicOption(input: {
   code: string;
   label: string;
   sort_order?: number;
   expires_at?: Date | null;
+  requires_photo?: boolean;
 }): Promise<GraphicOption> {
   const sortOrder = Number.isFinite(input.sort_order)
     ? Number(input.sort_order)
     : 0;
 
   const result = await query(
-    `INSERT INTO graphic_options (code, label, active, sort_order, expires_at)
-     VALUES ($1, $2, true, $3, $4)
-     RETURNING id, code, label, active, sort_order, expires_at, vaulted_at`,
-    [input.code, input.label, sortOrder, input.expires_at ?? null]
+    `INSERT INTO graphic_options
+       (code, label, active, sort_order, expires_at, requires_photo)
+     VALUES ($1, $2, true, $3, $4, $5)
+     RETURNING id, code, label, active, sort_order, expires_at, vaulted_at,
+               requires_photo`,
+    [
+      input.code,
+      input.label,
+      sortOrder,
+      input.expires_at ?? null,
+      input.requires_photo === true,
+    ]
   );
 
   const mapped = mapGraphic(result.rows[0] as Record<string, unknown>);
@@ -218,11 +249,29 @@ export async function deleteGraphicOption(id: string): Promise<boolean> {
 
 export async function getGraphicById(id: string): Promise<GraphicOption | null> {
   const result = await query(
-    `SELECT id, code, label, active, sort_order, expires_at, vaulted_at
+    `SELECT id, code, label, active, sort_order, expires_at, vaulted_at,
+            requires_photo
      FROM graphic_options
      WHERE id = $1
      LIMIT 1`,
     [id]
+  );
+  if (!result.rows[0]) return null;
+  return mapGraphic(result.rows[0] as Record<string, unknown>);
+}
+
+/** Toggle whether a graphic requires a customer photo on the request form. */
+export async function updateGraphicRequiresPhoto(
+  id: string,
+  requiresPhoto: boolean
+): Promise<GraphicOption | null> {
+  const result = await query(
+    `UPDATE graphic_options
+     SET requires_photo = $2
+     WHERE id = $1
+     RETURNING id, code, label, active, sort_order, expires_at, vaulted_at,
+               requires_photo`,
+    [id, requiresPhoto]
   );
   if (!result.rows[0]) return null;
   return mapGraphic(result.rows[0] as Record<string, unknown>);
@@ -256,7 +305,8 @@ export async function updateGraphicOptionExpires(
      SET expires_at = $2
      WHERE id = $1
        AND vaulted_at IS NULL
-     RETURNING id, code, label, active, sort_order, expires_at, vaulted_at`,
+     RETURNING id, code, label, active, sort_order, expires_at, vaulted_at,
+               requires_photo`,
     [id, expiresAt]
   );
   if (!result.rows[0]) return null;
@@ -274,7 +324,8 @@ export async function vaultGraphicOption(
          vault_acknowledged = true
      WHERE id = $1
        AND vaulted_at IS NULL
-     RETURNING id, code, label, active, sort_order, expires_at, vaulted_at`,
+     RETURNING id, code, label, active, sort_order, expires_at, vaulted_at,
+               requires_photo`,
     [id]
   );
   if (!result.rows[0]) return null;
@@ -284,7 +335,8 @@ export async function vaultGraphicOption(
 /** Auto-vaulted offers the admins haven't dismissed yet (notification bell). */
 export async function listUnacknowledgedVaulted(): Promise<GraphicOption[]> {
   const result = await query(
-    `SELECT id, code, label, active, sort_order, expires_at, vaulted_at
+    `SELECT id, code, label, active, sort_order, expires_at, vaulted_at,
+            requires_photo
      FROM graphic_options
      WHERE vaulted_at IS NOT NULL
        AND vault_acknowledged = false
