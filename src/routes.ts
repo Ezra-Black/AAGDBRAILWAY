@@ -76,7 +76,14 @@ import {
   getNewsletterCount,
   subscribeNewsletter,
 } from "./db/stats";
-import { createContactMessage, listContactMessages } from "./db/contact";
+import {
+  contactMessageCounts,
+  createContactMessage,
+  listContactMessages,
+  markAllContactMessagesRead,
+  setContactMessageArchived,
+  setContactMessageRead,
+} from "./db/contact";
 import { getAnalyticsSummary, recordPageView } from "./db/analytics";
 import {
   archiveGraphicOption,
@@ -1707,12 +1714,114 @@ apiRouter.post(
   })
 );
 
-/** GET /admin/contact-messages — inbox for the admin portal. */
+/** GET /admin/contact-messages — inbox for the admin portal.
+ *  Query params: q (search), unread (1/true), archived (1/true).
+ */
 apiRouter.get(
   "/admin/contact-messages",
   requireAdmin,
+  asyncHandler(async (req, res) => {
+    const search =
+      typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+    const unreadOnly = req.query.unread === "1" || req.query.unread === "true";
+    const archived =
+      req.query.archived === "1" || req.query.archived === "true";
+
+    const [messages, counts] = await Promise.all([
+      listContactMessages(200, {
+        search: search || undefined,
+        unreadOnly,
+        archived,
+      }),
+      contactMessageCounts(),
+    ]);
+    res.json({
+      success: true,
+      count: messages.length,
+      archived,
+      totals: counts,
+      messages,
+    });
+  })
+);
+
+/** GET /admin/contact-messages/counts — badge poll for the portal. */
+apiRouter.get(
+  "/admin/contact-messages/counts",
+  requireAdmin,
   asyncHandler(async (_req, res) => {
-    const messages = await listContactMessages(200);
-    res.json({ success: true, count: messages.length, messages });
+    const totals = await contactMessageCounts();
+    res.json({ success: true, totals });
+  })
+);
+
+/** PATCH /admin/contact-messages/:id/read — mark read ↔ unread */
+apiRouter.patch(
+  "/admin/contact-messages/:id/read",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid message ID" });
+      return;
+    }
+    const parsed = z.object({ read: z.boolean() }).strict().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: "read is required" });
+      return;
+    }
+
+    const message = await setContactMessageRead(idCheck.data, parsed.data.read);
+    if (!message) {
+      res.status(404).json({ success: false, error: "Message not found" });
+      return;
+    }
+    res.json({ success: true, message });
+  })
+);
+
+/** PATCH /admin/contact-messages/:id/archive — archive or restore one message */
+apiRouter.patch(
+  "/admin/contact-messages/:id/archive",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid message ID" });
+      return;
+    }
+    const parsed = z
+      .object({ archived: z.boolean() })
+      .strict()
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ success: false, error: "archived is required" });
+      return;
+    }
+
+    const message = await setContactMessageArchived(
+      idCheck.data,
+      parsed.data.archived
+    );
+    if (!message) {
+      res.status(404).json({ success: false, error: "Message not found" });
+      return;
+    }
+    logger.info("Admin toggled contact message archive", {
+      id: idCheck.data,
+      archived: parsed.data.archived,
+    });
+    res.json({ success: true, message });
+  })
+);
+
+/** POST /admin/contact-messages/read-all — mark the whole inbox read */
+apiRouter.post(
+  "/admin/contact-messages/read-all",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const updated = await markAllContactMessagesRead();
+    logger.info("Admin marked contact inbox read", { updated });
+    res.json({ success: true, updated });
   })
 );

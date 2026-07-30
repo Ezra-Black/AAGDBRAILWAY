@@ -243,6 +243,13 @@ export async function migrate(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_contact_messages_created_at
       ON contact_messages (created_at DESC);
 
+    ALTER TABLE contact_messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
+    ALTER TABLE contact_messages ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+
+    CREATE INDEX IF NOT EXISTS idx_contact_messages_unread
+      ON contact_messages (created_at DESC)
+      WHERE read_at IS NULL AND archived_at IS NULL;
+
     CREATE TABLE IF NOT EXISTS facebook_users (
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       fb_user_id    TEXT NOT NULL UNIQUE,
