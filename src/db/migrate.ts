@@ -1,6 +1,6 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { closePool, query } from "./pool";
+import { closePool, query, withTransaction } from "./pool";
 import { logger } from "../logger";
 
 const SEED_ADMIN_EMAIL = "allaudrey22@gmail.com";
@@ -69,7 +69,23 @@ export async function migrate(): Promise<void> {
     --   applied   = the email was handed to SMTP, outcome not yet confirmed
     --   processed = delivery confirmed (kept as the final state name)
     --   escalated = automation stopped on purpose, a person must look
-    ALTER TABLE entries DROP CONSTRAINT IF EXISTS entries_status_check;
+    -- Drop by definition, not by name: a database whose constraint was created
+    -- under a different name would otherwise keep the old narrow rule and
+    -- reject every new status at runtime instead of here.
+    DO $status_check$
+    DECLARE existing TEXT;
+    BEGIN
+      FOR existing IN
+        SELECT conname FROM pg_constraint
+        WHERE conrelid = 'entries'::regclass
+          AND contype = 'c'
+          AND pg_get_constraintdef(oid) ILIKE '%status%'
+      LOOP
+        EXECUTE format('ALTER TABLE entries DROP CONSTRAINT %I', existing);
+      END LOOP;
+    END
+    $status_check$;
+
     ALTER TABLE entries
       ADD CONSTRAINT entries_status_check
       CHECK (status IN (
@@ -590,19 +606,25 @@ async function sweepPreEbflowInFlight(): Promise<void> {
   );
   if (done.rowCount) return;
 
-  const swept = await query(
-    `UPDATE entries
-     SET status = 'escalated',
-         updated_at = NOW(),
-         metadata = metadata || jsonb_build_object(
-           'escalated_at', NOW()::text,
-           'escalation_reason', 'in_flight_before_split_delivery_states',
-           'note', 'Cannot confirm whether the delivery email was sent. Check the customer inbox, then resend or mark complete.',
-           'failure_acked', 'false'
-         )
-     WHERE status = 'processing'
-       AND archived_at IS NULL`
-  );
+  const swept = await withTransaction(async (client) => {
+    await client.query(
+      `SELECT set_config('aagdb.actor', 'migration:ebflow_v1', true),
+              set_config('aagdb.reason', 'in flight when delivery states split; outcome unknown', true)`
+    );
+    return client.query(
+      `UPDATE entries
+       SET status = 'escalated',
+           updated_at = NOW(),
+           metadata = metadata || jsonb_build_object(
+             'escalated_at', NOW()::text,
+             'escalation_reason', 'in_flight_before_split_delivery_states',
+             'note', 'Cannot confirm whether the delivery email was sent. Check the customer inbox, then resend or mark complete.',
+             'failure_acked', 'false'
+           )
+       WHERE status = 'processing'
+         AND archived_at IS NULL`
+    );
+  });
 
   await query(
     `INSERT INTO site_settings (key, value)

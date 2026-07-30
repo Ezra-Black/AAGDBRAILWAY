@@ -15,6 +15,7 @@ import { spawn, type ChildProcess } from "child_process";
 import http from "http";
 import net from "net";
 import { closePool, query } from "../src/db/pool";
+import { migrate } from "../src/db/migrate";
 
 const WORKER_PORT_XAI = 8791;
 const WORKER_PORT_SMTP = 8792;
@@ -274,6 +275,9 @@ async function waitForStatus(
 async function main(): Promise<void> {
   const xai = await startXaiStub();
   const smtp = await startSmtpStub("accept");
+
+  // Works against an empty database, not just an already-migrated one.
+  await migrate();
 
   // Start clean so claims are unambiguous.
   await query(

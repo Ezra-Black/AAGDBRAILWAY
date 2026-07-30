@@ -572,7 +572,7 @@ export async function skipLegacyPendingBefore(
            'photo_sent', 'false',
            'note', 'Closed as pre-automation backlog; do not auto-email'
          )
-     WHERE status IN ('pending', 'processing', 'validated', 'applied')
+     WHERE status IN ('pending', 'processing', 'validated', 'applied', 'escalated')
        AND archived_at IS NULL
        AND created_at < $1::timestamptz`,
         [before]
