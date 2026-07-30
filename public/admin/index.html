@@ -171,6 +171,15 @@
         letter-spacing: 0.08em;
         color: rgba(255, 246, 228, 0.4);
       }
+      /* The tab row is wider than a phone — let it scroll sideways. */
+      .tab-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .tab-scroll::-webkit-scrollbar {
+        display: none;
+      }
       .tab-btn {
         border: 1px solid transparent;
         background: none;
@@ -181,6 +190,8 @@
         padding: 0.55rem 1.2rem;
         border-radius: 9999px;
         cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
         transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease;
       }
       .tab-btn:hover {
@@ -535,7 +546,8 @@
       </div>
 
       <!-- View tabs -->
-      <nav class="mb-8 inline-flex items-center gap-1 rounded-full border border-white/10 p-1" style="background:rgba(255,255,255,0.03)">
+      <div class="tab-scroll mb-8">
+      <nav class="inline-flex items-center gap-1 rounded-full border border-white/10 p-1" style="background:rgba(255,255,255,0.03)">
         <button type="button" id="tab-dashboard" class="tab-btn active">Dashboard</button>
         <button type="button" id="tab-requests" class="tab-btn">Requests</button>
         <button type="button" id="tab-orders" class="tab-btn">Orders</button>
@@ -544,6 +556,7 @@
         </button>
         <button type="button" id="tab-newsletter" class="tab-btn">Newsletter</button>
       </nav>
+      </div>
 
       <!-- ═══════════ Dashboard view ═══════════ -->
       <div id="view-dashboard">
@@ -2266,12 +2279,9 @@
 
       function replyHref(msg) {
         const subject = "Re: your message to Audrey’s Angel Graphics";
-        return (
-          "mailto:" +
-          encodeURIComponent(msg.email) +
-          "?subject=" +
-          encodeURIComponent(subject)
-        );
+        // Mail clients want a literal @ in the address, everything else encoded.
+        const to = encodeURIComponent(msg.email).replace(/%40/g, "@");
+        return "mailto:" + to + "?subject=" + encodeURIComponent(subject);
       }
 
       function renderContactMessage(msg) {
