@@ -348,6 +348,50 @@
         font-weight: 600;
         cursor: pointer;
       }
+      /* Unread counter inside a top-level tab */
+      .tab-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.15rem;
+        height: 1.15rem;
+        margin-left: 0.45rem;
+        padding: 0 0.3rem;
+        border-radius: 9999px;
+        background: linear-gradient(135deg, #fb7185, #e11d48);
+        color: #fff;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        line-height: 1;
+      }
+      .tab-btn.active .tab-badge {
+        background: rgba(26, 18, 6, 0.75);
+        color: #f6d56a;
+      }
+      /* Contact inbox */
+      .msg-card {
+        border-radius: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        background: rgba(255, 255, 255, 0.03);
+        padding: 1.1rem 1.3rem;
+        transition: border-color 0.25s ease, background 0.25s ease;
+      }
+      .msg-card.unread {
+        border-color: rgba(240, 196, 92, 0.35);
+        background: rgba(240, 196, 92, 0.05);
+      }
+      .msg-dot {
+        display: inline-block;
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 9999px;
+        background: #f0c45c;
+        flex-shrink: 0;
+      }
+      .msg-body {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
       /* Notification bell */
       .bell-btn {
         position: relative;
@@ -495,6 +539,9 @@
         <button type="button" id="tab-dashboard" class="tab-btn active">Dashboard</button>
         <button type="button" id="tab-requests" class="tab-btn">Requests</button>
         <button type="button" id="tab-orders" class="tab-btn">Orders</button>
+        <button type="button" id="tab-contact" class="tab-btn">
+          Contact messages<span id="tab-contact-badge" class="tab-badge hidden">0</span>
+        </button>
         <button type="button" id="tab-newsletter" class="tab-btn">Newsletter</button>
       </nav>
 
@@ -936,6 +983,82 @@
         </p>
         <p id="orders-error" class="mt-6 hidden text-sm text-rose-400"></p>
       </div><!-- /view-orders -->
+
+      <!-- ═══════════ Contact messages view ═══════════ -->
+      <div id="view-contact" class="hidden">
+        <div class="mb-6">
+          <h2 class="text-lg font-semibold text-cream">Contact messages</h2>
+          <p class="mt-1 text-xs text-cream/45">
+            Everything sent through the public
+            <a href="/contact" target="_blank" rel="noopener" class="text-amber-300 underline decoration-amber-300/40 underline-offset-2">contact page</a>,
+            newest first. Messages are stored here even when the email forward
+            fails, so nothing gets lost. Hit Reply to answer from your own mail app.
+          </p>
+        </div>
+
+        <section class="mb-6 grid grid-cols-3 gap-3">
+          <div class="stat-card">
+            <p class="col-header">Unread</p>
+            <p id="c-unread" class="gold-text mt-1.5 text-2xl font-bold" style="letter-spacing:-0.03em">—</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">In inbox</p>
+            <p id="c-inbox" class="mt-1.5 text-2xl font-bold text-cream" style="letter-spacing:-0.03em">—</p>
+          </div>
+          <div class="stat-card">
+            <p class="col-header">Archived</p>
+            <p id="c-archived" class="mt-1.5 text-2xl font-bold text-cream/70" style="letter-spacing:-0.03em">—</p>
+          </div>
+        </section>
+
+        <!-- Inbox / Archived sub-tabs + bulk mark read -->
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div class="inline-flex items-center gap-2" role="group" aria-label="Contact messages view">
+            <button type="button" id="msg-tab-inbox" class="range-btn active">Inbox</button>
+            <button type="button" id="msg-tab-archived" class="range-btn">Archived</button>
+          </div>
+          <button
+            type="button"
+            id="msg-read-all"
+            class="range-btn"
+            title="Mark every message in the inbox as read"
+          >
+            Mark all read
+          </button>
+        </div>
+
+        <!-- Filters + search -->
+        <div class="mb-4 flex flex-wrap items-end gap-3">
+          <div class="field">
+            <label for="filter_msg_read" style="font-size:0.75rem">Show</label>
+            <select id="filter_msg_read" class="min-w-[150px]" style="padding:0.6rem 0.9rem;font-size:0.875rem">
+              <option value="">All messages</option>
+              <option value="unread">Unread only</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1;min-width:220px">
+            <label for="search_messages" style="font-size:0.75rem">Search</label>
+            <input
+              id="search_messages"
+              type="search"
+              placeholder="Name, email, message text…"
+              style="padding:0.6rem 0.9rem;font-size:0.875rem"
+            />
+          </div>
+        </div>
+
+        <div id="msg-list" class="space-y-3"></div>
+
+        <p id="msg-empty" class="mt-6 hidden text-sm text-cream/40">
+          No messages yet — they’ll land here the moment someone writes in from the contact page.
+        </p>
+        <p id="msg-error" class="mt-6 hidden text-sm text-rose-400"></p>
+        <p class="mt-4 text-xs text-cream/40">
+          Tip: opening this tab doesn’t mark anything read — click a message’s
+          <span class="text-amber-300">Mark read</span> button when you’ve dealt with it.
+          Archiving tucks a message away without deleting it; restore it anytime from the Archived tab.
+        </p>
+      </div><!-- /view-contact -->
 
       <!-- ═══════════ Newsletter view ═══════════ -->
       <div id="view-newsletter" class="hidden">
@@ -2004,10 +2127,15 @@
       const tabNewsletter = document.getElementById("tab-newsletter");
       let postsLoaded = false;
 
+      const viewContact = document.getElementById("view-contact");
+      const tabContact = document.getElementById("tab-contact");
+      let messagesLoaded = false;
+
       const VIEW_TITLES = {
         dashboard: "Dashboard",
         requests: "Requests",
         orders: "Orders",
+        contact: "Contact messages",
         newsletter: "Newsletter",
       };
 
@@ -2015,20 +2143,254 @@
         viewDashboard.classList.toggle("hidden", view !== "dashboard");
         viewRequests.classList.toggle("hidden", view !== "requests");
         viewOrders.classList.toggle("hidden", view !== "orders");
+        viewContact.classList.toggle("hidden", view !== "contact");
         viewNewsletter.classList.toggle("hidden", view !== "newsletter");
         tabDashboard.classList.toggle("active", view === "dashboard");
         tabRequests.classList.toggle("active", view === "requests");
         tabOrders.classList.toggle("active", view === "orders");
+        tabContact.classList.toggle("active", view === "contact");
         tabNewsletter.classList.toggle("active", view === "newsletter");
         document.getElementById("page-title").textContent = VIEW_TITLES[view];
         if (view === "orders" && !ordersLoaded) loadOrders();
+        if (view === "contact" && !messagesLoaded) loadContactMessages();
         if (view === "newsletter" && !postsLoaded) loadAdminPosts();
       }
 
       tabDashboard.addEventListener("click", () => switchView("dashboard"));
       tabRequests.addEventListener("click", () => switchView("requests"));
       tabOrders.addEventListener("click", () => switchView("orders"));
+      tabContact.addEventListener("click", () => switchView("contact"));
       tabNewsletter.addEventListener("click", () => switchView("newsletter"));
+
+      /* ═══════════ Contact messages inbox ═══════════ */
+
+      const msgList = document.getElementById("msg-list");
+      const msgEmpty = document.getElementById("msg-empty");
+      const msgError = document.getElementById("msg-error");
+      const msgTabInbox = document.getElementById("msg-tab-inbox");
+      const msgTabArchived = document.getElementById("msg-tab-archived");
+      const msgReadAllBtn = document.getElementById("msg-read-all");
+      const msgReadSelect = document.getElementById("filter_msg_read");
+      const searchMessages = document.getElementById("search_messages");
+      const tabContactBadge = document.getElementById("tab-contact-badge");
+      let messagesArchived = false;
+
+      function renderContactTotals(totals) {
+        if (!totals) return;
+        document.getElementById("c-unread").textContent =
+          totals.unread.toLocaleString();
+        document.getElementById("c-inbox").textContent =
+          totals.inbox.toLocaleString();
+        document.getElementById("c-archived").textContent =
+          totals.archived.toLocaleString();
+        tabContactBadge.classList.toggle("hidden", totals.unread === 0);
+        tabContactBadge.textContent =
+          totals.unread > 99 ? "99+" : String(totals.unread);
+      }
+
+      /** Badge-only refresh, so new mail shows up without opening the tab. */
+      async function loadContactCounts() {
+        try {
+          const res = await fetch("/admin/contact-messages/counts", {
+            credentials: "include",
+          });
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.success) renderContactTotals(data.totals);
+        } catch {
+          /* counts are best-effort; next poll retries */
+        }
+      }
+
+      function setMessagesArchived(archived) {
+        if (messagesArchived === archived) return;
+        messagesArchived = archived;
+        msgTabInbox.classList.toggle("active", !archived);
+        msgTabArchived.classList.toggle("active", archived);
+        msgReadAllBtn.style.display = archived ? "none" : "";
+        loadContactMessages();
+      }
+      msgTabInbox.addEventListener("click", () => setMessagesArchived(false));
+      msgTabArchived.addEventListener("click", () => setMessagesArchived(true));
+      msgReadSelect.addEventListener("change", () => loadContactMessages());
+      searchMessages.addEventListener(
+        "input",
+        debounce(() => loadContactMessages(), 300)
+      );
+
+      msgReadAllBtn.addEventListener("click", async () => {
+        msgReadAllBtn.disabled = true;
+        try {
+          const res = await fetch("/admin/contact-messages/read-all", {
+            method: "POST",
+            credentials: "include",
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          await loadContactMessages();
+        } catch {
+          msgError.textContent = "Network error marking messages read";
+          msgError.classList.remove("hidden");
+        } finally {
+          msgReadAllBtn.disabled = false;
+        }
+      });
+
+      async function patchContactMessage(id, path, body, buttonEl) {
+        buttonEl.disabled = true;
+        try {
+          const res = await fetch("/admin/contact-messages/" + id + path, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            msgError.textContent = data.error || "Could not update message";
+            msgError.classList.remove("hidden");
+          }
+        } catch {
+          msgError.textContent = "Network error updating message";
+          msgError.classList.remove("hidden");
+        }
+        await loadContactMessages();
+        if (buttonEl.isConnected) buttonEl.disabled = false;
+      }
+
+      function replyHref(msg) {
+        const subject = "Re: your message to Audrey’s Angel Graphics";
+        return (
+          "mailto:" +
+          encodeURIComponent(msg.email) +
+          "?subject=" +
+          encodeURIComponent(subject)
+        );
+      }
+
+      function renderContactMessage(msg) {
+        const unread = !msg.read_at;
+        const card = document.createElement("article");
+        card.className = "msg-card" + (unread ? " unread" : "");
+        card.innerHTML =
+          '<div class="flex flex-wrap items-start justify-between gap-3">' +
+          '<div class="min-w-0">' +
+          '<p class="flex items-center gap-2 font-semibold text-cream">' +
+          (unread ? '<span class="msg-dot" title="Unread"></span>' : "") +
+          escapeHtml(msg.name) +
+          "</p>" +
+          '<p class="mt-0.5 break-all text-xs text-cream/45">' +
+          '<a href="mailto:' +
+          escapeAttr(msg.email) +
+          '" class="text-amber-300/80 underline decoration-amber-300/30 underline-offset-2">' +
+          escapeHtml(msg.email) +
+          "</a> · " +
+          '<span title="' +
+          escapeAttr(absoluteDateTitle(msg.created_at)) +
+          '">' +
+          escapeHtml(formatRelativeAge(msg.created_at)) +
+          "</span>" +
+          "</p>" +
+          "</div>" +
+          '<div class="flex flex-wrap items-center gap-2">' +
+          '<a href="' +
+          escapeAttr(replyHref(msg)) +
+          '" class="archive-btn" style="text-decoration:none;display:inline-block" title="Reply in your mail app">Reply</a>' +
+          '<button type="button" data-msg-read="' +
+          escapeAttr(msg.id) +
+          '" data-next-read="' +
+          (unread ? "true" : "false") +
+          '" class="archive-btn">' +
+          (unread ? "Mark read" : "Mark unread") +
+          "</button>" +
+          '<button type="button" data-msg-archive="' +
+          escapeAttr(msg.id) +
+          '" class="archive-btn">' +
+          (messagesArchived ? "Restore" : "Archive") +
+          "</button>" +
+          "</div>" +
+          "</div>" +
+          '<p class="msg-body mt-3 text-sm text-cream/70">' +
+          escapeHtml(msg.message) +
+          "</p>";
+        return card;
+      }
+
+      async function loadContactMessages() {
+        msgError.classList.add("hidden");
+        try {
+          const params = new URLSearchParams();
+          if (msgReadSelect.value === "unread") params.set("unread", "1");
+          const q = searchMessages.value.trim();
+          if (q) params.set("q", q);
+          if (messagesArchived) params.set("archived", "1");
+          const qs = params.toString();
+          const res = await fetch(
+            "/admin/contact-messages" + (qs ? "?" + qs : ""),
+            { credentials: "include" }
+          );
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            msgError.textContent = data.error || "Could not load messages";
+            msgError.classList.remove("hidden");
+            return;
+          }
+          messagesLoaded = true;
+          renderContactTotals(data.totals);
+
+          const messages = data.messages || [];
+          msgList.innerHTML = "";
+          msgEmpty.classList.toggle("hidden", messages.length > 0);
+          msgEmpty.textContent = messagesArchived
+            ? "Nothing archived yet — use Archive on a message to tidy it away."
+            : q || msgReadSelect.value
+            ? "No messages match these filters."
+            : "No messages yet — they’ll land here the moment someone writes in from the contact page.";
+
+          for (const msg of messages) {
+            msgList.appendChild(renderContactMessage(msg));
+          }
+
+          msgList.querySelectorAll("[data-msg-read]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const id = btn.getAttribute("data-msg-read");
+              if (!id) return;
+              patchContactMessage(
+                id,
+                "/read",
+                { read: btn.getAttribute("data-next-read") === "true" },
+                btn
+              );
+            });
+          });
+
+          msgList.querySelectorAll("[data-msg-archive]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const id = btn.getAttribute("data-msg-archive");
+              if (!id) return;
+              patchContactMessage(
+                id,
+                "/archive",
+                { archived: !messagesArchived },
+                btn
+              );
+            });
+          });
+        } catch {
+          msgError.textContent = "Network error loading messages";
+          msgError.classList.remove("hidden");
+        }
+      }
 
       /* ═══════════ Newsletter posts ═══════════ */
 
@@ -2468,13 +2830,13 @@
         }
       }
 
-      document.querySelectorAll(".range-btn").forEach((btn) => {
+      document.querySelectorAll(".range-btn[data-range]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const days = Number(btn.getAttribute("data-range"));
           if (!days || days === currentRange) return;
           currentRange = days;
           document
-            .querySelectorAll(".range-btn")
+            .querySelectorAll(".range-btn[data-range]")
             .forEach((b) => b.classList.toggle("active", b === btn));
           loadAnalytics();
         });
@@ -2755,9 +3117,11 @@
         await loadEntries();
         await loadVaultAlerts();
         await loadAiWorkerState();
+        await loadContactCounts();
         // Keep the bell + offer timers honest while the portal sits open.
         setInterval(loadVaultAlerts, 60_000);
         setInterval(loadAiWorkerState, 60_000);
+        setInterval(loadContactCounts, 60_000);
       })();
     </script>
   </body>
