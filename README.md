@@ -49,7 +49,11 @@ Migrations run automatically on app boot.
 | `PATCH` | `/admin/graphics/:id/vault` | Vault an offer immediately, before its timer ends (admin) |
 | `POST` | `/newsletter/subscribe` | `{ "email" }` → mailing-list opt-in (popup / footer forms) |
 | `POST` | `/contact` | `{ "name", "email", "message" }` → save message + forward to the ProtonMail inbox |
-| `GET` | `/admin/contact-messages` | Contact inbox (admin session required) |
+| `GET` | `/admin/contact-messages` | Contact inbox — `?q=` search, `?unread=1`, `?archived=1` (admin session required) |
+| `GET` | `/admin/contact-messages/counts` | Inbox / unread / archived totals for the tab badge (admin) |
+| `PATCH` | `/admin/contact-messages/:id/read` | `{ "read": true\|false }` — mark read or back to unread (admin) |
+| `PATCH` | `/admin/contact-messages/:id/archive` | `{ "archived": true\|false }` — archive or restore a message (admin) |
+| `POST` | `/admin/contact-messages/read-all` | Mark every message in the inbox read (admin) |
 | `GET` | `/auth/facebook/config` | Whether Facebook quick sign-in is enabled (+ app id) |
 | `POST` | `/auth/facebook` | `{ "access_token" }` → verify with Facebook, store email securely |
 | `POST` | `/track/pageview` | Anonymous page-view beacon (no IPs / PII stored) |
@@ -170,11 +174,21 @@ used for business purposes only. Tokens are verified server-side with the
 Graph API (`debug_token`) before anything is saved to `facebook_users`.
 Without the env vars the feature is fully disabled — no SDK is loaded.
 
-### Contact → ProtonMail
+### Contact → ProtonMail (+ the Contact messages tab)
 
-Contact-page messages are always stored in `contact_messages`. When SMTP is
-configured (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, optional `SMTP_PORT` /
-`SMTP_FROM`), each message is also emailed to `CONTACT_EMAIL_TO`
+Contact-page messages are always stored in `contact_messages` and are readable
+in the portal's **Contact messages** tab — newest first, with the full message
+body, the sender's email as a `mailto:` link, and a **Reply** button that opens
+your own mail app. Each message tracks `read_at` and `archived_at`, so the tab
+carries an unread badge (refreshed every 60 s) and offers **Inbox / Archived**
+sub-tabs, an unread-only filter, search across name / email / body, per-message
+**Mark read** and **Archive**, and a **Mark all read** bulk action. Archiving
+only hides a message from the inbox view — nothing is ever deleted. Because the
+messages are in Postgres, they are readable even when the email forward below
+fails.
+
+When SMTP is configured (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, optional
+`SMTP_PORT` / `SMTP_FROM`), each message is also emailed to `CONTACT_EMAIL_TO`
 (default **aaggraphics@protonmail.com**) with the sender set as reply-to.
 ProtonMail doesn't accept direct SMTP logins on free plans — point the SMTP
 vars at Proton Mail Bridge, a Proton SMTP token (paid plans), or any
