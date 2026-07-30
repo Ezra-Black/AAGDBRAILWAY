@@ -230,7 +230,7 @@ export async function getAnalyticsSummary(
        (SELECT COUNT(*) FROM entries
          WHERE created_at > NOW() - make_interval(days => $1::int))::int AS submissions,
        (SELECT COUNT(*) FROM newsletter_subscribers)::int AS newsletter_subscribers,
-       (SELECT COUNT(*) FROM contact_messages)::int AS contact_messages`,
+       (SELECT COUNT(*) FROM message_threads)::int AS contact_messages`,
     [rangeDays]
   );
   const business = businessRes.rows[0] ?? {};

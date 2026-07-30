@@ -76,14 +76,6 @@ import {
   getNewsletterCount,
   subscribeNewsletter,
 } from "./db/stats";
-import {
-  contactMessageCounts,
-  createContactMessage,
-  listContactMessages,
-  markAllContactMessagesRead,
-  setContactMessageArchived,
-  setContactMessageRead,
-} from "./db/contact";
 import { getAnalyticsSummary, recordPageView } from "./db/analytics";
 import {
   archiveGraphicOption,
@@ -109,8 +101,10 @@ import {
   getThreadById,
   listMessagesForThread,
   listThreadsForAdmin,
+  markAllOpenThreadsRead,
   markThreadRead,
   setThreadStatus,
+  threadCounts,
 } from "./db/messages";
 import {
   getStripe,
@@ -1330,12 +1324,7 @@ apiRouter.post(
       body: parsed.data.message,
     });
 
-    // Keep a legacy row + email ping so ProtonMail still gets notified.
-    await createContactMessage({
-      name: parsed.data.name || req.user.name,
-      email: parsed.data.email || req.user.email,
-      message: parsed.data.message,
-    });
+    // Email ping so ProtonMail still gets notified; inbox lives in Threads.
     const emailed = await sendContactEmail({
       name: parsed.data.name || req.user.name,
       email: parsed.data.email || req.user.email,
@@ -1473,13 +1462,56 @@ apiRouter.patch(
 
 /* ═══════════ Message threads (admin) ═══════════ */
 
-/** GET /admin/threads — conversation list. */
+/** GET /admin/threads — conversation list.
+ *  Query: status=open|closed, unread=1, q=search
+ */
 apiRouter.get(
   "/admin/threads",
   requireAdmin,
+  asyncHandler(async (req, res) => {
+    const statusRaw = String(req.query.status || "").trim();
+    const status =
+      statusRaw === "open" || statusRaw === "closed" ? statusRaw : undefined;
+    const unreadOnly =
+      req.query.unread === "1" || req.query.unread === "true";
+    const search =
+      typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+
+    const [threads, totals] = await Promise.all([
+      listThreadsForAdmin({
+        status,
+        unreadOnly,
+        search: search || undefined,
+      }),
+      threadCounts(),
+    ]);
+    res.json({
+      success: true,
+      count: threads.length,
+      totals,
+      threads,
+    });
+  })
+);
+
+/** GET /admin/threads/counts — badge poll for the portal. */
+apiRouter.get(
+  "/admin/threads/counts",
+  requireAdmin,
   asyncHandler(async (_req, res) => {
-    const threads = await listThreadsForAdmin(200);
-    res.json({ success: true, count: threads.length, threads });
+    const totals = await threadCounts();
+    res.json({ success: true, totals });
+  })
+);
+
+/** POST /admin/threads/read-all — mark open-inbox user messages read. */
+apiRouter.post(
+  "/admin/threads/read-all",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const updated = await markAllOpenThreadsRead();
+    logger.info("Admin marked message inbox read", { updated });
+    res.json({ success: true, updated });
   })
 );
 
@@ -2004,114 +2036,3 @@ apiRouter.post(
   })
 );
 
-/** GET /admin/contact-messages — inbox for the admin portal.
- *  Query params: q (search), unread (1/true), archived (1/true).
- */
-apiRouter.get(
-  "/admin/contact-messages",
-  requireAdmin,
-  asyncHandler(async (req, res) => {
-    const search =
-      typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
-    const unreadOnly = req.query.unread === "1" || req.query.unread === "true";
-    const archived =
-      req.query.archived === "1" || req.query.archived === "true";
-
-    const [messages, counts] = await Promise.all([
-      listContactMessages(200, {
-        search: search || undefined,
-        unreadOnly,
-        archived,
-      }),
-      contactMessageCounts(),
-    ]);
-    res.json({
-      success: true,
-      count: messages.length,
-      archived,
-      totals: counts,
-      messages,
-    });
-  })
-);
-
-/** GET /admin/contact-messages/counts — badge poll for the portal. */
-apiRouter.get(
-  "/admin/contact-messages/counts",
-  requireAdmin,
-  asyncHandler(async (_req, res) => {
-    const totals = await contactMessageCounts();
-    res.json({ success: true, totals });
-  })
-);
-
-/** PATCH /admin/contact-messages/:id/read — mark read ↔ unread */
-apiRouter.patch(
-  "/admin/contact-messages/:id/read",
-  requireAdmin,
-  asyncHandler(async (req, res) => {
-    const idCheck = uuidSchema.safeParse(req.params.id);
-    if (!idCheck.success) {
-      res.status(400).json({ success: false, error: "Invalid message ID" });
-      return;
-    }
-    const parsed = z.object({ read: z.boolean() }).strict().safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: "read is required" });
-      return;
-    }
-
-    const message = await setContactMessageRead(idCheck.data, parsed.data.read);
-    if (!message) {
-      res.status(404).json({ success: false, error: "Message not found" });
-      return;
-    }
-    res.json({ success: true, message });
-  })
-);
-
-/** PATCH /admin/contact-messages/:id/archive — archive or restore one message */
-apiRouter.patch(
-  "/admin/contact-messages/:id/archive",
-  requireAdmin,
-  asyncHandler(async (req, res) => {
-    const idCheck = uuidSchema.safeParse(req.params.id);
-    if (!idCheck.success) {
-      res.status(400).json({ success: false, error: "Invalid message ID" });
-      return;
-    }
-    const parsed = z
-      .object({ archived: z.boolean() })
-      .strict()
-      .safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: "archived is required" });
-      return;
-    }
-
-    const message = await setContactMessageArchived(
-      idCheck.data,
-      parsed.data.archived
-    );
-    if (!message) {
-      res.status(404).json({ success: false, error: "Message not found" });
-      return;
-    }
-    logger.info("Admin toggled contact message archive", {
-      id: idCheck.data,
-      archived: parsed.data.archived,
-    });
-    res.json({ success: true, message });
-  })
-);
-
-/** POST /admin/contact-messages/read-all — mark the whole inbox read */
-apiRouter.post(
-  "/admin/contact-messages/read-all",
-  requireAdmin,
-  asyncHandler(async (_req, res) => {
-    const updated = await markAllContactMessagesRead();
-    logger.info("Admin marked contact inbox read", { updated });
-    res.json({ success: true, updated });
-  })
-);

@@ -409,6 +409,15 @@ export async function migrate(): Promise<void> {
       WHERE read_at IS NULL;
   `);
 
+  // Fold legacy one-shot contact_messages into threads when the sender has an account.
+  const { importLegacyContactIntoThreads } = await import("./messages");
+  const imported = await importLegacyContactIntoThreads();
+  if (imported > 0) {
+    logger.info("Imported legacy contact messages into threads", {
+      count: imported,
+    });
+  }
+
   // Keep the archive in sync: any option currently offered (or offered at any
   // boot since this feature shipped) is recorded forever.
   await query(`

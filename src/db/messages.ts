@@ -27,6 +27,23 @@ export interface ThreadMessage {
   read_at: Date | null;
 }
 
+export interface AdminThreadFilters {
+  /** open = inbox, closed = archived. */
+  status?: ThreadStatus;
+  unreadOnly?: boolean;
+  search?: string;
+  limit?: number;
+}
+
+export interface ThreadCounts {
+  /** Open conversations. */
+  inbox: number;
+  /** Closed / archived conversations. */
+  closed: number;
+  /** Unread user messages across open threads — drives the tab badge. */
+  unread: number;
+}
+
 function mapThread(row: Record<string, unknown>): MessageThread {
   return {
     id: row.id as string,
@@ -98,8 +115,39 @@ export async function createThreadWithMessage(input: {
 }
 
 export async function listThreadsForAdmin(
-  limit = 200
+  filters: AdminThreadFilters = {}
 ): Promise<MessageThread[]> {
+  const limit = filters.limit ?? 200;
+  const params: unknown[] = [];
+  const clauses: string[] = [];
+
+  if (filters.status === "open" || filters.status === "closed") {
+    params.push(filters.status);
+    clauses.push(`t.status = $${params.length}`);
+  }
+  if (filters.unreadOnly) {
+    clauses.push(`EXISTS (
+      SELECT 1 FROM thread_messages m
+      WHERE m.thread_id = t.id
+        AND m.sender = 'user'
+        AND m.read_at IS NULL
+    )`);
+  }
+  if (filters.search?.trim()) {
+    params.push(`%${filters.search.trim()}%`);
+    const n = params.length;
+    clauses.push(
+      `(u.name ILIKE $${n} OR u.email ILIKE $${n} OR t.subject ILIKE $${n}
+        OR EXISTS (
+          SELECT 1 FROM thread_messages m
+          WHERE m.thread_id = t.id AND m.body ILIKE $${n}
+        ))`
+    );
+  }
+
+  params.push(limit);
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
   const result = await query(
     `SELECT t.*,
             u.name AS user_name,
@@ -123,11 +171,48 @@ export async function listThreadsForAdmin(
        ORDER BY created_at DESC
        LIMIT 1
      ) lm ON true
+     ${where}
      ORDER BY t.updated_at DESC
-     LIMIT $1`,
-    [limit]
+     LIMIT $${params.length}`,
+    params
   );
   return result.rows.map(mapThread);
+}
+
+export async function threadCounts(): Promise<ThreadCounts> {
+  const result = await query(
+    `SELECT
+       (SELECT COUNT(*)::int FROM message_threads WHERE status = 'open') AS inbox,
+       (SELECT COUNT(*)::int FROM message_threads WHERE status = 'closed') AS closed,
+       (
+         SELECT COUNT(*)::int
+         FROM thread_messages m
+         JOIN message_threads t ON t.id = m.thread_id
+         WHERE m.sender = 'user'
+           AND m.read_at IS NULL
+           AND t.status = 'open'
+       ) AS unread`
+  );
+  const row = result.rows[0] ?? {};
+  return {
+    inbox: Number(row.inbox) || 0,
+    closed: Number(row.closed) || 0,
+    unread: Number(row.unread) || 0,
+  };
+}
+
+/** Mark every unread user message in open threads as read. */
+export async function markAllOpenThreadsRead(): Promise<number> {
+  const result = await query(
+    `UPDATE thread_messages m
+     SET read_at = NOW()
+     FROM message_threads t
+     WHERE m.thread_id = t.id
+       AND t.status = 'open'
+       AND m.sender = 'user'
+       AND m.read_at IS NULL`
+  );
+  return result.rowCount ?? 0;
 }
 
 export async function listThreadsForUser(
@@ -239,4 +324,52 @@ export async function setThreadStatus(input: {
     [input.id, input.status]
   );
   return result.rows[0] ? mapThread(result.rows[0]) : null;
+}
+
+/**
+ * One-time import: legacy contact_messages that match a user by email become
+ * threads (skipped when an identical body already exists for that user).
+ */
+export async function importLegacyContactIntoThreads(): Promise<number> {
+  const candidates = await query(
+    `SELECT c.id, u.id AS user_id, c.message, c.created_at,
+            c.read_at, c.archived_at
+     FROM contact_messages c
+     JOIN users u ON lower(u.email) = lower(c.email)
+     WHERE NOT EXISTS (
+       SELECT 1
+       FROM message_threads t
+       JOIN thread_messages m ON m.thread_id = t.id
+       WHERE t.user_id = u.id
+         AND m.sender = 'user'
+         AND m.body = c.message
+     )
+     ORDER BY c.created_at ASC`
+  );
+
+  let imported = 0;
+  for (const row of candidates.rows) {
+    const status = row.archived_at ? "closed" : "open";
+    const readAt =
+      row.archived_at || row.read_at
+        ? ((row.read_at as Date) ??
+          (row.archived_at as Date) ??
+          (row.created_at as Date))
+        : null;
+
+    const threadResult = await query(
+      `INSERT INTO message_threads (user_id, subject, status, created_at, updated_at)
+       VALUES ($1, 'Contact message', $2, $3, $3)
+       RETURNING id`,
+      [row.user_id, status, row.created_at]
+    );
+    const threadId = threadResult.rows[0].id as string;
+    await query(
+      `INSERT INTO thread_messages (thread_id, sender, body, created_at, read_at)
+       VALUES ($1, 'user', $2, $3, $4)`,
+      [threadId, row.message, row.created_at, readAt]
+    );
+    imported += 1;
+  }
+  return imported;
 }
