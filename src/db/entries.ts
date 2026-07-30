@@ -544,19 +544,39 @@ export async function findDeliveredDuplicate(
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }
 
+export interface PipelineAlertEntry extends Entry {
+  graphic_label: string | null;
+}
+
 export async function listFailedPipelineAlerts(
   limit = 50
-): Promise<Entry[]> {
+): Promise<PipelineAlertEntry[]> {
   const result = await query(
-    `SELECT * FROM entries
-     WHERE status = 'failed'
-       AND archived_at IS NULL
-       AND coalesce(metadata->>'failure_acked', 'false') <> 'true'
-     ORDER BY updated_at DESC
+    `SELECT e.*,
+       (
+         SELECT g.label
+         FROM graphic_options g
+         WHERE lower(trim(g.code)) = lower(trim(coalesce(e.graphic_code, '')))
+            OR lower(trim(g.label)) = lower(trim(coalesce(e.graphic_code, '')))
+         ORDER BY (lower(trim(g.code)) = lower(trim(coalesce(e.graphic_code, '')))) DESC
+         LIMIT 1
+       ) AS graphic_label
+     FROM entries e
+     WHERE e.status = 'failed'
+       AND e.archived_at IS NULL
+       AND coalesce(e.metadata->>'failure_acked', 'false') <> 'true'
+     ORDER BY e.updated_at DESC
      LIMIT $1`,
     [limit]
   );
-  return result.rows.map(mapRow);
+  return result.rows.map((row) => {
+    const entry = mapRow(row as Record<string, unknown>);
+    const label =
+      row.graphic_label == null || String(row.graphic_label).trim() === ""
+        ? null
+        : String(row.graphic_label).trim();
+    return { ...entry, graphic_label: label };
+  });
 }
 
 export async function ackFailedPipelineAlerts(): Promise<number> {

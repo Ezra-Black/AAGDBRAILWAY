@@ -182,7 +182,12 @@ export async function sendGraphicDeliveryEmail(input: {
     logger.error("Failed to send graphic delivery email", {
       error: String(err),
       to: input.to,
+      angel_name: input.angelName,
+      filename: input.filename,
     });
+    console.error(
+      `[smtp-fail] delivery to=${input.to} angel=${input.angelName} error=${String(err)}`
+    );
     return false;
   }
 }
@@ -221,7 +226,13 @@ export async function sendPipelineFailureEmail(input: {
   } catch (err) {
     logger.error("Failed to send pipeline failure alert", {
       error: String(err),
+      entry_id: input.entryId,
+      angel_name: input.angelName,
+      graphic: input.graphicCode,
     });
+    console.error(
+      `[smtp-fail] failure-alert entry=${input.entryId} graphic=${input.graphicCode} error=${String(err)}`
+    );
     return false;
   }
 }

@@ -22,7 +22,7 @@ import {
   updateEntryStatus,
   type Entry,
 } from "../db/entries";
-import { getGraphicImageUrl, graphicRequiresPhoto } from "../db/graphics";
+import { getGraphicImageUrl, getGraphicLabel, graphicRequiresPhoto } from "../db/graphics";
 import {
   sendGraphicDeliveryEmail,
   sendPipelineFailureEmail,
@@ -83,14 +83,36 @@ async function saveGenerated(
 }
 
 async function failEntry(entry: Entry, error: string): Promise<void> {
+  let graphicLabel: string | null = null;
+  try {
+    if (entry.graphic_code) {
+      graphicLabel = await getGraphicLabel(entry.graphic_code);
+    }
+  } catch (lookupErr) {
+    logger.warn("Could not resolve graphic label for failure log", {
+      error: String(lookupErr),
+    });
+  }
+
+  const graphicDisplay =
+    graphicLabel || entry.graphic_code || "(unknown graphic)";
+
   logger.error("Graphic pipeline failed", {
     id: entry.id,
     angel_name: entry.angel_name,
+    email: entry.email,
+    graphic_code: entry.graphic_code,
+    graphic_label: graphicDisplay,
     error,
   });
+  console.error(
+    `[pipeline-fail] entry=${entry.id} angel=${entry.angel_name} graphic=${graphicDisplay} (${entry.graphic_code || "n/a"}) error=${error}`
+  );
 
   await updateEntryStatus(entry.id, "failed", {
     error,
+    graphic_label: graphicDisplay,
+    graphic_code: entry.graphic_code,
     failure_acked: "false",
     failed_at: new Date().toISOString(),
   });
@@ -99,7 +121,9 @@ async function failEntry(entry: Entry, error: string): Promise<void> {
     entryId: entry.id,
     angelName: entry.angel_name,
     email: entry.email,
-    graphicCode: entry.graphic_code,
+    graphicCode: entry.graphic_code
+      ? `${graphicDisplay} (${entry.graphic_code})`
+      : graphicDisplay,
     error,
   });
 }
@@ -266,6 +290,9 @@ async function tick(cutoff: Date): Promise<void> {
   try {
     await processEntry(entry);
   } catch (err) {
+    console.error(
+      `[pipeline-fail] unhandled entry=${entry.id} angel=${entry.angel_name} graphic=${entry.graphic_code || "n/a"} error=${String(err)}`
+    );
     await failEntry(entry, String(err));
   }
 }

@@ -408,14 +408,23 @@ apiRouter.get(
     res.json({
       success: true,
       count: entries.length,
-      entries: entries.map((e) => ({
-        id: e.id,
-        angel_name: e.angel_name,
-        email: e.email,
-        graphic_code: e.graphic_code,
-        error: e.metadata?.error ?? null,
-        updated_at: e.updated_at,
-      })),
+      entries: entries.map((e) => {
+        const graphicLabel =
+          e.graphic_label ||
+          (typeof e.metadata?.graphic_label === "string"
+            ? e.metadata.graphic_label
+            : null) ||
+          e.graphic_code;
+        return {
+          id: e.id,
+          angel_name: e.angel_name,
+          email: e.email,
+          graphic_code: e.graphic_code,
+          graphic_label: graphicLabel,
+          error: e.metadata?.error ?? null,
+          updated_at: e.updated_at,
+        };
+      }),
     });
   })
 );

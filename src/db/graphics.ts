@@ -190,6 +190,24 @@ export async function graphicCodeExists(code: string): Promise<boolean> {
   return result.rowCount !== null && result.rowCount > 0;
 }
 
+/** Resolve display label for a graphic code (or null). */
+export async function getGraphicLabel(code: string): Promise<string | null> {
+  const trimmed = code.trim();
+  if (!trimmed) return null;
+  const result = await query(
+    `SELECT label FROM graphic_options
+     WHERE lower(trim(code)) = lower(trim($1))
+        OR lower(trim(label)) = lower(trim($1))
+     ORDER BY (lower(trim(code)) = lower(trim($1))) DESC
+     LIMIT 1`,
+    [trimmed]
+  );
+  const label = result.rows[0]?.label;
+  return label == null || String(label).trim() === ""
+    ? null
+    : String(label).trim();
+}
+
 /** Whether an open graphic option requires a customer photo upload. */
 export async function graphicRequiresPhoto(code: string): Promise<boolean> {
   const result = await query(

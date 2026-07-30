@@ -2061,6 +2061,37 @@
         "pipeline-banner-dismiss"
       );
 
+      function graphicFailureLabel(entry) {
+        const label = String(entry.graphic_label || "").trim();
+        const code = String(entry.graphic_code || "").trim();
+        if (label && code && label.toLowerCase() !== code.toLowerCase()) {
+          return label + " (" + code + ")";
+        }
+        return label || code || "unknown graphic";
+      }
+
+      function formatPipelineBanner(entries) {
+        if (!entries.length) return "";
+        const first = entries[0];
+        const err =
+          typeof first.error === "string" && first.error
+            ? first.error
+            : "Unknown error";
+        const more =
+          entries.length > 1
+            ? " (+" + (entries.length - 1) + " more)"
+            : "";
+        return (
+          (first.angel_name || "Request") +
+          " · graphic: " +
+          graphicFailureLabel(first) +
+          " — " +
+          err.slice(0, 160) +
+          more +
+          ". Download Generated from Requests if the art was saved. Audrey was emailed at the failure alert address."
+        );
+      }
+
       async function loadVaultAlerts() {
         try {
           const [vaultRes, pipeRes] = await Promise.all([
@@ -2077,25 +2108,7 @@
             if (pipeData.success) {
               pipeEntries = pipeData.entries || [];
               pipelineBanner.classList.toggle("hidden", pipeEntries.length === 0);
-              if (pipeEntries.length > 0) {
-                const first = pipeEntries[0];
-                const err =
-                  typeof first.error === "string" && first.error
-                    ? first.error
-                    : "Unknown error";
-                const more =
-                  pipeEntries.length > 1
-                    ? " (+" + (pipeEntries.length - 1) + " more)"
-                    : "";
-                pipelineBannerText.textContent =
-                  (first.angel_name || "Request") +
-                  " — " +
-                  err.slice(0, 180) +
-                  more +
-                  ". Audrey was emailed at the failure alert address.";
-              } else {
-                pipelineBannerText.textContent = "";
-              }
+              pipelineBannerText.textContent = formatPipelineBanner(pipeEntries);
             }
           }
 
@@ -2118,6 +2131,9 @@
             item.innerHTML =
               '<p class="text-sm font-medium text-cream">Pipeline failed — ' +
               escapeHtml(e.angel_name || "request") +
+              "</p>" +
+              '<p class="mt-0.5 text-xs text-cream/55">Graphic: ' +
+              escapeHtml(graphicFailureLabel(e)) +
               "</p>" +
               '<p class="mt-0.5 text-xs text-cream/45">' +
               escapeHtml(err.slice(0, 220)) +
