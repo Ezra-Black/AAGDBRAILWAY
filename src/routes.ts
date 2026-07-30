@@ -39,9 +39,12 @@ import {
   vaultGraphicOption,
 } from "./db/graphics";
 import {
+  attachReactionsToPosts,
   createNewsletterPost,
   deleteNewsletterPost,
+  getNewsletterPostById,
   listNewsletterPosts,
+  toggleNewsletterReaction,
 } from "./db/newsletter";
 import { logger } from "./logger";
 import {
@@ -51,6 +54,7 @@ import {
   loginLimiter,
   newsletterSubscribeLimiter,
   newsletterVisitLimiter,
+  reactionLimiter,
   readLimiter,
   rejectHoneypot,
   requireAutomationKeyIfConfigured,
@@ -84,7 +88,11 @@ import {
   stripeConfigured,
   stripePublishableKey,
 } from "./stripe";
-import { attachUserIfPresent, type UserRequest } from "./userAuth";
+import {
+  attachUserIfPresent,
+  requireUser,
+  type UserRequest,
+} from "./userAuth";
 import { upsertFacebookUser } from "./db/facebook";
 import {
   facebookAppId,
@@ -102,6 +110,7 @@ import {
   facebookAuthSchema,
   lookupQuerySchema,
   newsletterPostSchema,
+  newsletterReactionSchema,
   newsletterSubscribeSchema,
   pageViewSchema,
   PASSWORD_RULES,
@@ -893,13 +902,74 @@ apiRouter.post(
   })
 );
 
-/** GET /newsletter/posts — public feed for the newsletter page. */
+/** GET /newsletter/posts — public feed for the newsletter page.
+ *  Includes reaction counts; when logged in, also each post's my_reactions.
+ */
 apiRouter.get(
   "/newsletter/posts",
   readLimiter,
-  asyncHandler(async (_req, res) => {
+  attachUserIfPresent,
+  asyncHandler(async (req: UserRequest, res) => {
     const posts = await listNewsletterPosts(100);
-    res.json({ success: true, count: posts.length, posts });
+    const withReactions = await attachReactionsToPosts(
+      posts,
+      req.user?.id ?? null
+    );
+    res.json({
+      success: true,
+      count: withReactions.length,
+      posts: withReactions,
+    });
+  })
+);
+
+/** POST /newsletter/posts/:id/reactions — toggle an emoji (logged-in only). */
+apiRouter.post(
+  "/newsletter/posts/:id/reactions",
+  requireUser,
+  reactionLimiter,
+  asyncHandler(async (req: UserRequest, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid post ID" });
+      return;
+    }
+
+    const parsed = newsletterReactionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const post = await getNewsletterPostById(idCheck.data);
+    if (!post) {
+      res.status(404).json({ success: false, error: "Post not found" });
+      return;
+    }
+
+    const result = await toggleNewsletterReaction(
+      idCheck.data,
+      req.user!.id,
+      parsed.data.emoji
+    );
+
+    logger.info("User toggled newsletter reaction", {
+      post_id: idCheck.data,
+      user_id: req.user!.id,
+      emoji: parsed.data.emoji,
+      active: result.active,
+    });
+
+    res.json({
+      success: true,
+      active: result.active,
+      reactions: result.reactions,
+      my_reactions: result.my_reactions,
+    });
   })
 );
 

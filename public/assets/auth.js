@@ -276,6 +276,12 @@
     backdrop.querySelector("[data-auth-forgot]").addEventListener("click", function () { showPane("forgot"); });
     backdrop.querySelector("[data-auth-back]").addEventListener("click", function () { showPane("login"); });
 
+    // Optional starting pane: "login" | "register" | "forgot"
+    var startTab = options && options.tab;
+    if (startTab === "register" || startTab === "forgot" || startTab === "login") {
+      showPane(startTab);
+    }
+
     function busy(form, isBusy, label) {
       var btn = form.querySelector("button[type='submit']");
       btn.disabled = isBusy;

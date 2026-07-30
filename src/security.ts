@@ -82,6 +82,18 @@ export const profileLimiter = rateLimit({
   },
 });
 
+/** Newsletter emoji reactions — logged-in users tapping hearts/angels. */
+export const reactionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: envInt("REACTION_RATE_MAX", 120),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "Too many reactions. Please wait a moment.",
+  },
+});
+
 /** Visit bump: once an hour per IP so refreshes don’t explode the counter. */
 export const newsletterVisitLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,

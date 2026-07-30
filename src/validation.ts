@@ -375,3 +375,12 @@ export const newsletterPostSchema = z
       ),
   })
   .strict();
+
+/** Logged-in toggle for a newsletter post reaction. */
+export const newsletterReactionSchema = z
+  .object({
+    emoji: z.enum(["love", "angel", "thumbs_up"], {
+      errorMap: () => ({ message: "Pick love, angel, or thumbs_up" }),
+    }),
+  })
+  .strict();

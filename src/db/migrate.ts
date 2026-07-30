@@ -144,6 +144,22 @@ export async function migrate(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user
       ON password_reset_tokens (user_id);
 
+    -- Logged-in emoji reactions on newsletter posts (love / angel / thumbs_up).
+    CREATE TABLE IF NOT EXISTS newsletter_post_reactions (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      post_id     UUID NOT NULL REFERENCES newsletter_posts(id) ON DELETE CASCADE,
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      emoji       TEXT NOT NULL CHECK (emoji IN ('love', 'angel', 'thumbs_up')),
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (post_id, user_id, emoji)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_newsletter_reactions_post
+      ON newsletter_post_reactions (post_id);
+
+    CREATE INDEX IF NOT EXISTS idx_newsletter_reactions_user
+      ON newsletter_post_reactions (user_id);
+
     CREATE TABLE IF NOT EXISTS admins (
       id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       email          TEXT NOT NULL UNIQUE,
