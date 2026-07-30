@@ -104,6 +104,17 @@ export async function migrate(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_entry_photos_entry_id
       ON entry_photos (entry_id);
 
+    -- Simple key/value site settings (admin kill switches, etc.)
+    CREATE TABLE IF NOT EXISTS site_settings (
+      key         TEXT PRIMARY KEY,
+      value       JSONB NOT NULL DEFAULT 'null'::jsonb,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    INSERT INTO site_settings (key, value)
+    VALUES ('ai_worker_enabled', 'true'::jsonb)
+    ON CONFLICT (key) DO NOTHING;
+
     -- Newsletter: blog-style posts written by admins for the public page.
     CREATE TABLE IF NOT EXISTS newsletter_posts (
       id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -110,6 +110,7 @@ import {
   verifyFacebookToken,
 } from "./facebook";
 import { sendContactEmail } from "./email";
+import { isAiWorkerEnabled, setAiWorkerEnabled } from "./db/settings";
 import {
   adminGraphicCreateSchema,
   adminGraphicRequiresPhotoSchema,
@@ -396,6 +397,38 @@ apiRouter.post(
   asyncHandler(async (_req, res) => {
     const updated = await acknowledgeVaultedGraphics();
     res.json({ success: true, updated });
+  })
+);
+
+/** GET /admin/ai-worker — whether the graphic AI worker is allowed to run */
+apiRouter.get(
+  "/admin/ai-worker",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const enabled = await isAiWorkerEnabled();
+    res.json({ success: true, enabled });
+  })
+);
+
+/** PATCH /admin/ai-worker — kill switch for AI graphic automation */
+apiRouter.patch(
+  "/admin/ai-worker",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const enabled = req.body?.enabled;
+    if (typeof enabled !== "boolean") {
+      res.status(400).json({
+        success: false,
+        error: "Body must include enabled: true or false",
+      });
+      return;
+    }
+    await setAiWorkerEnabled(enabled);
+    logger.info("Admin toggled AI worker", { enabled });
+    console.error(
+      `[ai-worker] admin set enabled=${enabled}`
+    );
+    res.json({ success: true, enabled });
   })
 );
 

@@ -125,6 +125,39 @@
         opacity: 0.5;
         cursor: default;
       }
+      .ai-kill-btn {
+        border-radius: 9999px;
+        padding: 0.55rem 1.15rem;
+        font-size: 0.8125rem;
+        font-weight: 800;
+        font-family: inherit;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease,
+          box-shadow 0.2s ease;
+      }
+      .ai-kill-btn.on {
+        color: #fff5f5;
+        background: rgba(220, 38, 38, 0.85);
+        border-color: rgba(248, 113, 113, 0.7);
+        box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.25);
+      }
+      .ai-kill-btn.on:hover {
+        background: rgba(185, 28, 28, 0.95);
+      }
+      .ai-kill-btn.off {
+        color: #ecfdf5;
+        background: rgba(4, 120, 87, 0.75);
+        border-color: rgba(52, 211, 153, 0.55);
+      }
+      .ai-kill-btn.off:hover {
+        background: rgba(6, 95, 70, 0.9);
+      }
+      .ai-kill-btn:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
       .stat-card {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -415,6 +448,15 @@
               </p>
             </div>
           </div>
+          <button
+            id="ai-kill-btn"
+            type="button"
+            class="ai-kill-btn on"
+            title="Turn automatic AI graphic generation on or off"
+            aria-pressed="true"
+          >
+            AI ON
+          </button>
           <button
             id="logout-btn"
             type="button"
@@ -1780,6 +1822,74 @@
         window.location.href = "/admin/login";
       });
 
+      const aiKillBtn = document.getElementById("ai-kill-btn");
+      let aiWorkerEnabled = true;
+
+      function renderAiKillBtn() {
+        if (!aiKillBtn) return;
+        aiKillBtn.classList.toggle("on", aiWorkerEnabled);
+        aiKillBtn.classList.toggle("off", !aiWorkerEnabled);
+        aiKillBtn.setAttribute("aria-pressed", String(aiWorkerEnabled));
+        aiKillBtn.textContent = aiWorkerEnabled ? "AI ON" : "AI OFF";
+        aiKillBtn.title = aiWorkerEnabled
+          ? "AI graphic worker is running. Click to pause automation."
+          : "AI graphic worker is paused. Click to turn automation back on.";
+      }
+
+      async function loadAiWorkerState() {
+        if (!aiKillBtn) return;
+        try {
+          const res = await fetch("/admin/ai-worker", { credentials: "include" });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data.success) {
+            aiWorkerEnabled = data.enabled !== false;
+            renderAiKillBtn();
+          }
+        } catch {
+          /* ignore — button stays on defaults */
+        }
+      }
+
+      if (aiKillBtn) {
+        renderAiKillBtn();
+        aiKillBtn.addEventListener("click", async () => {
+          const next = !aiWorkerEnabled;
+          const confirmMsg = next
+            ? "Turn AI graphic automation back ON? New pending requests (without required customer photos) will be processed again."
+            : "Turn AI graphic automation OFF? The worker will stop claiming new jobs until you turn it back on. Pending requests stay in the queue.";
+          if (!confirm(confirmMsg)) return;
+          aiKillBtn.disabled = true;
+          try {
+            const res = await fetch("/admin/ai-worker", {
+              method: "PATCH",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ enabled: next }),
+            });
+            if (res.status === 401) {
+              window.location.href = "/admin/login";
+              return;
+            }
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+              alert(data.error || "Could not update AI worker switch");
+              return;
+            }
+            aiWorkerEnabled = data.enabled === true;
+            renderAiKillBtn();
+          } catch {
+            alert("Network error updating AI worker switch");
+          } finally {
+            aiKillBtn.disabled = false;
+          }
+        });
+      }
+
       /* ═══════════ Dashboard ═══════════ */
 
       const dashError = document.getElementById("dash-error");
@@ -2644,8 +2754,10 @@
         await loadGraphics();
         await loadEntries();
         await loadVaultAlerts();
+        await loadAiWorkerState();
         // Keep the bell + offer timers honest while the portal sits open.
         setInterval(loadVaultAlerts, 60_000);
+        setInterval(loadAiWorkerState, 60_000);
       })();
     </script>
   </body>

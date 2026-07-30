@@ -30,6 +30,7 @@ import {
 import { logger } from "../logger";
 import { editAngelGraphic } from "../xai/imagine";
 import { upsertEntryPhoto } from "../db/entryPhotos";
+import { isAiWorkerEnabled } from "../db/settings";
 import {
   resolvePlaceholderForXai,
   safeAngelFilename,
@@ -265,6 +266,18 @@ async function processEntry(entry: Entry): Promise<void> {
 }
 
 async function tick(cutoff: Date): Promise<void> {
+  const aiOn = await isAiWorkerEnabled();
+  if (!aiOn) {
+    // Still release requires_photo stuck jobs, but do not claim/process AI work.
+    const released = await releaseRequiresPhotoProcessing();
+    if (released > 0) {
+      logger.info("Released requires_photo jobs back to pending", {
+        count: released,
+      });
+    }
+    return;
+  }
+
   const released = await releaseRequiresPhotoProcessing();
   if (released > 0) {
     logger.info("Released requires_photo jobs back to pending", {
@@ -320,13 +333,25 @@ async function main(): Promise<void> {
     automation_cutoff: cutoff.toISOString(),
     skipped_legacy_pending: skippedPending,
     closed_legacy_failed: closedFailed,
+    ai_worker_enabled: await isAiWorkerEnabled(),
   });
 
+  let lastPausedLog = 0;
   for (;;) {
     try {
+      const aiOn = await isAiWorkerEnabled();
+      if (!aiOn) {
+        const now = Date.now();
+        if (now - lastPausedLog > 60_000) {
+          logger.warn("AI worker paused by admin kill switch");
+          console.error("[ai-worker] paused — admin turned AI off");
+          lastPausedLog = now;
+        }
+      }
       await tick(cutoff);
     } catch (err) {
       logger.error("Worker tick crashed", { error: String(err) });
+      console.error(`[pipeline-fail] tick-crash error=${String(err)}`);
     }
     await new Promise((r) => setTimeout(r, POLL_SECONDS * 1000));
   }
