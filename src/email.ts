@@ -135,7 +135,44 @@ export function failureAlertAddress(): string {
 }
 
 /**
+ * Outcome of a send that matters to the caller.
+ *
+ * "not_sent" is only used when the message provably never reached the relay,
+ * which makes a retry safe. Anything else is "unknown", because a timeout or a
+ * dropped socket can still have been accepted, and resending on that basis is
+ * how a customer ends up with two copies.
+ */
+export type SendOutcome =
+  | { status: "sent" }
+  | { status: "not_sent"; error: string }
+  | { status: "unknown"; error: string };
+
+/** Nodemailer codes that prove the message never left. */
+const NEVER_SENT_CODES = new Set([
+  "EAUTH",
+  "EENVELOPE",
+  "EMESSAGE",
+  "EDNS",
+  "ECONNECTION",
+]);
+
+function classifySendFailure(err: unknown): SendOutcome {
+  const error = String(err);
+  const details = err as { code?: unknown; command?: unknown } | null;
+  const code = String(details?.code ?? "").toUpperCase();
+  const command = String(details?.command ?? "").toUpperCase();
+
+  if (NEVER_SENT_CODES.has(code)) return { status: "not_sent", error };
+  // A timeout while still connecting or greeting means no message was written.
+  if (code === "ETIMEDOUT" && command === "CONN") {
+    return { status: "not_sent", error };
+  }
+  return { status: "unknown", error };
+}
+
+/**
  * Soft-tone delivery email with the generated angel graphic attached.
+ * The caller must treat "unknown" as possibly delivered.
  */
 export async function sendGraphicDeliveryEmail(input: {
   to: string;
@@ -143,12 +180,15 @@ export async function sendGraphicDeliveryEmail(input: {
   filename: string;
   image: Buffer;
   contentType?: string;
-}): Promise<boolean> {
+}): Promise<SendOutcome> {
   if (!mailerConfigured()) {
     logger.warn(
       "SMTP not configured — graphic delivery email not sent. Set SMTP_HOST/SMTP_USER/SMTP_PASS."
     );
-    return false;
+    return {
+      status: "not_sent",
+      error: "SMTP is not configured (SMTP_HOST / SMTP_USER / SMTP_PASS)",
+    };
   }
 
   const name = input.angelName.trim();
@@ -177,28 +217,33 @@ export async function sendGraphicDeliveryEmail(input: {
         },
       ],
     });
-    return true;
+    return { status: "sent" };
   } catch (err) {
+    const outcome = classifySendFailure(err);
     logger.error("Failed to send graphic delivery email", {
       error: String(err),
+      outcome: outcome.status,
       to: input.to,
       angel_name: input.angelName,
       filename: input.filename,
     });
     console.error(
-      `[smtp-fail] delivery to=${input.to} angel=${input.angelName} error=${String(err)}`
+      `[smtp-fail] delivery outcome=${outcome.status} to=${input.to} angel=${input.angelName} error=${String(err)}`
     );
-    return false;
+    return outcome;
   }
 }
 
-/** Alert Audrey when the graphic pipeline fails. */
+/** Alert Audrey when the graphic pipeline fails or stops for a human. */
 export async function sendPipelineFailureEmail(input: {
   entryId: string;
   angelName: string;
   email: string | null;
   graphicCode: string | null;
   error: string;
+  /** Automation has stopped for this request; it will not retry on its own. */
+  escalated?: boolean;
+  retryInMinutes?: number | null;
 }): Promise<boolean> {
   if (!mailerConfigured()) {
     logger.warn(
@@ -207,20 +252,30 @@ export async function sendPipelineFailureEmail(input: {
     return false;
   }
 
+  const subject = input.escalated
+    ? `[AAGDB] Needs your review — ${input.angelName}`
+    : `[AAGDB] Graphic pipeline failed — ${input.angelName}`;
+
+  const nextStep = input.escalated
+    ? `Automation has stopped for this request and will not try again.\n` +
+      `Open Admin → Requests to check it. If the graphic was generated you can\n` +
+      `download it under Generated and send it yourself, then mark the name complete.\n`
+    : `The worker will try again automatically` +
+      (input.retryInMinutes ? ` in about ${input.retryInMinutes} minute(s).\n` : `.\n`);
+
   try {
     await sendMailWithTimeout({
       from: fromAddress(),
       to: failureAlertAddress(),
-      subject: `[AAGDB] Graphic pipeline failed — ${input.angelName}`,
+      subject,
       text:
-        `A graphic request failed in the automation worker.\n\n` +
+        `A graphic request needs attention in the automation worker.\n\n` +
         `Entry ID: ${input.entryId}\n` +
         `Angel name: ${input.angelName}\n` +
         `Customer email: ${input.email || "(none)"}\n` +
         `Graphic code: ${input.graphicCode || "(none)"}\n\n` +
-        `Error:\n${input.error}\n\n` +
-        `Check the admin portal for the failure banner / Requests → Failed.\n` +
-        `If a graphic was generated, download it from Admin → Requests → Generated.\n`,
+        `What happened:\n${input.error}\n\n` +
+        nextStep,
     });
     return true;
   } catch (err) {

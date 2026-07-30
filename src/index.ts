@@ -10,7 +10,7 @@ import express, {
 import helmet from "helmet";
 import { vaultExpiredGraphics } from "./db/graphics";
 import { migrate } from "./db/migrate";
-import { closePool } from "./db/pool";
+import { closePool, withAdvisoryLock } from "./db/pool";
 import { markPurchaseStatusByIntent } from "./db/shop";
 import { logger } from "./logger";
 import { authRouter } from "./authRoutes";
@@ -244,7 +244,9 @@ async function start() {
     process.exit(1);
   }
 
-  await migrate();
+  // Both this service and the graphic worker migrate on boot, in whichever
+  // order Railway deploys them. The lock keeps them from racing.
+  await withAdvisoryLock("aagdb_migrate", () => migrate());
   ensureUploadDir();
 
   // Vault sweep: close limited-time graphic offers whose countdown hit zero.

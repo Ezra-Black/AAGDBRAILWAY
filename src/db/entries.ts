@@ -1,6 +1,29 @@
-import { query } from "./pool";
+import { query, withTransaction } from "./pool";
+import { claimDelivery, deliveryKey, type DeliveryRecord } from "./deliveries";
 
-export type EntryStatus = "pending" | "processing" | "processed" | "failed";
+export type EntryStatus =
+  | "pending"
+  | "processing"
+  | "validated"
+  | "applied"
+  | "processed"
+  | "failed"
+  | "escalated";
+
+/** Statuses where the pipeline still owes the customer something. */
+export const IN_FLIGHT_STATUSES: EntryStatus[] = [
+  "pending",
+  "processing",
+  "validated",
+  "applied",
+  "escalated",
+];
+
+/** How many delivery attempts before a request is handed to a person. */
+export const MAX_ATTEMPTS = 3;
+
+/** Backoff before each retry, in minutes, indexed by attempts already made. */
+const RETRY_BACKOFF_MINUTES = [1, 5, 15];
 
 export interface Entry {
   id: string;
@@ -9,6 +32,10 @@ export interface Entry {
   email: string | null;
   graphic_code: string | null;
   status: EntryStatus;
+  /** Bumped once per completed delivery cycle; guards against stale claims. */
+  version: number;
+  attempt_count: number;
+  next_retry_at: Date | null;
   archived_at: Date | null;
   created_at: Date;
   updated_at: Date;
@@ -33,6 +60,9 @@ function mapRow(row: Record<string, unknown>): Entry {
     email: (row.email as string) ?? null,
     graphic_code: (row.graphic_code as string) ?? null,
     status: row.status as EntryStatus,
+    version: Number(row.version ?? 1),
+    attempt_count: Number(row.attempt_count ?? 0),
+    next_retry_at: (row.next_retry_at as Date) ?? null,
     archived_at: (row.archived_at as Date) ?? null,
     created_at: row.created_at as Date,
     updated_at: row.updated_at as Date,
@@ -215,7 +245,7 @@ export async function listAngelGroupsForAdmin(
     }
     group.submission_count = group.entry_ids.length;
     group.duplicate = group.submission_count > 1;
-    if (row.status === "pending" || row.status === "processing") {
+    if (row.status !== "processed") {
       group.has_pending = true;
     }
     if (row.created_at > group.latest_at) {
@@ -281,21 +311,31 @@ export async function archiveCompletedEntries(): Promise<number> {
        AND status = 'processed'
        AND lower(angel_name) NOT IN (
          SELECT lower(angel_name) FROM entries
-         WHERE archived_at IS NULL AND status IN ('pending', 'processing')
+         WHERE archived_at IS NULL AND status <> 'processed'
        )`
   );
   return result.rowCount ?? 0;
 }
 
+/**
+ * Admin override: close out every open submission for a name because it was
+ * handled by hand. Also acks any failure so the alert banner clears.
+ */
 export async function markAngelNameComplete(
   angelName: string
 ): Promise<number> {
   const result = await query(
     `UPDATE entries
      SET status = 'processed',
-         updated_at = NOW()
+         next_retry_at = NULL,
+         updated_at = NOW(),
+         metadata = metadata || jsonb_build_object(
+           'failure_acked', 'true',
+           'closed_by', 'admin',
+           'closed_at', NOW()::text
+         )
      WHERE lower(angel_name) = lower($1)
-       AND status IN ('pending', 'processing')`,
+       AND status <> 'processed'`,
     [angelName]
   );
   return result.rowCount ?? 0;
@@ -421,6 +461,7 @@ export async function claimNextPending(
        FROM entries e
        WHERE e.status = 'pending'
          AND e.archived_at IS NULL
+         AND (e.next_retry_at IS NULL OR e.next_retry_at <= NOW())
          AND ($1::timestamptz IS NULL OR e.created_at >= $1::timestamptz)
          AND NOT EXISTS (
            SELECT 1
@@ -490,7 +531,7 @@ export async function skipLegacyPendingBefore(
            'photo_sent', 'false',
            'note', 'Closed as pre-automation backlog; do not auto-email'
          )
-     WHERE status IN ('pending', 'processing')
+     WHERE status IN ('pending', 'processing', 'validated', 'applied')
        AND archived_at IS NULL
        AND created_at < $1::timestamptz`,
     [before]
@@ -562,7 +603,7 @@ export async function listFailedPipelineAlerts(
          LIMIT 1
        ) AS graphic_label
      FROM entries e
-     WHERE e.status = 'failed'
+     WHERE e.status IN ('failed', 'escalated')
        AND e.archived_at IS NULL
        AND coalesce(e.metadata->>'failure_acked', 'false') <> 'true'
      ORDER BY e.updated_at DESC
@@ -584,10 +625,382 @@ export async function ackFailedPipelineAlerts(): Promise<number> {
     `UPDATE entries
      SET metadata = metadata || '{"failure_acked":"true"}'::jsonb,
          updated_at = NOW()
-     WHERE status = 'failed'
+     WHERE status IN ('failed', 'escalated')
        AND coalesce(metadata->>'failure_acked', 'false') <> 'true'`
   );
   return result.rowCount ?? 0;
+}
+
+export interface TransitionOptions {
+  /** Recorded in entry_transitions: worker stage, 'admin', 'api'. */
+  actor?: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+  /** Set when this transition ends a delivery cycle. */
+  bumpVersion?: boolean;
+  clearRetry?: boolean;
+}
+
+/**
+ * Move an entry between states, but only if it is still where and how the
+ * caller last saw it. A mismatched status or version means another worker (or
+ * an admin) has already moved this row, so the caller must stop rather than
+ * overwrite newer work. Returns null when the guard rejects the write.
+ */
+export async function transitionEntry(
+  id: string,
+  from: EntryStatus | EntryStatus[],
+  to: EntryStatus,
+  expectedVersion: number,
+  options: TransitionOptions = {}
+): Promise<Entry | null> {
+  const fromStatuses = Array.isArray(from) ? from : [from];
+  return withTransaction(async (client) => {
+    await client.query(`SELECT set_config('aagdb.actor', $1, true)`, [
+      options.actor ?? "worker",
+    ]);
+    await client.query(`SELECT set_config('aagdb.reason', $1, true)`, [
+      options.reason ?? "",
+    ]);
+
+    const result = await client.query(
+      `UPDATE entries
+       SET status = $3,
+           version = CASE WHEN $5 THEN version + 1 ELSE version END,
+           next_retry_at = CASE WHEN $6 THEN NULL ELSE next_retry_at END,
+           updated_at = NOW(),
+           metadata = CASE
+             WHEN $7::jsonb IS NULL THEN metadata
+             ELSE metadata || $7::jsonb
+           END
+       WHERE id = $1
+         AND status = ANY($2::text[])
+         AND version = $4
+       RETURNING *`,
+      [
+        id,
+        fromStatuses,
+        to,
+        expectedVersion,
+        options.bumpVersion ?? false,
+        options.clearRetry ?? false,
+        options.metadata ? JSON.stringify(options.metadata) : null,
+      ]
+    );
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
+  });
+}
+
+export type FailureClass = "transient" | "permanent";
+
+/**
+ * Record a pipeline failure. Transient failures get a backed-off retry until
+ * the attempt cap; permanent ones (and exhausted retries) stop as 'escalated'
+ * so a person picks them up instead of the queue churning.
+ */
+export async function recordFailure(input: {
+  entry: Entry;
+  stage: "generate" | "deliver";
+  error: string;
+  failureClass: FailureClass;
+  metadata?: Record<string, unknown>;
+}): Promise<{ entry: Entry | null; escalated: boolean; retryInMinutes: number | null }> {
+  const attempts = input.entry.attempt_count + 1;
+  const backoff = RETRY_BACKOFF_MINUTES[input.entry.attempt_count] ?? null;
+  const escalate =
+    input.failureClass === "permanent" ||
+    attempts >= MAX_ATTEMPTS ||
+    backoff === null;
+
+  const metadata = {
+    error: input.error,
+    failure_stage: input.stage,
+    failure_class: input.failureClass,
+    failed_at: new Date().toISOString(),
+    failure_acked: "false",
+    attempt_count: String(attempts),
+    ...(input.metadata ?? {}),
+  };
+
+  return withTransaction(async (client) => {
+    await client.query(`SELECT set_config('aagdb.actor', $1, true)`, [
+      `worker:${input.stage}`,
+    ]);
+    await client.query(`SELECT set_config('aagdb.reason', $1, true)`, [
+      input.error.slice(0, 300),
+    ]);
+
+    const result = await client.query(
+      `UPDATE entries
+       SET status = $2,
+           attempt_count = $3,
+           next_retry_at = $4,
+           updated_at = NOW(),
+           metadata = metadata || $5::jsonb
+       WHERE id = $1
+         AND version = $6
+       RETURNING *`,
+      [
+        input.entry.id,
+        escalate ? "escalated" : "failed",
+        attempts,
+        escalate ? null : new Date(Date.now() + backoff! * 60_000),
+        JSON.stringify(
+          escalate
+            ? {
+                ...metadata,
+                escalated_at: new Date().toISOString(),
+                escalation_reason:
+                  input.failureClass === "permanent"
+                    ? "permanent_failure"
+                    : "retry_attempts_exhausted",
+              }
+            : metadata
+        ),
+        input.entry.version,
+      ]
+    );
+
+    return {
+      entry: result.rows[0] ? mapRow(result.rows[0]) : null,
+      escalated: escalate,
+      retryInMinutes: escalate ? null : backoff,
+    };
+  });
+}
+
+/**
+ * Put failures whose backoff has elapsed back in the queue. Generation output
+ * is reused on the retry, and the delivery record decides whether a second
+ * email is allowed, so requeueing here cannot produce a duplicate send.
+ */
+export async function requeueDueRetries(
+  minCreatedAt?: Date | null
+): Promise<number> {
+  const result = await query(
+    `UPDATE entries
+     SET status = 'pending',
+         next_retry_at = NULL,
+         updated_at = NOW(),
+         metadata = metadata || jsonb_build_object(
+           'requeued_at', NOW()::text,
+           'requeue_reason', 'retry_backoff_elapsed'
+         )
+     WHERE status = 'failed'
+       AND archived_at IS NULL
+       AND next_retry_at IS NOT NULL
+       AND next_retry_at <= NOW()
+       AND attempt_count < $1
+       AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)`,
+    [MAX_ATTEMPTS, minCreatedAt ?? null]
+  );
+  return result.rowCount ?? 0;
+}
+
+/**
+ * An entry left in 'applied' means an email was handed to SMTP and the worker
+ * never saw the outcome. Retrying could send a second copy, so age it out to a
+ * person instead.
+ */
+export async function escalateStuckApplied(
+  olderThanMinutes = 15
+): Promise<number> {
+  const minutes = Math.max(5, olderThanMinutes);
+  const result = await query(
+    `UPDATE entries
+     SET status = 'escalated',
+         updated_at = NOW(),
+         metadata = metadata || jsonb_build_object(
+           'escalated_at', NOW()::text,
+           'escalation_reason', 'delivery_outcome_unconfirmed',
+           'note', 'Email was handed to SMTP but never confirmed. Check the customer inbox before resending.',
+           'failure_acked', 'false'
+         )
+     WHERE status = 'applied'
+       AND archived_at IS NULL
+       AND updated_at < NOW() - ($1::text || ' minutes')::interval`,
+    [String(minutes)]
+  );
+  return result.rowCount ?? 0;
+}
+
+/**
+ * Admin action: allow one more delivery attempt for a request that stopped
+ * because an earlier send was never confirmed. Clears the block on the
+ * delivery key and gives the request a fresh set of retries.
+ */
+export async function reopenForResend(id: string): Promise<Entry | null> {
+  return withTransaction(async (client) => {
+    await client.query(`SELECT set_config('aagdb.actor', $1, true)`, ["admin"]);
+    await client.query(`SELECT set_config('aagdb.reason', $1, true)`, [
+      "admin authorised one more send",
+    ]);
+    const result = await client.query(
+      `UPDATE entries
+       SET status = 'pending',
+           attempt_count = 0,
+           next_retry_at = NULL,
+           updated_at = NOW(),
+           metadata = metadata || jsonb_build_object(
+             'reopened_at', NOW()::text,
+             'reopened_by', 'admin',
+             'failure_acked', 'true'
+           )
+       WHERE id = $1
+         AND status IN ('failed', 'escalated')
+       RETURNING *`,
+      [id]
+    );
+    return result.rows[0] ? mapRow(result.rows[0]) : null;
+  });
+}
+
+/** The delivery identity for this entry, when it has enough detail to send. */
+export function entryDeliveryKey(entry: Entry): string | null {
+  const email = entry.email?.trim();
+  const graphicCode = entry.graphic_code?.trim();
+  if (!email || !graphicCode) return null;
+  return deliveryKey({ email, angelName: entry.angel_name, graphicCode });
+}
+
+export type DeliveryClaim =
+  | { kind: "empty" }
+  | { kind: "claimed"; entry: Entry; deliveryKey: string }
+  | { kind: "duplicate"; entry: Entry; existing: DeliveryRecord }
+  | { kind: "unconfirmed"; entry: Entry; existing: DeliveryRecord };
+
+/**
+ * Claim one generated request for delivery.
+ *
+ * The row moves to 'applied' and the delivery intent is recorded in the same
+ * transaction, before any email is sent. If the caller then crashes, times
+ * out, or is killed, the durable record still says an attempt was made.
+ */
+export async function claimValidatedForDelivery(
+  minCreatedAt?: Date | null
+): Promise<DeliveryClaim> {
+  return withTransaction(async (client) => {
+    const candidate = await client.query(
+      `SELECT * FROM entries
+       WHERE status = 'validated'
+         AND archived_at IS NULL
+         AND ($1::timestamptz IS NULL OR created_at >= $1::timestamptz)
+       ORDER BY created_at ASC
+       FOR UPDATE SKIP LOCKED
+       LIMIT 1`,
+      [minCreatedAt ?? null]
+    );
+    if (!candidate.rows[0]) return { kind: "empty" as const };
+
+    const entry = mapRow(candidate.rows[0]);
+    const email = entry.email?.trim();
+    const graphicCode = entry.graphic_code?.trim();
+    if (!email || !graphicCode) {
+      // Validation should have caught this; treat as unconfirmed so a person
+      // looks rather than the row silently spinning.
+      await client.query(
+        `UPDATE entries
+         SET status = 'escalated',
+             updated_at = NOW(),
+             metadata = metadata || jsonb_build_object(
+               'escalation_reason', 'missing_email_or_graphic_at_delivery',
+               'failure_acked', 'false'
+             )
+         WHERE id = $1`,
+        [entry.id]
+      );
+      return { kind: "empty" as const };
+    }
+
+    const key = deliveryKey({
+      email,
+      angelName: entry.angel_name,
+      graphicCode,
+    });
+
+    await client.query(`SELECT set_config('aagdb.actor', $1, true)`, [
+      "worker:deliver",
+    ]);
+
+    const claim = await claimDelivery(client, { key, entryId: entry.id });
+    if (!claim.claimed) {
+      if (claim.existing.state === "sent") {
+        await client.query(`SELECT set_config('aagdb.reason', $1, true)`, [
+          "already delivered under this idempotency key",
+        ]);
+        const closed = await client.query(
+          `UPDATE entries
+           SET status = 'processed',
+               version = version + 1,
+               next_retry_at = NULL,
+               updated_at = NOW(),
+               metadata = metadata || jsonb_build_object(
+                 'photo_sent', 'true',
+                 'skipped_duplicate', 'true',
+                 'duplicate_of_delivery', $2::text,
+                 'note', 'A delivery for this customer, angel name and graphic was already sent'
+               )
+           WHERE id = $1
+           RETURNING *`,
+          [entry.id, key]
+        );
+        return {
+          kind: "duplicate" as const,
+          entry: mapRow(closed.rows[0]),
+          existing: claim.existing,
+        };
+      }
+
+      await client.query(`SELECT set_config('aagdb.reason', $1, true)`, [
+        "previous delivery attempt never confirmed",
+      ]);
+      const held = await client.query(
+        `UPDATE entries
+         SET status = 'escalated',
+             updated_at = NOW(),
+             metadata = metadata || jsonb_build_object(
+               'escalated_at', NOW()::text,
+               'escalation_reason', 'delivery_outcome_unconfirmed',
+               'note', 'An earlier send for this customer was never confirmed. Check their inbox, then release it for one more send or mark it complete.',
+               'failure_acked', 'false'
+             )
+         WHERE id = $1
+         RETURNING *`,
+        [entry.id]
+      );
+      return {
+        kind: "unconfirmed" as const,
+        entry: mapRow(held.rows[0]),
+        existing: claim.existing,
+      };
+    }
+
+    await client.query(`SELECT set_config('aagdb.reason', $1, true)`, [
+      "delivery intent recorded before send",
+    ]);
+    const applied = await client.query(
+      `UPDATE entries
+       SET status = 'applied',
+           attempt_count = attempt_count + 1,
+           updated_at = NOW(),
+           metadata = metadata || jsonb_build_object(
+             'delivery_key', $2::text,
+             'delivery_attempted_at', NOW()::text
+           )
+       WHERE id = $1
+         AND status = 'validated'
+         AND version = $3
+       RETURNING *`,
+      [entry.id, key, entry.version]
+    );
+    if (!applied.rows[0]) return { kind: "empty" as const };
+
+    return {
+      kind: "claimed" as const,
+      entry: mapRow(applied.rows[0]),
+      deliveryKey: key,
+    };
+  });
 }
 
 export async function updateEntryStatus(
