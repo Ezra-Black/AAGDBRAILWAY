@@ -156,6 +156,37 @@
         </p>
       </header>
 
+      <aside
+        id="account-nudge-entry"
+        class="account-nudge reveal mb-5"
+        style="--reveal-delay:0.05s"
+        hidden
+        role="region"
+        aria-label="Account tip"
+      >
+        <button
+          type="button"
+          class="account-nudge-dismiss"
+          data-nudge-dismiss="entry"
+          aria-label="Dismiss tip"
+        >
+          ×
+        </button>
+        <p class="account-nudge-title">A little shortcut, if you want it</p>
+        <p class="account-nudge-body">
+          A free account can remember your names and email so the next request
+          goes quicker. No pressure — you can fill this out either way.
+        </p>
+        <div class="account-nudge-actions">
+          <button type="button" id="nudge-create-account" class="btn-secondary account-nudge-btn">
+            Create a free account
+          </button>
+          <button type="button" class="account-nudge-later" data-nudge-dismiss="entry">
+            Maybe later
+          </button>
+        </div>
+      </aside>
+
       <form
         id="submit-form"
         class="glass-panel reveal space-y-5 rounded-[1.75rem] p-6 sm:p-8"
@@ -266,6 +297,34 @@
           </p>
         </div>
       </form>
+
+      <aside
+        id="account-nudge-after"
+        class="account-nudge account-nudge-after mt-5"
+        hidden
+        role="region"
+        aria-label="Saved details tip"
+      >
+        <button
+          type="button"
+          class="account-nudge-dismiss"
+          data-nudge-dismiss="after"
+          aria-label="Dismiss tip"
+        >
+          ×
+        </button>
+        <p class="account-nudge-title">Next time can be easier</p>
+        <p class="account-nudge-body">
+          Your details stay with your account, so we can fill this in for you
+          on the next request. No need to retype everything.
+        </p>
+        <div class="account-nudge-actions">
+          <a href="/profile" class="btn-secondary account-nudge-btn">View your profile</a>
+          <button type="button" class="account-nudge-later" data-nudge-dismiss="after">
+            Sounds good
+          </button>
+        </div>
+      </aside>
 
       <div id="review-prompt" class="reveal mt-6 text-center" style="--reveal-delay:0.2s" hidden>
         <button type="button" id="leave-review-btn" class="btn-primary">
@@ -564,6 +623,88 @@
         AAGAuth.ready.then((user) => prefillFromUser(user));
       }
 
+      /* Soft account nudges — gentle, dismissible, never blocking. */
+      const NUDGE_ENTRY_KEY = "aag_form_nudge_entry_v1";
+      const NUDGE_DISMISS_MS = 1000 * 60 * 60 * 24 * 21; // 21 days
+      const nudgeEntry = document.getElementById("account-nudge-entry");
+      const nudgeAfter = document.getElementById("account-nudge-after");
+
+      function nudgeDismissedRecently(key) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) return false;
+          const at = Number(raw);
+          if (!Number.isFinite(at)) return false;
+          return Date.now() - at < NUDGE_DISMISS_MS;
+        } catch {
+          return false;
+        }
+      }
+
+      function dismissNudge(which) {
+        if (which === "entry" && nudgeEntry) {
+          nudgeEntry.hidden = true;
+          try {
+            localStorage.setItem(NUDGE_ENTRY_KEY, String(Date.now()));
+          } catch {}
+        }
+        if (which === "after" && nudgeAfter) {
+          nudgeAfter.hidden = true;
+        }
+      }
+
+      function showEntryNudge(user) {
+        if (!nudgeEntry) return;
+        if (user || nudgeDismissedRecently(NUDGE_ENTRY_KEY)) {
+          nudgeEntry.hidden = true;
+          return;
+        }
+        nudgeEntry.hidden = false;
+      }
+
+      function showAfterNudge() {
+        if (!nudgeAfter) return;
+        if (nudgeEntry) nudgeEntry.hidden = true;
+        nudgeAfter.hidden = false;
+        nudgeAfter.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+
+      document.querySelectorAll("[data-nudge-dismiss]").forEach((el) => {
+        el.addEventListener("click", () => {
+          dismissNudge(el.getAttribute("data-nudge-dismiss"));
+        });
+      });
+
+      const nudgeCreateBtn = document.getElementById("nudge-create-account");
+      if (nudgeCreateBtn) {
+        nudgeCreateBtn.addEventListener("click", () => {
+          if (!window.AAGAuth) return;
+          AAGAuth.openModal({
+            tab: "register",
+            title: "Create a free account",
+            message:
+              "We’ll remember your names and email for next time. Takes a moment.",
+          }).then(
+            (user) => {
+              prefillFromUser(user);
+              dismissNudge("entry");
+            },
+            () => {
+              /* dismissed — leave the tip alone */
+            }
+          );
+        });
+      }
+
+      document.addEventListener("aag:auth", (e) => {
+        showEntryNudge(e.detail.user);
+      });
+      if (window.AAGAuth) {
+        AAGAuth.ready.then((user) => showEntryNudge(user));
+      } else {
+        showEntryNudge(null);
+      }
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         message.hidden = true;
@@ -687,6 +828,7 @@
                 "This graphic was already sent (or is already on the way) for that angel name. Check your email — including spam."
             );
             if (reviewPrompt) reviewPrompt.hidden = true;
+            if (nudgeAfter) nudgeAfter.hidden = true;
             return;
           }
 
@@ -702,6 +844,7 @@
               "Submitted! You’re on the list — keep an eye on your email for an update.",
             true
           );
+          showAfterNudge();
           if (reviewPrompt) reviewPrompt.hidden = false;
         } catch {
           showMessage("Network glitch. Try again in a sec.", false);

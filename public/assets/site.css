@@ -612,3 +612,93 @@ body {
   background: rgba(240, 196, 92, 0.12);
   color: var(--cream, #fff6e4);
 }
+
+/* Soft account nudges on the request form */
+.account-nudge {
+  position: relative;
+  border-radius: 1.35rem;
+  border: 1px solid rgba(255, 246, 228, 0.1);
+  background: rgba(255, 246, 228, 0.04);
+  padding: 1.15rem 1.25rem 1.2rem;
+  color: rgba(255, 246, 228, 0.78);
+}
+
+.account-nudge-after {
+  animation: account-nudge-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes account-nudge-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.account-nudge-title {
+  margin: 0 1.5rem 0.35rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--cream, #fff6e4);
+}
+
+.account-nudge-body {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 300;
+  line-height: 1.55;
+  color: rgba(255, 246, 228, 0.58);
+}
+
+.account-nudge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-top: 0.95rem;
+}
+
+.account-nudge-btn {
+  padding: 0.55rem 1.15rem;
+  font-size: 0.82rem;
+}
+
+.account-nudge-later {
+  background: none;
+  border: 0;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: rgba(255, 246, 228, 0.45);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(255, 246, 228, 0.2);
+}
+
+.account-nudge-later:hover {
+  color: rgba(255, 246, 228, 0.75);
+}
+
+.account-nudge-dismiss {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.7rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: rgba(255, 246, 228, 0.4);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.account-nudge-dismiss:hover {
+  color: rgba(255, 246, 228, 0.8);
+  background: rgba(255, 246, 228, 0.06);
+}
