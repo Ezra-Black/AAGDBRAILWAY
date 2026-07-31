@@ -28,12 +28,15 @@ import {
   getEntryByRealName,
   listAngelGroupsForAdmin,
   listEntries,
+  entryDeliveryKey,
   listFailedPipelineAlerts,
   listPending,
   markAngelNameComplete,
+  reopenForResend,
   setAngelNameArchived,
   updateEntryStatus,
 } from "./db/entries";
+import { releaseDeliveryForResend } from "./db/deliveries";
 import { createAdmin, getAdminByEmail } from "./db/admins";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -394,6 +397,58 @@ apiRouter.post(
   })
 );
 
+/**
+ * POST /admin/entries/:id/allow-resend — authorise one more delivery attempt.
+ *
+ * Requests stop as 'escalated' when the mail server never confirmed a send,
+ * because sending again could give the customer a second copy. Once an admin
+ * has checked the customer's inbox, this releases that block and puts the
+ * request back in the queue.
+ */
+apiRouter.post(
+  "/admin/entries/:id/allow-resend",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = z.string().uuid().safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid entry id" });
+      return;
+    }
+
+    const entry = await getEntryById(idCheck.data);
+    if (!entry) {
+      res.status(404).json({ success: false, error: "Entry not found" });
+      return;
+    }
+    if (entry.status !== "failed" && entry.status !== "escalated") {
+      res.status(409).json({
+        success: false,
+        error: `Only stopped requests can be released for a resend (this one is ${entry.status})`,
+      });
+      return;
+    }
+
+    const key = entryDeliveryKey(entry);
+    if (key) await releaseDeliveryForResend(key);
+
+    const reopened = await reopenForResend(entry.id);
+    if (!reopened) {
+      res.status(409).json({
+        success: false,
+        error: "This request moved on before it could be released",
+      });
+      return;
+    }
+
+    logger.info("Admin released a request for one more delivery attempt", {
+      id: entry.id,
+      angel_name: entry.angel_name,
+      previous_status: entry.status,
+    });
+    res.json({ success: true, entry: reopened });
+  })
+);
+
 /** GET /admin/graphics — manage dropdown options (sweeps expired offers first) */
 apiRouter.get(
   "/admin/graphics",
@@ -486,6 +541,12 @@ apiRouter.get(
           graphic_code: e.graphic_code,
           graphic_label: graphicLabel,
           error: e.metadata?.error ?? null,
+          status: e.status,
+          /** escalated = automation stopped; failed = a retry is scheduled. */
+          needs_review: e.status === "escalated",
+          escalation_reason: e.metadata?.escalation_reason ?? null,
+          attempt_count: e.attempt_count,
+          next_retry_at: e.next_retry_at,
           updated_at: e.updated_at,
         };
       }),

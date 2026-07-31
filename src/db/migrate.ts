@@ -1,6 +1,6 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { closePool, query } from "./pool";
+import { closePool, query, withTransaction } from "./pool";
 import { logger } from "../logger";
 
 const SEED_ADMIN_EMAIL = "allaudrey22@gmail.com";
@@ -56,6 +56,88 @@ export async function migrate(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_entries_pending
       ON entries (created_at ASC)
       WHERE status = 'pending';
+
+    -- Pipeline bookkeeping. version is compared-and-set on every worker
+    -- transition, so a claim made before a requeue can never overwrite the
+    -- newer state. attempt_count / next_retry_at drive capped backoff.
+    ALTER TABLE entries ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1;
+    ALTER TABLE entries ADD COLUMN IF NOT EXISTS attempt_count INT NOT NULL DEFAULT 0;
+    ALTER TABLE entries ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ;
+
+    -- Delivery is split so a retry can tell which half already happened:
+    --   validated = graphic generated and stored, nothing emailed yet
+    --   applied   = the email was handed to SMTP, outcome not yet confirmed
+    --   processed = delivery confirmed (kept as the final state name)
+    --   escalated = automation stopped on purpose, a person must look
+    -- Drop by definition, not by name: a database whose constraint was created
+    -- under a different name would otherwise keep the old narrow rule and
+    -- reject every new status at runtime instead of here.
+    DO $status_check$
+    DECLARE existing TEXT;
+    BEGIN
+      FOR existing IN
+        SELECT conname FROM pg_constraint
+        WHERE conrelid = 'entries'::regclass
+          AND contype = 'c'
+          AND pg_get_constraintdef(oid) ILIKE '%status%'
+      LOOP
+        EXECUTE format('ALTER TABLE entries DROP CONSTRAINT %I', existing);
+      END LOOP;
+    END
+    $status_check$;
+
+    ALTER TABLE entries
+      ADD CONSTRAINT entries_status_check
+      CHECK (status IN (
+        'pending', 'processing', 'validated', 'applied',
+        'processed', 'failed', 'escalated'
+      ));
+
+    CREATE INDEX IF NOT EXISTS idx_entries_validated
+      ON entries (created_at ASC)
+      WHERE status = 'validated';
+
+    CREATE INDEX IF NOT EXISTS idx_entries_retry_ready
+      ON entries (next_retry_at)
+      WHERE status = 'failed' AND next_retry_at IS NOT NULL;
+
+    -- One row per customer delivery intent, written BEFORE the email is
+    -- handed to SMTP. The unique key means a second attempt for the same
+    -- intent is refused by Postgres rather than by application logic, so an
+    -- interrupted or timed-out send can never look like it never happened.
+    --   attempted = handed to SMTP, outcome unknown (never auto-retried)
+    --   sent      = SMTP accepted the message
+    --   not_sent  = proven never sent (bad auth, bad recipient, no connection)
+    CREATE TABLE IF NOT EXISTS graphic_deliveries (
+      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      idempotency_key  TEXT NOT NULL UNIQUE,
+      entry_id         UUID REFERENCES entries(id) ON DELETE SET NULL,
+      state            TEXT NOT NULL DEFAULT 'attempted'
+                       CHECK (state IN ('attempted', 'sent', 'not_sent')),
+      attempt_count    INT NOT NULL DEFAULT 1,
+      last_error       TEXT,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_graphic_deliveries_entry
+      ON graphic_deliveries (entry_id);
+
+    -- Append-only audit so "where did this stop, and why" is answerable from
+    -- the database alone, without reading worker logs.
+    CREATE TABLE IF NOT EXISTS entry_transitions (
+      id           BIGSERIAL PRIMARY KEY,
+      entry_id     UUID NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+      version      INT NOT NULL DEFAULT 1,
+      from_status  TEXT,
+      to_status    TEXT NOT NULL,
+      actor        TEXT NOT NULL DEFAULT 'system',
+      reason       TEXT,
+      at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_entry_transitions_entry
+      ON entry_transitions (entry_id, at DESC);
 
     CREATE TABLE IF NOT EXISTS graphic_options (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -354,6 +436,36 @@ export async function migrate(): Promise<void> {
       ON purchases (archived_at);
   `);
 
+  // Log every status change from any code path (worker, admin portal, API),
+  // not just the ones that remember to write an audit row.
+  await query(`
+    CREATE OR REPLACE FUNCTION entries_log_transition() RETURNS trigger
+    LANGUAGE plpgsql AS $fn$
+    BEGIN
+      IF NEW.status IS DISTINCT FROM OLD.status THEN
+        INSERT INTO entry_transitions (
+          entry_id, version, from_status, to_status, actor, reason
+        ) VALUES (
+          NEW.id,
+          NEW.version,
+          OLD.status,
+          NEW.status,
+          COALESCE(NULLIF(current_setting('aagdb.actor', true), ''), 'system'),
+          NULLIF(current_setting('aagdb.reason', true), '')
+        );
+      END IF;
+      RETURN NEW;
+    END;
+    $fn$;
+
+    DROP TRIGGER IF EXISTS trg_entries_log_transition ON entries;
+    CREATE TRIGGER trg_entries_log_transition
+    AFTER UPDATE OF status ON entries
+    FOR EACH ROW EXECUTE FUNCTION entries_log_transition();
+  `);
+
+  await sweepPreEbflowInFlight();
+
   // Link requests and orders to the account that made them (when logged in),
   // so the profile portal can show a user's activity. Runs after the main
   // block because it references both users and purchases.
@@ -571,6 +683,52 @@ export async function migrate(): Promise<void> {
   );
 
   logger.info("Database migration complete");
+}
+
+/**
+ * One-time hand-off for requests that were mid-flight when the split states
+ * shipped. Under the old single 'processing' state we cannot tell whether the
+ * customer email already went out, so these go to a person instead of being
+ * retried. Gated on a settings flag: a normal restart must never touch rows
+ * the worker is actively holding.
+ */
+async function sweepPreEbflowInFlight(): Promise<void> {
+  const done = await query(
+    `SELECT 1 FROM site_settings WHERE key = 'ebflow_pipeline_v1'`
+  );
+  if (done.rowCount) return;
+
+  const swept = await withTransaction(async (client) => {
+    await client.query(
+      `SELECT set_config('aagdb.actor', 'migration:ebflow_v1', true),
+              set_config('aagdb.reason', 'in flight when delivery states split; outcome unknown', true)`
+    );
+    return client.query(
+      `UPDATE entries
+       SET status = 'escalated',
+           updated_at = NOW(),
+           metadata = metadata || jsonb_build_object(
+             'escalated_at', NOW()::text,
+             'escalation_reason', 'in_flight_before_split_delivery_states',
+             'note', 'Cannot confirm whether the delivery email was sent. Check the customer inbox, then resend or mark complete.',
+             'failure_acked', 'false'
+           )
+       WHERE status = 'processing'
+         AND archived_at IS NULL`
+    );
+  });
+
+  await query(
+    `INSERT INTO site_settings (key, value)
+     VALUES ('ebflow_pipeline_v1', 'true'::jsonb)
+     ON CONFLICT (key) DO NOTHING`
+  );
+
+  if (swept.rowCount) {
+    logger.warn("Escalated pre-split in-flight requests for manual review", {
+      count: swept.rowCount,
+    });
+  }
 }
 
 async function runCli() {

@@ -69,7 +69,15 @@ export type SubmitInput = z.infer<typeof submitSchema>;
 
 export const statusSchema = z
   .object({
-    status: z.enum(["pending", "processing", "processed", "failed"]),
+    status: z.enum([
+      "pending",
+      "processing",
+      "validated",
+      "applied",
+      "processed",
+      "failed",
+      "escalated",
+    ]),
     metadata: z.record(z.unknown()).optional(),
   })
   .strict();

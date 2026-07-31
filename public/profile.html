@@ -545,8 +545,31 @@
       });
 
       /* ── Activity feed ─────────────────────────────────── */
+      /* Internal pipeline stages are not customer language: everything still
+         in progress reads as "in progress", and anything waiting on the studio
+         reads as "with the studio". */
+      const REQUEST_STATUS_LABELS = {
+        pending: { label: "in progress", pill: "processing" },
+        processing: { label: "in progress", pill: "processing" },
+        validated: { label: "in progress", pill: "processing" },
+        applied: { label: "sending", pill: "processing" },
+        processed: { label: "delivered", pill: "processed" },
+        failed: { label: "with the studio", pill: "pending" },
+        escalated: { label: "with the studio", pill: "pending" },
+      };
+
       function statusPill(status) {
         return '<span class="status-pill status-' + esc(status) + '">' + esc(status) + "</span>";
+      }
+
+      function requestStatusPill(status) {
+        const mapped = REQUEST_STATUS_LABELS[status];
+        if (!mapped) return statusPill(status);
+        return (
+          '<span class="status-pill status-' + esc(mapped.pill) + '">' +
+          esc(mapped.label) +
+          "</span>"
+        );
       }
 
       async function loadActivity() {
@@ -561,7 +584,7 @@
                 '<div class="activity-row">' +
                 '<div><p class="font-medium text-cream">' + esc(r.angel_name) + "</p>" +
                 '<p class="text-xs text-cream/40">' + esc(r.graphic_code || "—") + " · " + fmtDate(r.created_at) + "</p></div>" +
-                statusPill(r.status) +
+                requestStatusPill(r.status) +
                 "</div>"
               ).join("")
             : '<p class="py-3 text-cream/40">No requests yet — <a href="/form" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">make your first one</a>.</p>';

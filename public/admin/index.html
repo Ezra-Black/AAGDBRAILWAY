@@ -520,7 +520,9 @@
       >
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p class="text-sm font-semibold text-cream">Graphic pipeline failed</p>
+            <p id="pipeline-banner-title" class="text-sm font-semibold text-cream">
+              Graphic pipeline needs attention
+            </p>
             <p id="pipeline-banner-text" class="mt-1 text-xs text-cream/60"></p>
           </div>
           <button
@@ -2825,10 +2827,26 @@
       const bellDismiss = document.getElementById("bell-dismiss");
 
       const pipelineBanner = document.getElementById("pipeline-banner");
+      const pipelineBannerTitle = document.getElementById(
+        "pipeline-banner-title"
+      );
       const pipelineBannerText = document.getElementById("pipeline-banner-text");
       const pipelineBannerDismiss = document.getElementById(
         "pipeline-banner-dismiss"
       );
+
+      function formatTimeUntil(value) {
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) return "shortly";
+        const seconds = Math.floor((date.getTime() - Date.now()) / 1000);
+        if (seconds <= 60) return "in under a minute";
+        const minutes = Math.round(seconds / 60);
+        if (minutes < 60) {
+          return minutes === 1 ? "in about a minute" : "in about " + minutes + " minutes";
+        }
+        const hours = Math.round(minutes / 60);
+        return hours === 1 ? "in about an hour" : "in about " + hours + " hours";
+      }
 
       function graphicFailureLabel(entry) {
         const label = String(entry.graphic_label || "").trim();
@@ -2841,7 +2859,9 @@
 
       function formatPipelineBanner(entries) {
         if (!entries.length) return "";
-        const first = entries[0];
+        // Lead with anything the worker has stopped on, since those wait on you.
+        const review = entries.filter((e) => e.needs_review);
+        const first = review[0] || entries[0];
         const err =
           typeof first.error === "string" && first.error
             ? first.error
@@ -2850,6 +2870,9 @@
           entries.length > 1
             ? " (+" + (entries.length - 1) + " more)"
             : "";
+        const nextStep = first.needs_review
+          ? ". Automation has stopped on this one. Check the customer's inbox, then use Allow one more send in the bell, or mark the name complete."
+          : ". The worker will try again on its own. Download Generated from Requests if the art was saved.";
         return (
           (first.angel_name || "Request") +
           " · graphic: " +
@@ -2857,8 +2880,32 @@
           " — " +
           err.slice(0, 160) +
           more +
-          ". Download Generated from Requests if the art was saved. Audrey was emailed at the failure alert address."
+          nextStep
         );
+      }
+
+      async function allowOneMoreSend(entryId, button) {
+        button.disabled = true;
+        button.textContent = "Releasing…";
+        try {
+          const res = await fetch(
+            "/admin/entries/" + encodeURIComponent(entryId) + "/allow-resend",
+            { method: "POST", credentials: "include" }
+          );
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.success) {
+            alert(data.error || "Could not release this request.");
+            button.disabled = false;
+            button.textContent = "Allow one more send";
+            return;
+          }
+          button.textContent = "Queued";
+          await loadVaultAlerts();
+        } catch {
+          alert("Could not release this request. Try again.");
+          button.disabled = false;
+          button.textContent = "Allow one more send";
+        }
       }
 
       async function loadVaultAlerts() {
@@ -2878,6 +2925,13 @@
               pipeEntries = pipeData.entries || [];
               pipelineBanner.classList.toggle("hidden", pipeEntries.length === 0);
               pipelineBannerText.textContent = formatPipelineBanner(pipeEntries);
+              if (pipelineBannerTitle) {
+                pipelineBannerTitle.textContent = pipeEntries.some(
+                  (e) => e.needs_review
+                )
+                  ? "Graphic pipeline stopped — needs your review"
+                  : "Graphic pipeline failed";
+              }
             }
           }
 
@@ -2897,8 +2951,12 @@
             item.style.background = "rgba(248,113,113,0.08)";
             const err =
               typeof e.error === "string" && e.error ? e.error : "Unknown error";
+            const heading = e.needs_review
+              ? "Needs your review — "
+              : "Pipeline failed — ";
             item.innerHTML =
-              '<p class="text-sm font-medium text-cream">Pipeline failed — ' +
+              '<p class="text-sm font-medium text-cream">' +
+              heading +
               escapeHtml(e.angel_name || "request") +
               "</p>" +
               '<p class="mt-0.5 text-xs text-cream/55">Graphic: ' +
@@ -2906,7 +2964,26 @@
               "</p>" +
               '<p class="mt-0.5 text-xs text-cream/45">' +
               escapeHtml(err.slice(0, 220)) +
-              "</p>";
+              "</p>" +
+              (e.needs_review
+                ? ""
+                : '<p class="mt-0.5 text-xs text-cream/35">Retrying automatically' +
+                  (e.next_retry_at
+                    ? " " + escapeHtml(formatTimeUntil(e.next_retry_at))
+                    : "") +
+                  ".</p>");
+            if (e.needs_review) {
+              const release = document.createElement("button");
+              release.type = "button";
+              release.className = "status-pending mt-2";
+              release.textContent = "Allow one more send";
+              release.title =
+                "Only after checking the customer's inbox — this permits a second email";
+              release.addEventListener("click", () =>
+                allowOneMoreSend(e.id, release)
+              );
+              item.appendChild(release);
+            }
             bellList.appendChild(item);
           }
           for (const g of alerts) {
