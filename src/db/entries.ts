@@ -379,6 +379,39 @@ export async function findExistingGraphicClaim(
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }
 
+/**
+ * Most recent form request from this email and/or logged-in user within the
+ * cooldown window — one graphic request per requester per period.
+ */
+export async function findRecentSubmissionForRequester(
+  email: string,
+  cooldownHours = 24,
+  userId?: string | null
+): Promise<Entry | null> {
+  const hours = Math.min(Math.max(Math.floor(Number(cooldownHours) || 24), 1), 168);
+  const uid = userId?.trim() || "";
+  const result = uid
+    ? await query(
+        `SELECT * FROM entries
+         WHERE archived_at IS NULL
+           AND created_at > NOW() - make_interval(hours => $3::int)
+           AND (lower(email) = lower($1) OR user_id = $2::uuid)
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [email, uid, hours]
+      )
+    : await query(
+        `SELECT * FROM entries
+         WHERE archived_at IS NULL
+           AND created_at > NOW() - make_interval(hours => $2::int)
+           AND lower(email) = lower($1)
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [email, hours]
+      );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
 export async function getEntryByRealName(
   realName: string
 ): Promise<Entry | null> {

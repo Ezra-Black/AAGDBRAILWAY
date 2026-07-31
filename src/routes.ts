@@ -22,6 +22,7 @@ import {
   emailExistsInEntries,
   findExistingGraphicClaim,
   findRecentDuplicateClaim,
+  findRecentSubmissionForRequester,
   getEntryByAngelName,
   getEntryById,
   getEntryByRealName,
@@ -853,6 +854,8 @@ apiRouter.post(
 
     const DUPLICATE_ALREADY_SENT_MESSAGE =
       "This graphic was already sent (or is already on the way) for that angel name. Check your email — including spam.";
+    const cooldownHours = Number(process.env.SUBMIT_COOLDOWN_HOURS) || 24;
+    const RATE_LIMIT_MESSAGE = `You can only request one graphic every ${cooldownHours} hours. Please check your email for your current request, or try again later.`;
 
     // Exact combo already on file — don't create another row.
     const existingSameGraphic = await findExistingGraphicClaim(
@@ -877,9 +880,34 @@ apiRouter.post(
       return;
     }
 
-    const cooldownHours = Number(process.env.SUBMIT_COOLDOWN_HOURS) || 24;
-    // With the flag on, cooldown only applies to the same graphic; with it
-    // off, any resubmit of the same angel name is held for the window.
+    // One request per email / account per cooldown window (default 24h).
+    const recentByRequester = await findRecentSubmissionForRequester(
+      email,
+      cooldownHours,
+      req.user?.id ?? null
+    );
+    if (recentByRequester) {
+      logger.info("Blocked submit — requester cooldown", {
+        email,
+        user_id: req.user?.id ?? null,
+        graphic_code,
+        existing_id: recentByRequester.id,
+        cooldown_hours: cooldownHours,
+      });
+      res.status(200).json({
+        success: true,
+        duplicate: true,
+        already_sent: true,
+        rate_limited: true,
+        message: RATE_LIMIT_MESSAGE,
+        entry: recentByRequester,
+      });
+      return;
+    }
+
+    // With the flag on, also catch same angel + same graphic inside the
+    // window (covers edge cases); with it off, any resubmit of that angel
+    // name for this email is held.
     const recentSameClaim = await findRecentDuplicateClaim(
       email,
       angel_name,
