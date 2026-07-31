@@ -320,23 +320,61 @@ export async function getEntryByAngelName(
 }
 
 /**
- * Same email + angel name within a cooldown window (anti multi-submit spam).
- * Uses parameterized SQL only — never string-concatenated user input.
+ * Same email + angel name (+ optional graphic) within a cooldown window.
+ * When graphicCode is provided, only that graphic combo is treated as a
+ * duplicate — so the same angel can still request a different style.
  */
 export async function findRecentDuplicateClaim(
   email: string,
   angelName: string,
-  cooldownHours = 24
+  cooldownHours = 24,
+  graphicCode?: string | null
 ): Promise<Entry | null> {
   const hours = Math.min(Math.max(Math.floor(Number(cooldownHours) || 24), 1), 168);
+  const code = graphicCode?.trim() || "";
+  const result = code
+    ? await query(
+        `SELECT * FROM entries
+         WHERE lower(email) = lower($1)
+           AND lower(angel_name) = lower($2)
+           AND lower(coalesce(graphic_code, '')) = lower($3)
+           AND archived_at IS NULL
+           AND created_at > NOW() - make_interval(hours => $4::int)
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [email, angelName, code, hours]
+      )
+    : await query(
+        `SELECT * FROM entries
+         WHERE lower(email) = lower($1)
+           AND lower(angel_name) = lower($2)
+           AND archived_at IS NULL
+           AND created_at > NOW() - make_interval(hours => $3::int)
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [email, angelName, hours]
+      );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
+/**
+ * Any prior request for this email + angel name + graphic (not just cooldown).
+ * Used to tell the visitor that style was already sent / is already queued.
+ */
+export async function findExistingGraphicClaim(
+  email: string,
+  angelName: string,
+  graphicCode: string
+): Promise<Entry | null> {
   const result = await query(
     `SELECT * FROM entries
-     WHERE lower(email) = lower($1)
+     WHERE archived_at IS NULL
+       AND lower(email) = lower($1)
        AND lower(angel_name) = lower($2)
-       AND created_at > NOW() - make_interval(hours => $3::int)
+       AND lower(coalesce(graphic_code, '')) = lower($3)
      ORDER BY created_at DESC
      LIMIT 1`,
-    [email, angelName, hours]
+    [email, angelName, graphicCode]
   );
   return result.rows[0] ? mapRow(result.rows[0]) : null;
 }

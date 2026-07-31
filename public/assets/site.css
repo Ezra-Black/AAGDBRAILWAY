@@ -593,3 +593,22 @@ body {
   font-weight: 700;
   color: var(--gold);
 }
+
+/* Email domain typo hint — tap to apply suggested address */
+.email-hint-action {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(240, 196, 92, 0.45);
+}
+
+.email-hint-action:hover {
+  color: var(--gold);
+}
+
+/* Duplicate graphic request notice on /form */
+.duplicate-banner {
+  border: 1px solid rgba(240, 196, 92, 0.45);
+  background: rgba(240, 196, 92, 0.12);
+  color: var(--cream, #fff6e4);
+}

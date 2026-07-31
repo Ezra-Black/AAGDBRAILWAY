@@ -805,8 +805,9 @@
                   ?
                   <span class="help-bubble" role="tooltip">
                     When checked, visitors who pick this graphic must upload a
-                    JPG or PNG with their request. That customer photo is stored
-                    separately from the generated angel graphic.
+                    JPG or PNG on the free request form and in the archive shop.
+                    That customer photo is stored separately from the finished
+                    angel graphic.
                   </span>
                 </span>
               </span>
@@ -1451,14 +1452,14 @@
             "</div>" +
             '<div class="flex flex-wrap items-center gap-2">' +
             offerChip(g) +
-            (g.requires_photo
-              ? '<span class="offer-chip" title="Request form requires a customer JPG/PNG">Needs photo</span>'
+              (g.requires_photo
+              ? '<span class="offer-chip" title="Request form and archive shop require a customer JPG/PNG">Needs photo</span>'
               : "") +
             '<button type="button" data-toggle-requires-photo="' +
             escapeAttr(g.id) +
             '" data-requires-photo="' +
             (g.requires_photo ? "1" : "0") +
-            '" class="archive-btn" title="Toggle whether this graphic needs a customer photo">' +
+            '" class="archive-btn" title="Toggle whether this graphic needs a customer photo (request form + archive shop)">' +
             (g.requires_photo ? "Photo required ✓" : "Photo optional") +
             "</button>" +
             offerTimerControls(g) +
@@ -3070,6 +3071,11 @@
             const row = document.createElement("div");
             row.className =
               "grid gap-2 px-5 py-4 text-sm sm:grid-cols-[0.85fr_1fr_1fr_1.25fr_0.5fr_0.6fr_0.55fr] sm:items-center";
+            const photoLink = p.has_customer_photo
+              ? '<a class="archive-btn" style="text-decoration:none" href="/admin/purchases/' +
+                escapeAttr(p.id) +
+                '/photo" download>Customer photo</a>'
+              : "";
             row.innerHTML =
               '<span class="text-cream/50" title="' +
               escapeAttr(absoluteDateTitle(p.created_at)) +
@@ -3091,11 +3097,13 @@
               "<span>" +
               renderOrderStatus(p) +
               "</span>" +
-              '<span><button type="button" data-archive-order="' +
+              '<span class="flex flex-wrap items-center gap-2"><button type="button" data-archive-order="' +
               escapeAttr(p.id) +
               '" class="archive-btn">' +
               (ordersArchived ? "Restore" : "Archive") +
-              "</button></span>" +
+              "</button>" +
+              photoLink +
+              "</span>" +
               (p.note
                 ? '<p class="text-xs text-cream/45 sm:col-span-7" style="margin-top:0.2rem">Note: ' +
                   escapeHtml(p.note) +

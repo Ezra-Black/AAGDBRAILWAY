@@ -298,6 +298,10 @@ export async function migrate(): Promise<void> {
     ALTER TABLE archive_graphics
       ADD COLUMN IF NOT EXISTS image_url TEXT;
 
+    -- Survives vaulting: shop checkout reads this, not graphic_options.
+    ALTER TABLE archive_graphics
+      ADD COLUMN IF NOT EXISTS requires_photo BOOLEAN NOT NULL DEFAULT false;
+
     CREATE INDEX IF NOT EXISTS idx_archive_graphics_active
       ON archive_graphics (active, sort_order);
 
@@ -319,6 +323,20 @@ export async function migrate(): Promise<void> {
     );
 
     ALTER TABLE purchases ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+
+    -- Customer photo uploaded at archive-shop checkout (jpg/png).
+    -- Stored in Postgres so admin can download even across Railway volumes.
+    CREATE TABLE IF NOT EXISTS purchase_photos (
+      id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      purchase_id        UUID NOT NULL UNIQUE REFERENCES purchases(id) ON DELETE CASCADE,
+      content_type       TEXT NOT NULL,
+      original_filename  TEXT,
+      bytes              BYTEA NOT NULL,
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_purchase_photos_purchase_id
+      ON purchase_photos (purchase_id);
 
     -- Existing DBs may still have the old CHECK without 'delivered'.
     ALTER TABLE purchases DROP CONSTRAINT IF EXISTS purchases_status_check;
@@ -507,6 +525,14 @@ export async function migrate(): Promise<void> {
       AND b.image_url IS NOT NULL
       AND a.image_url IS NULL
       AND COALESCE(a.active, true) = true
+  `);
+
+  // Keep archive photo requirement in sync with the offer-form flag.
+  await query(`
+    UPDATE archive_graphics a
+    SET requires_photo = g.requires_photo
+    FROM graphic_options g
+    WHERE lower(trim(a.code)) = lower(trim(g.code))
   `);
 
   await query(

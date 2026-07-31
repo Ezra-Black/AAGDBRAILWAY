@@ -207,6 +207,7 @@
             required
             placeholder="you@email.com"
           />
+          <p id="email-hint" class="mt-1.5 text-xs text-honey/90" hidden></p>
         </div>
 
         <div class="field">
@@ -249,6 +250,21 @@
           hidden
           class="rounded-2xl px-4 py-3.5 text-sm leading-relaxed"
         ></div>
+
+        <div
+          id="duplicate-banner"
+          role="status"
+          aria-live="polite"
+          hidden
+          class="duplicate-banner rounded-2xl px-4 py-4 text-sm leading-relaxed"
+        >
+          <p id="duplicate-banner-text" class="m-0 font-medium"></p>
+          <p class="mt-2 mb-0 text-cream/70">
+            If you think this is a mistake,
+            <a href="/contact" class="text-honey underline decoration-honey/40 underline-offset-2 hover:text-honey">contact us directly</a>
+            and we’ll sort it out.
+          </p>
+        </div>
       </form>
 
       <div id="review-prompt" class="reveal mt-6 text-center" style="--reveal-delay:0.2s" hidden>
@@ -305,6 +321,7 @@
 
     <script src="/assets/site.js"></script>
     <script src="/assets/auth.js"></script>
+    <script src="/assets/emailCheck.js"></script>
     <script src="/assets/reviews.js"></script>
     <script>
       document.getElementById("year").textContent = new Date().getFullYear();
@@ -324,7 +341,17 @@
       const customerPhotoName = document.getElementById("customer-photo-name");
       let graphicsCache = [];
 
+      const duplicateBanner = document.getElementById("duplicate-banner");
+      const duplicateBannerText = document.getElementById("duplicate-banner-text");
+
+      function hideDuplicateBanner() {
+        if (!duplicateBanner) return;
+        duplicateBanner.hidden = true;
+        if (duplicateBannerText) duplicateBannerText.textContent = "";
+      }
+
       function showMessage(text, ok) {
+        hideDuplicateBanner();
         message.hidden = false;
         message.textContent = text;
         message.className =
@@ -333,6 +360,20 @@
             ? "border border-emerald-400/40 bg-emerald-500/15 text-emerald-100"
             : "border border-rose-400/40 bg-rose-500/15 text-rose-100");
         message.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+
+      function showDuplicateBanner(text) {
+        message.hidden = true;
+        message.textContent = "";
+        if (!duplicateBanner || !duplicateBannerText) {
+          showMessage(text, true);
+          return;
+        }
+        duplicateBannerText.textContent =
+          text ||
+          "This graphic was already sent (or is already on the way) for that angel name. Check your email — including spam.";
+        duplicateBanner.hidden = false;
+        duplicateBanner.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
 
       function selectedGraphicCode() {
@@ -490,25 +531,47 @@
 
       loadGraphics();
 
+      const emailInput = document.getElementById("email");
+      const emailHint = document.getElementById("email-hint");
+      if (window.AAGEmail) AAGEmail.bindHint(emailInput, emailHint);
+
       // Prefill from the logged-in account (name, angel's name, email).
-      function prefillFromUser(user) {
+      // forceEmail: after login, prefer the account email when the field is
+      // empty or looks like a known domain typo (e.g. sol.com vs aol.com).
+      function prefillFromUser(user, opts) {
         if (!user) return;
+        const forceEmail = Boolean(opts && opts.forceEmail);
         const realName = document.getElementById("real_name");
         const angelName = document.getElementById("angel_name");
-        const emailInput = document.getElementById("email");
         if (!realName.value && user.name) realName.value = user.name;
         if (!angelName.value && user.angel_name) angelName.value = user.angel_name;
-        if (!emailInput.value && user.email) emailInput.value = user.email;
+        if (!user.email) return;
+        const typed = emailInput.value.trim();
+        const typo =
+          typed && window.AAGEmail ? AAGEmail.suggest(typed) : null;
+        if (!typed || (forceEmail && typo)) {
+          emailInput.value = user.email;
+          if (emailHint) {
+            emailHint.hidden = true;
+            emailHint.textContent = "";
+          }
+        }
       }
-      document.addEventListener("aag:auth", (e) => prefillFromUser(e.detail.user));
+      document.addEventListener("aag:auth", (e) =>
+        prefillFromUser(e.detail.user)
+      );
+      if (window.AAGAuth) {
+        AAGAuth.ready.then((user) => prefillFromUser(user));
+      }
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         message.hidden = true;
+        hideDuplicateBanner();
 
         const real_name = document.getElementById("real_name").value.trim();
         const angel_name = document.getElementById("angel_name").value.trim();
-        const email = document.getElementById("email").value.trim();
+        let email = emailInput.value.trim();
         const graphic_code = selectedGraphicCode();
 
         if (!real_name) {
@@ -519,8 +582,12 @@
           showMessage("Please enter your angel name.", false);
           return;
         }
-        if (!email) {
-          showMessage("Please enter your email.", false);
+        const emailCheck = window.AAGEmail
+          ? AAGEmail.validate(email)
+          : { ok: Boolean(email), error: "Please enter your email." };
+        if (!emailCheck.ok) {
+          showMessage(emailCheck.error, false);
+          emailInput.focus();
           return;
         }
         if (!graphic_code) {
@@ -558,8 +625,9 @@
         // Requests are tracked per account: unauthenticated visitors get the
         // login/register modal here, and the submission continues seamlessly
         // right after they sign in.
+        let user;
         try {
-          await AAGAuth.requireAuth({
+          user = await AAGAuth.requireAuth({
             title: "Log in to send your request",
             message:
               "An account lets us track your request and show its progress on your profile. It takes seconds — your form is saved and will send right after.",
@@ -569,6 +637,18 @@
             "Please log in (or create a free account) to send your request — everything you typed is still here.",
             false
           );
+          return;
+        }
+
+        // Sync account details after login (and replace a typo'd email).
+        prefillFromUser(user || AAGAuth.getUser(), { forceEmail: true });
+        email = emailInput.value.trim();
+        const emailCheckAfter = window.AAGEmail
+          ? AAGEmail.validate(email)
+          : { ok: Boolean(email) };
+        if (!emailCheckAfter.ok) {
+          showMessage(emailCheckAfter.error || "Please enter a valid email.", false);
+          emailInput.focus();
           return;
         }
 
@@ -599,11 +679,16 @@
             return;
           }
 
-          const successText = data.duplicate
-            ? data.message ||
-              "That angel name is already in our database. We’ll send you an update soon — please check your email."
-            : data.message ||
-              "Submitted! You’re on the list — keep an eye on your email for an update.";
+          const reviewPrompt = document.getElementById("review-prompt");
+
+          if (data.duplicate || data.already_sent) {
+            showDuplicateBanner(
+              data.message ||
+                "This graphic was already sent (or is already on the way) for that angel name. Check your email — including spam."
+            );
+            if (reviewPrompt) reviewPrompt.hidden = true;
+            return;
+          }
 
           document.getElementById("real_name").value = "";
           document.getElementById("angel_name").value = "";
@@ -612,8 +697,11 @@
           customerPhotoName.textContent = "";
           customerPhotoName.classList.add("hidden");
           await loadGraphics({ keepMessage: true });
-          showMessage(successText, true);
-          const reviewPrompt = document.getElementById("review-prompt");
+          showMessage(
+            data.message ||
+              "Submitted! You’re on the list — keep an eye on your email for an update.",
+            true
+          );
           if (reviewPrompt) reviewPrompt.hidden = false;
         } catch {
           showMessage("Network glitch. Try again in a sec.", false);

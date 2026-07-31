@@ -8,6 +8,7 @@ import {
   type AdminRequest,
 } from "./auth";
 import {
+  detectJpegOrPng,
   photoUpload,
   saveGraphicSample,
   deleteGraphicSample,
@@ -19,6 +20,7 @@ import {
   archiveCompletedEntries,
   createEntry,
   emailExistsInEntries,
+  findExistingGraphicClaim,
   findRecentDuplicateClaim,
   getEntryByAngelName,
   getEntryById,
@@ -82,13 +84,20 @@ import {
   archivePaidPurchases,
   createPurchase,
   getArchiveGraphicByCode,
+  getPurchaseById,
   getPurchaseByIntent,
   listArchiveGraphics,
   listPurchasesForAdmin,
   markPurchaseStatusByIntent,
+  mergePurchaseMetadata,
+  setArchiveGraphicRequiresPhoto,
   setPurchaseArchived,
   setPurchaseStatus,
 } from "./db/shop";
+import {
+  getPurchasePhoto,
+  upsertPurchasePhoto,
+} from "./db/purchasePhotos";
 import {
   createReview,
   deleteReview,
@@ -641,6 +650,11 @@ apiRouter.patch(
       res.status(404).json({ success: false, error: "Graphic not found" });
       return;
     }
+    // Keep the archive shop in sync so vaulted/past offers still require a photo.
+    await setArchiveGraphicRequiresPhoto(
+      graphic.code,
+      graphic.requires_photo
+    );
     logger.info("Admin set graphic requires_photo", {
       id: graphic.id,
       requires_photo: graphic.requires_photo,
@@ -829,29 +843,87 @@ apiRouter.post(
       return;
     }
 
+    // When true (default), the same angel name may request a different
+    // graphic. Duplicate blocking is scoped to email + angel + graphic.
+    const allowSameNameDifferentGraphic = !["0", "false", "no", "off"].includes(
+      String(process.env.ALLOW_SAME_NAME_DIFFERENT_GRAPHIC ?? "true")
+        .trim()
+        .toLowerCase()
+    );
+
+    const DUPLICATE_ALREADY_SENT_MESSAGE =
+      "This graphic was already sent (or is already on the way) for that angel name. Check your email — including spam.";
+
+    // Exact combo already on file — don't create another row.
+    const existingSameGraphic = await findExistingGraphicClaim(
+      email,
+      angel_name,
+      graphic_code
+    );
+    if (existingSameGraphic) {
+      logger.info("Blocked duplicate graphic claim", {
+        email,
+        angel_name,
+        graphic_code,
+        existing_id: existingSameGraphic.id,
+      });
+      res.status(200).json({
+        success: true,
+        duplicate: true,
+        already_sent: true,
+        message: DUPLICATE_ALREADY_SENT_MESSAGE,
+        entry: existingSameGraphic,
+      });
+      return;
+    }
+
     const cooldownHours = Number(process.env.SUBMIT_COOLDOWN_HOURS) || 24;
+    // With the flag on, cooldown only applies to the same graphic; with it
+    // off, any resubmit of the same angel name is held for the window.
     const recentSameClaim = await findRecentDuplicateClaim(
       email,
       angel_name,
-      cooldownHours
+      cooldownHours,
+      allowSameNameDifferentGraphic ? graphic_code : null
     );
     if (recentSameClaim) {
       logger.info("Blocked rapid multi-submit", {
         email,
         angel_name,
+        graphic_code,
         existing_id: recentSameClaim.id,
       });
       res.status(200).json({
         success: true,
         duplicate: true,
-        message:
-          "You’re already on the list for that angel name. Please check your email for an update soon.",
+        already_sent: true,
+        message: DUPLICATE_ALREADY_SENT_MESSAGE,
         entry: recentSameClaim,
       });
       return;
     }
 
-    const existing = await getEntryByAngelName(angel_name);
+    // Legacy mode: block a second graphic for an angel name that already
+    // exists anywhere (not just for this email).
+    if (!allowSameNameDifferentGraphic) {
+      const existingName = await getEntryByAngelName(angel_name);
+      if (existingName) {
+        logger.info("Blocked same-name different-graphic (flag off)", {
+          email,
+          angel_name,
+          graphic_code,
+          existing_id: existingName.id,
+        });
+        res.status(200).json({
+          success: true,
+          duplicate: true,
+          already_sent: true,
+          message: DUPLICATE_ALREADY_SENT_MESSAGE,
+          entry: existingName,
+        });
+        return;
+      }
+    }
 
     let savedCustomer:
       | { path: string; contentType: string; ext: string }
@@ -901,23 +973,13 @@ apiRouter.post(
       graphic_code: refreshed.graphic_code,
       status: refreshed.status,
       has_customer_photo: Boolean(savedCustomer),
-      name_already_claimed: Boolean(existing),
+      allow_same_name_different_graphic: allowSameNameDifferentGraphic,
     });
-
-    if (existing) {
-      res.status(201).json({
-        success: true,
-        duplicate: true,
-        message:
-          "Submitted! That angel name is already in our database. We’ll send you an update soon — please check your email.",
-        entry: refreshed,
-      });
-      return;
-    }
 
     res.status(201).json({
       success: true,
       duplicate: false,
+      already_sent: false,
       message:
         "Submitted! You’re on the list — keep an eye on your email for an update.",
       entry: refreshed,
@@ -1703,10 +1765,33 @@ apiRouter.get(
  * POST /shop/checkout — start a purchase.
  * Validates the order, creates a Stripe PaymentIntent for the fixed price
  * (amount is always set server-side), and records a pending purchase.
+ * Accepts JSON or multipart/form-data. Field "customer_photo" (jpg/png)
+ * is required when the selected archive graphic has requires_photo enabled.
  */
 apiRouter.post(
   "/shop/checkout",
   checkoutLimiter,
+  (req: Request, res: Response, next: NextFunction) => {
+    const contentType = String(req.headers["content-type"] || "");
+    if (!contentType.includes("multipart/form-data")) {
+      next();
+      return;
+    }
+    photoUpload.single("customer_photo")(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({
+          success: false,
+          error: "Photo is too large — 5 MB max. Use JPG or PNG.",
+        });
+        return;
+      }
+      if (err) {
+        next(err);
+        return;
+      }
+      next();
+    });
+  },
   rejectHoneypot,
   attachUserIfPresent,
   asyncHandler(async (req: UserRequest, res) => {
@@ -1738,6 +1823,36 @@ apiRouter.post(
       return;
     }
 
+    const file = (
+      req as Request & { file?: { buffer?: Buffer; originalname?: string } }
+    ).file;
+    if (graphic.requires_photo && !file?.buffer?.length) {
+      res.status(400).json({
+        success: false,
+        error: "This graphic requires a photo upload (JPG or PNG).",
+        details: {
+          customer_photo: [
+            "Attach a JPG or PNG photo to complete this order",
+          ],
+        },
+      });
+      return;
+    }
+
+    // Validate image bytes before creating a Stripe intent / purchase row.
+    let photoKind: ReturnType<typeof detectJpegOrPng> = null;
+    if (file?.buffer?.length) {
+      photoKind = detectJpegOrPng(file.buffer);
+      if (!photoKind) {
+        res.status(400).json({
+          success: false,
+          error:
+            "That file doesn’t look like a JPG or PNG. Please upload one of those.",
+        });
+        return;
+      }
+    }
+
     const amount = shopPriceCents();
     const intent = await getStripe().paymentIntents.create({
       amount,
@@ -1751,6 +1866,7 @@ apiRouter.post(
         graphic_label: graphic.label,
         angel_name: parsed.data.angel_name,
         real_name: parsed.data.real_name,
+        requires_photo: graphic.requires_photo ? "true" : "false",
       },
     });
 
@@ -1766,9 +1882,29 @@ apiRouter.post(
       user_id: req.user?.id ?? null,
     });
 
+    let hasCustomerPhoto = false;
+    if (file?.buffer?.length && photoKind) {
+      const savedCustomer = await saveCustomerPhoto(purchase.id, file.buffer);
+      if (savedCustomer) {
+        await upsertPurchasePhoto({
+          purchaseId: purchase.id,
+          contentType: savedCustomer.contentType,
+          originalFilename:
+            file.originalname || `customer.${savedCustomer.ext}`,
+          bytes: file.buffer,
+        });
+        await mergePurchaseMetadata(purchase.id, {
+          customer_photo_path: savedCustomer.path,
+          customer_photo_uploaded_at: new Date().toISOString(),
+        });
+        hasCustomerPhoto = true;
+      }
+    }
+
     logger.info("Shop checkout started", {
       purchase_id: purchase.id,
       graphic_code: graphic.code,
+      has_customer_photo: hasCustomerPhoto,
     });
 
     res.status(201).json({
@@ -1945,6 +2081,46 @@ apiRouter.post(
     const updated = await archivePaidPurchases();
     logger.info("Admin archived paid orders", { updated });
     res.json({ success: true, updated });
+  })
+);
+
+/** GET /admin/purchases/:id/photo — download the customer photo for an order. */
+apiRouter.get(
+  "/admin/purchases/:id/photo",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid order ID" });
+      return;
+    }
+
+    const purchase = await getPurchaseById(idCheck.data);
+    if (!purchase) {
+      res.status(404).json({ success: false, error: "Order not found" });
+      return;
+    }
+
+    const photo = await getPurchasePhoto(idCheck.data);
+    if (!photo) {
+      res.status(404).json({ success: false, error: "Photo not found" });
+      return;
+    }
+
+    const ext = photo.content_type.includes("png") ? "png" : "jpg";
+    const fallback = `${purchase.angel_name || "angel"}-customer.${ext}`;
+    const filename = (photo.original_filename || fallback).replace(
+      /[^\w.\- ()]+/g,
+      "_"
+    );
+
+    res.setHeader("Content-Type", photo.content_type);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${filename}"`
+    );
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(photo.bytes);
   })
 );
 

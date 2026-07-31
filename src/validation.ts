@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { suggestEmailCorrection } from "./emailDomain";
 
 /** Strip control chars / zero-width junk that can be used in abuse payloads. */
 function sanitizeText(value: string): string {
@@ -30,6 +31,15 @@ const emailField = z
       .max(254, "Email is too long")
       .email("Enter a valid email")
       .refine((v) => !/[<>{};`]/.test(v), "Contains invalid characters")
+      .superRefine((v, ctx) => {
+        const hint = suggestEmailCorrection(v);
+        if (hint) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `That email domain looks off — did you mean ${hint.suggestedEmail}?`,
+          });
+        }
+      })
   );
 
 const graphicCodeField = z

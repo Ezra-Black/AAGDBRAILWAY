@@ -7,6 +7,7 @@ export interface ArchiveGraphic {
   image_url: string | null;
   active: boolean;
   sort_order: number;
+  requires_photo: boolean;
 }
 
 export interface Purchase {
@@ -23,6 +24,7 @@ export interface Purchase {
   archived_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  metadata: Record<string, unknown>;
 }
 
 function mapPurchase(row: Record<string, unknown>): Purchase {
@@ -40,32 +42,39 @@ function mapPurchase(row: Record<string, unknown>): Purchase {
     archived_at: (row.archived_at as Date) ?? null,
     created_at: row.created_at as Date,
     updated_at: row.updated_at as Date,
+    metadata: (row.metadata as Record<string, unknown>) ?? {},
   };
 }
 
-/** Active archive graphics for the shop dropdown. */
-export async function listArchiveGraphics(): Promise<ArchiveGraphic[]> {
-  const result = await query(
-    `SELECT id, code, label, image_url, active, sort_order
-     FROM archive_graphics
-     WHERE COALESCE(active, true) = true
-     ORDER BY sort_order ASC NULLS LAST, label ASC`
-  );
-  return result.rows.map((row) => ({
+function mapArchiveGraphic(row: Record<string, unknown>): ArchiveGraphic {
+  return {
     id: String(row.id),
     code: String(row.code),
     label: String(row.label),
     image_url: (row.image_url as string) ?? null,
     active: row.active !== false,
     sort_order: Number(row.sort_order ?? 0),
-  }));
+    requires_photo:
+      row.requires_photo === true || row.requires_photo === "true",
+  };
+}
+
+/** Active archive graphics for the shop dropdown. */
+export async function listArchiveGraphics(): Promise<ArchiveGraphic[]> {
+  const result = await query(
+    `SELECT id, code, label, image_url, active, sort_order, requires_photo
+     FROM archive_graphics
+     WHERE COALESCE(active, true) = true
+     ORDER BY sort_order ASC NULLS LAST, label ASC`
+  );
+  return result.rows.map((row) => mapArchiveGraphic(row));
 }
 
 export async function getArchiveGraphicByCode(
   code: string
 ): Promise<ArchiveGraphic | null> {
   const result = await query(
-    `SELECT id, code, label, image_url, active, sort_order
+    `SELECT id, code, label, image_url, active, sort_order, requires_photo
      FROM archive_graphics
      WHERE COALESCE(active, true) = true
        AND lower(trim(code)) = lower(trim($1))
@@ -74,14 +83,7 @@ export async function getArchiveGraphicByCode(
   );
   const row = result.rows[0];
   if (!row) return null;
-  return {
-    id: String(row.id),
-    code: String(row.code),
-    label: String(row.label),
-    image_url: (row.image_url as string) ?? null,
-    active: row.active !== false,
-    sort_order: Number(row.sort_order ?? 0),
-  };
+  return mapArchiveGraphic(row);
 }
 
 /** Record a graphic option in the archive forever (idempotent).
@@ -92,6 +94,7 @@ export async function archiveGraphicOption(input: {
   label: string;
   sort_order?: number;
   image_url?: string | null;
+  requires_photo?: boolean;
 }): Promise<void> {
   const imageUrl =
     input.image_url == null || String(input.image_url).trim() === ""
@@ -99,13 +102,33 @@ export async function archiveGraphicOption(input: {
       : String(input.image_url).trim();
 
   await query(
-    `INSERT INTO archive_graphics (code, label, image_url, sort_order)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO archive_graphics (code, label, image_url, sort_order, requires_photo)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (code) DO UPDATE
        SET label = EXCLUDED.label,
            image_url = COALESCE(EXCLUDED.image_url, archive_graphics.image_url),
-           sort_order = EXCLUDED.sort_order`,
-    [input.code, input.label, imageUrl, input.sort_order ?? 0]
+           sort_order = EXCLUDED.sort_order,
+           requires_photo = EXCLUDED.requires_photo`,
+    [
+      input.code,
+      input.label,
+      imageUrl,
+      input.sort_order ?? 0,
+      input.requires_photo === true,
+    ]
+  );
+}
+
+/** Sync the photo-required flag onto the archive row for a graphic code. */
+export async function setArchiveGraphicRequiresPhoto(
+  code: string,
+  requiresPhoto: boolean
+): Promise<void> {
+  await query(
+    `UPDATE archive_graphics
+     SET requires_photo = $2
+     WHERE lower(trim(code)) = lower(trim($1))`,
+    [code, requiresPhoto]
   );
 }
 
@@ -142,6 +165,13 @@ export async function createPurchase(input: {
   return mapPurchase(result.rows[0]);
 }
 
+export async function getPurchaseById(id: string): Promise<Purchase | null> {
+  const result = await query(`SELECT * FROM purchases WHERE id = $1 LIMIT 1`, [
+    id,
+  ]);
+  return result.rows[0] ? mapPurchase(result.rows[0]) : null;
+}
+
 export async function getPurchaseByIntent(
   paymentIntentId: string
 ): Promise<Purchase | null> {
@@ -150,6 +180,19 @@ export async function getPurchaseByIntent(
     [paymentIntentId]
   );
   return result.rows[0] ? mapPurchase(result.rows[0]) : null;
+}
+
+export async function mergePurchaseMetadata(
+  id: string,
+  metadata: Record<string, unknown>
+): Promise<void> {
+  await query(
+    `UPDATE purchases
+     SET metadata = metadata || $2::jsonb,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [id, JSON.stringify(metadata)]
+  );
 }
 
 export async function markPurchaseStatusByIntent(
@@ -186,6 +229,7 @@ export async function setPurchaseStatus(
 
 export interface AdminPurchase extends Purchase {
   graphic_label: string | null;
+  has_customer_photo: boolean;
 }
 
 export interface AdminPurchaseFilters {
@@ -218,7 +262,10 @@ export async function listPurchasesForAdmin(
     );
   }
   const result = await query(
-    `SELECT p.*, a.label AS graphic_label
+    `SELECT p.*, a.label AS graphic_label,
+            EXISTS (
+              SELECT 1 FROM purchase_photos pp WHERE pp.purchase_id = p.id
+            ) AS has_customer_photo
      FROM purchases p
      LEFT JOIN archive_graphics a ON a.code = p.graphic_code
      WHERE ${clauses.join(" AND ")}
@@ -229,6 +276,7 @@ export async function listPurchasesForAdmin(
   return result.rows.map((row) => ({
     ...mapPurchase(row),
     graphic_label: (row.graphic_label as string) ?? null,
+    has_customer_photo: Boolean(row.has_customer_photo),
   }));
 }
 

@@ -257,6 +257,19 @@
               <option value="">Loading the archive…</option>
             </select>
           </div>
+          <div id="customer-photo-field" class="field mt-4 hidden">
+            <label for="shop_customer_photo">Your photo <span class="text-honey/80">(required for this graphic)</span></label>
+            <input
+              id="shop_customer_photo"
+              name="customer_photo"
+              type="file"
+              accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+            />
+            <p class="mt-1.5 text-xs text-cream/45">
+              JPG or PNG only, 5 MB max. We’ll use this photo with your archive graphic order.
+            </p>
+            <p id="customer-photo-name" class="mt-1 hidden text-xs text-cream/40"></p>
+          </div>
           <p id="err-1" class="mt-3 hidden text-sm text-rose-300"></p>
         </div>
 
@@ -292,6 +305,7 @@
           <div class="field mt-6">
             <label for="shop_email">Email address</label>
             <input id="shop_email" type="email" autocomplete="email" maxlength="254" placeholder="you@email.com" />
+            <p id="shop-email-hint" class="mt-1.5 text-xs text-honey/90" hidden></p>
           </div>
           <p id="err-3" class="mt-3 hidden text-sm text-rose-300"></p>
         </div>
@@ -309,6 +323,7 @@
             <div class="summary-row"><span class="text-cream/50">Graphic</span><span id="sum-graphic" class="text-right font-medium text-cream"></span></div>
             <div class="summary-row"><span class="text-cream/50">Angel name</span><span id="sum-angel" class="text-right font-medium text-cream"></span></div>
             <div class="summary-row"><span class="text-cream/50">Email</span><span id="sum-email" class="break-all text-right font-medium text-cream"></span></div>
+            <div id="sum-photo-row" class="summary-row hidden"><span class="text-cream/50">Your photo</span><span id="sum-photo" class="text-right font-medium text-cream"></span></div>
             <div class="summary-row"><span class="text-cream/50">Total</span><span id="sum-total" class="gold-text text-right text-lg font-bold"></span></div>
           </div>
           <div id="payment-loading" class="mt-6 text-center text-sm text-cream/50">
@@ -417,6 +432,7 @@
 
     <script src="/assets/site.js"></script>
     <script src="/assets/auth.js"></script>
+    <script src="/assets/emailCheck.js"></script>
     <script src="/assets/reviews.js"></script>
     <script>
       document.getElementById("leave-review-btn")?.addEventListener("click", () => {
@@ -453,6 +469,9 @@
       const graphicPreview = document.getElementById("graphic-preview");
       const graphicPreviewImage = document.getElementById("graphic-preview-image");
       const graphicPreviewLabel = document.getElementById("graphic-preview-label");
+      const customerPhotoField = document.getElementById("customer-photo-field");
+      const customerPhotoInput = document.getElementById("shop_customer_photo");
+      const customerPhotoName = document.getElementById("customer-photo-name");
 
       function fmtPrice(cents, currency) {
         return new Intl.NumberFormat("en-US", {
@@ -469,10 +488,31 @@
         el.classList.toggle("hidden", !text);
       }
 
+      function selectedGraphic() {
+        return graphicsCache.find((item) => item.code === graphicSelect.value);
+      }
+
+      function selectedPhotoFile() {
+        return customerPhotoInput.files && customerPhotoInput.files[0]
+          ? customerPhotoInput.files[0]
+          : null;
+      }
+
+      function updateCustomerPhotoField() {
+        const graphic = selectedGraphic();
+        const needs = Boolean(graphic && graphic.requires_photo);
+        customerPhotoField.classList.toggle("hidden", !needs);
+        customerPhotoInput.required = needs;
+        if (!needs) {
+          customerPhotoInput.value = "";
+          customerPhotoName.textContent = "";
+          customerPhotoName.classList.add("hidden");
+        }
+      }
+
       function updateGraphicPreview() {
-        const graphic = graphicsCache.find(
-          (item) => item.code === graphicSelect.value
-        );
+        const graphic = selectedGraphic();
+        updateCustomerPhotoField();
         if (!graphic || !graphic.image_url) {
           graphicPreview.classList.remove("visible");
           graphicPreviewImage.removeAttribute("src");
@@ -488,6 +528,17 @@
       }
 
       graphicSelect.addEventListener("change", updateGraphicPreview);
+      customerPhotoInput.addEventListener("change", () => {
+        const file = selectedPhotoFile();
+        if (!file) {
+          customerPhotoName.textContent = "";
+          customerPhotoName.classList.add("hidden");
+          return;
+        }
+        customerPhotoName.textContent =
+          file.name + " · " + Math.max(1, Math.round(file.size / 1024)) + " KB";
+        customerPhotoName.classList.remove("hidden");
+      });
 
       function setStep(next) {
         const current = document.querySelector(".wizard-step.active");
@@ -532,6 +583,30 @@
             showError(1, "Please choose a graphic from the list to continue.");
             return false;
           }
+          const graphic = selectedGraphic();
+          const needsPhoto = Boolean(graphic && graphic.requires_photo);
+          const photoFile = selectedPhotoFile();
+          if (needsPhoto && !photoFile) {
+            showError(1, "This graphic needs a JPG or PNG photo attached.");
+            return false;
+          }
+          if (photoFile) {
+            const name = String(photoFile.name || "").toLowerCase();
+            const okExt =
+              name.endsWith(".jpg") ||
+              name.endsWith(".jpeg") ||
+              name.endsWith(".png");
+            const okType =
+              photoFile.type === "image/jpeg" || photoFile.type === "image/png";
+            if (!okExt && !okType) {
+              showError(1, "Please upload a JPG or PNG photo only.");
+              return false;
+            }
+            if (photoFile.size > 5 * 1024 * 1024) {
+              showError(1, "Photo is too large — 5 MB max.");
+              return false;
+            }
+          }
         }
         if (step === 2) {
           if (!document.getElementById("shop_angel_name").value.trim()) {
@@ -545,8 +620,14 @@
         }
         if (step === 3) {
           const email = document.getElementById("shop_email").value.trim();
-          if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-            showError(3, "Please enter a valid email address.");
+          const emailCheck = window.AAGEmail
+            ? AAGEmail.validate(email)
+            : {
+                ok: Boolean(email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)),
+                error: "Please enter a valid email address.",
+              };
+          if (!emailCheck.ok) {
+            showError(3, emailCheck.error || "Please enter a valid email address.");
             return false;
           }
         }
@@ -560,8 +641,9 @@
         // login. The wizard state is untouched, so after signing in the
         // visitor lands straight on review & pay.
         if (currentStep === 3) {
+          let user;
           try {
-            await AAGAuth.requireAuth({
+            user = await AAGAuth.requireAuth({
               title: "Log in to complete your order",
               message:
                 "An account lets us tie this order to you so you can track it from your profile. Your order details are saved — checkout continues right after.",
@@ -573,6 +655,8 @@
             );
             return;
           }
+          prefillShopFromUser(user || AAGAuth.getUser(), { forceEmail: true });
+          if (!validateStep(3)) return;
         }
 
         setStep(currentStep + 1);
@@ -661,13 +745,39 @@
         };
       }
 
+      function checkoutCacheKey(payload, photoFile) {
+        return JSON.stringify({
+          ...payload,
+          photo: photoFile
+            ? photoFile.name + ":" + photoFile.size + ":" + photoFile.lastModified
+            : null,
+        });
+      }
+
       async function preparePayment() {
         const payload = checkoutPayload();
-        const graphic = graphicsCache.find((g) => g.code === payload.graphic_code);
+        const graphic = selectedGraphic();
+        const photoFile = selectedPhotoFile();
+
+        // Re-check photo before creating a PaymentIntent (user may have
+        // cleared the file after leaving step 1).
+        if (graphic && graphic.requires_photo && !photoFile) {
+          showError(4, "This graphic needs a JPG or PNG photo — go back to step 1 to attach one.");
+          return;
+        }
 
         document.getElementById("sum-graphic").textContent = graphic ? graphic.label : payload.graphic_code;
         document.getElementById("sum-angel").textContent = payload.angel_name;
         document.getElementById("sum-email").textContent = payload.email;
+        const photoRow = document.getElementById("sum-photo-row");
+        const photoSum = document.getElementById("sum-photo");
+        if (photoFile) {
+          photoSum.textContent = photoFile.name;
+          photoRow.classList.remove("hidden");
+        } else {
+          photoSum.textContent = "";
+          photoRow.classList.add("hidden");
+        }
         document.getElementById("sum-total").textContent = shopConfig
           ? fmtPrice(shopConfig.price_cents, shopConfig.currency)
           : "$5";
@@ -686,7 +796,7 @@
 
         // Reuse the payment element if nothing changed (e.g. they went back
         // to double-check and returned without edits).
-        const key = JSON.stringify(payload);
+        const key = checkoutCacheKey(payload, photoFile);
         if (key === lastCheckoutKey && paymentElement) {
           payBtn.disabled = false;
           return;
@@ -701,10 +811,16 @@
         }
 
         try {
+          const body = new FormData();
+          body.append("graphic_code", payload.graphic_code);
+          body.append("angel_name", payload.angel_name);
+          body.append("real_name", payload.real_name);
+          body.append("email", payload.email);
+          if (photoFile) body.append("customer_photo", photoFile);
+
           const res = await fetch("/shop/checkout", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
+            body,
           });
           const data = await res.json();
           if (!res.ok || !data.success) {
@@ -837,17 +953,37 @@
         return false;
       }
 
-      // Prefill checkout fields from the logged-in account.
-      document.addEventListener("aag:auth", (e) => {
-        const user = e.detail.user;
+      const shopEmailInput = document.getElementById("shop_email");
+      const shopEmailHint = document.getElementById("shop-email-hint");
+      if (window.AAGEmail) AAGEmail.bindHint(shopEmailInput, shopEmailHint);
+
+      // Prefill checkout fields from the logged-in account. After login,
+      // replace a known domain typo with the account email.
+      function prefillShopFromUser(user, opts) {
         if (!user) return;
-        const emailInput = document.getElementById("shop_email");
+        const forceEmail = Boolean(opts && opts.forceEmail);
         const realName = document.getElementById("shop_real_name");
         const angelName = document.getElementById("shop_angel_name");
-        if (!emailInput.value && user.email) emailInput.value = user.email;
         if (!realName.value && user.name) realName.value = user.name;
         if (!angelName.value && user.angel_name) angelName.value = user.angel_name;
-      });
+        if (!user.email) return;
+        const typed = shopEmailInput.value.trim();
+        const typo =
+          typed && window.AAGEmail ? AAGEmail.suggest(typed) : null;
+        if (!typed || (forceEmail && typo)) {
+          shopEmailInput.value = user.email;
+          if (shopEmailHint) {
+            shopEmailHint.hidden = true;
+            shopEmailHint.textContent = "";
+          }
+        }
+      }
+      document.addEventListener("aag:auth", (e) =>
+        prefillShopFromUser(e.detail.user)
+      );
+      if (window.AAGAuth) {
+        AAGAuth.ready.then((user) => prefillShopFromUser(user));
+      }
 
       (async () => {
         await loadShop();
