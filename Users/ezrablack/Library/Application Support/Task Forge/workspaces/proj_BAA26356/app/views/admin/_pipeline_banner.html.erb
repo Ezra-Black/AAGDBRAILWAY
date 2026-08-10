@@ -1,0 +1,7 @@
+<% if @alerts.any? %>
+<div class="banner failure-alert">
+  <%= @alerts.first.details %>
+  <%= link_to 'Retry', retry_admin_entry_path(@entry), method: :post %>
+  <%= link_to 'Acknowledge', acknowledge_admin_alert_path(@alerts.first), method: :post %>
+</div>
+<% end %>
