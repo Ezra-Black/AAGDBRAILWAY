@@ -1,5 +1,9 @@
 import fs from "fs/promises";
 import path from "path";
+import {
+  isAllowedPlaceholderFetchUrl,
+  resolveUnderUploadRoot,
+} from "../uploadPaths";
 
 function uploadRoot(): string {
   return process.env.UPLOAD_DIR?.trim() || path.join(process.cwd(), "uploads");
@@ -7,6 +11,17 @@ function uploadRoot(): string {
 
 function publicBase(explicit?: string): string {
   return (explicit || process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
+}
+
+async function fetchAllowedUrl(url: string): Promise<Buffer> {
+  if (!isAllowedPlaceholderFetchUrl(url)) {
+    throw new Error("Placeholder URL host is not allow-listed");
+  }
+  const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch placeholder URL (${res.status})`);
+  }
+  return Buffer.from(await res.arrayBuffer());
 }
 
 /**
@@ -23,12 +38,20 @@ export async function resolvePlaceholderForXai(
   }
 
   if (/^https?:\/\//i.test(trimmed)) {
+    if (!isAllowedPlaceholderFetchUrl(trimmed)) {
+      throw new Error("Placeholder URL host is not allow-listed");
+    }
     return { source: trimmed, kind: "url" };
   }
 
   const base = publicBase(publicBaseUrl);
   if (base && trimmed.startsWith("/")) {
-    return { source: `${base}${trimmed}`, kind: "url" };
+    const absolute = `${base}${trimmed}`;
+    if (!isAllowedPlaceholderFetchUrl(absolute)) {
+      // Fall through to local disk / data URI instead of a blocked host.
+    } else {
+      return { source: absolute, kind: "url" };
+    }
   }
 
   return {
@@ -39,7 +62,7 @@ export async function resolvePlaceholderForXai(
 
 /**
  * Load a placeholder image as a data URI for xAI edits.
- * Supports /assets/..., /uploads/..., or absolute http(s) URLs.
+ * Supports /assets/..., /uploads/..., or allow-listed http(s) URLs.
  * Never writes back to the original asset.
  */
 export async function loadPlaceholderDataUri(
@@ -52,33 +75,48 @@ export async function loadPlaceholderDataUri(
   }
 
   if (/^https?:\/\//i.test(trimmed)) {
-    const res = await fetch(trimmed);
-    if (!res.ok) {
-      throw new Error(`Failed to fetch placeholder URL (${res.status})`);
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
-    const mime = res.headers.get("content-type") || guessMime(trimmed);
+    const buf = await fetchAllowedUrl(trimmed);
+    const mime = guessMime(trimmed);
     return `data:${mime};base64,${buf.toString("base64")}`;
   }
 
   if (trimmed.startsWith("/assets/")) {
     const filePath = path.join(process.cwd(), "public", trimmed);
-    const buf = await fs.readFile(filePath);
-    return `data:${guessMime(filePath)};base64,${buf.toString("base64")}`;
+    const resolvedPublic = path.resolve(path.join(process.cwd(), "public"));
+    const resolvedFile = path.resolve(filePath);
+    if (
+      resolvedFile !== resolvedPublic &&
+      !resolvedFile.startsWith(resolvedPublic + path.sep)
+    ) {
+      throw new Error("Invalid assets path");
+    }
+    const buf = await fs.readFile(resolvedFile);
+    return `data:${guessMime(resolvedFile)};base64,${buf.toString("base64")}`;
   }
 
   if (trimmed.startsWith("/uploads/")) {
-    const rel = trimmed.replace(/^\/uploads\//, "");
-    const filePath = path.join(uploadRoot(), rel);
+    const filePath = resolveUnderUploadRoot(uploadRoot(), trimmed);
+    if (!filePath) {
+      throw new Error("Invalid uploads path");
+    }
     const buf = await fs.readFile(filePath);
     return `data:${guessMime(filePath)};base64,${buf.toString("base64")}`;
   }
 
   const local = path.join(process.cwd(), "public", trimmed.replace(/^\//, ""));
   try {
-    const buf = await fs.readFile(local);
+    const resolvedPublic = path.resolve(path.join(process.cwd(), "public"));
+    const resolvedFile = path.resolve(local);
+    if (
+      resolvedFile !== resolvedPublic &&
+      !resolvedFile.startsWith(resolvedPublic + path.sep)
+    ) {
+      throw new Error("Invalid public path");
+    }
+    const buf = await fs.readFile(resolvedFile);
     return `data:${guessMime(local)};base64,${buf.toString("base64")}`;
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Invalid")) throw err;
     const base = publicBase(publicBaseUrl);
     if (!base) {
       throw new Error(

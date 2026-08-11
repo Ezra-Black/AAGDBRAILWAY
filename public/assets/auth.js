@@ -343,6 +343,15 @@
           setNote(errorText(result, "Could not create your account."));
           return;
         }
+        if (!result.data.user) {
+          setNote(
+            result.data.message ||
+              "If you already have an account, please log in.",
+            true
+          );
+          showPane("login");
+          return;
+        }
         await finishAuth(result.data.user, "Account created — welcome!");
       } catch (err) {
         setNote("Network glitch. Try again in a sec.");

@@ -11,7 +11,17 @@ import { query } from "./pool";
 const KNOWN_DEVICES = new Set(["mobile", "tablet", "desktop"]);
 
 function hashVisitorId(visitorId: string): string {
-  const salt = process.env.ANALYTICS_SALT?.trim() || "aag-analytics-v1";
+  const salt = process.env.ANALYTICS_SALT?.trim();
+  if (!salt) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("ANALYTICS_SALT is required in production");
+    }
+    // Dev-only fallback — production boot refuses to start without a salt.
+    return crypto
+      .createHash("sha256")
+      .update("aag-analytics-dev:" + visitorId)
+      .digest("hex");
+  }
   return crypto
     .createHash("sha256")
     .update(salt + ":" + visitorId)

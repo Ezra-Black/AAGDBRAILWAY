@@ -181,13 +181,9 @@ export async function sendGraphicDeliveryEmail(input: {
   } catch (err) {
     logger.error("Failed to send graphic delivery email", {
       error: String(err),
-      to: input.to,
-      angel_name: input.angelName,
       filename: input.filename,
     });
-    console.error(
-      `[smtp-fail] delivery to=${input.to} angel=${input.angelName} error=${String(err)}`
-    );
+    console.error(`[smtp-fail] delivery error=${String(err)}`);
     return false;
   }
 }
@@ -276,7 +272,6 @@ export async function sendInboxReplyEmail(input: {
   } catch (err) {
     logger.error("Failed to send inbox reply email", {
       error: String(err),
-      to: input.to,
     });
     return false;
   }

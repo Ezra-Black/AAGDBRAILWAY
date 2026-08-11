@@ -12,9 +12,11 @@ import { vaultExpiredGraphics } from "./db/graphics";
 import { migrate } from "./db/migrate";
 import { closePool } from "./db/pool";
 import { markPurchaseStatusByIntent } from "./db/shop";
+import { allowedOrigins, assertProductionSecurityEnv } from "./env";
 import { logger } from "./logger";
 import { authRouter } from "./authRoutes";
 import { apiRouter } from "./routes";
+import { requireSameOrigin } from "./sameOrigin";
 import { deleteExpiredUserSessions } from "./db/users";
 import { ensureUploadDir, uploadDir } from "./uploads";
 import { globalLimiter } from "./security";
@@ -42,7 +44,6 @@ app.use(
           "'unsafe-inline'",
           "https://cdn.tailwindcss.com",
           "https://cdn.jsdelivr.net",
-          "https://unpkg.com",
           "https://connect.facebook.net",
           "https://js.stripe.com",
         ],
@@ -51,7 +52,6 @@ app.use(
           "'unsafe-inline'",
           "https://cdn.tailwindcss.com",
           "https://cdn.jsdelivr.net",
-          "https://unpkg.com",
           "https://connect.facebook.net",
           "https://js.stripe.com",
         ],
@@ -66,7 +66,6 @@ app.use(
         connectSrc: [
           "'self'",
           "https://cdn.jsdelivr.net",
-          "https://unpkg.com",
           "https://graph.facebook.com",
           "https://www.facebook.com",
           "https://web.facebook.com",
@@ -86,20 +85,21 @@ app.use(
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
         workerSrc: ["'self'", "blob:"],
         childSrc: ["'self'", "blob:"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
       },
     },
   })
 );
 
-const corsOrigin = process.env.CORS_ORIGIN;
+const origins = allowedOrigins();
 app.use(
   cors({
-    origin: corsOrigin
-      ? corsOrigin.split(",").map((o) => o.trim())
-      : true,
+    origin: origins.length > 0 ? origins : false,
     // Session cookies only travel cross-origin when an explicit allow-list
-    // is configured — never with the wildcard default.
-    credentials: Boolean(corsOrigin),
+    // is configured — never with a reflect-any default.
+    credentials: origins.length > 0,
   })
 );
 
@@ -148,6 +148,7 @@ app.post(
 app.use(express.json({ limit: "8kb" }));
 app.use(express.urlencoded({ extended: false, limit: "8kb" }));
 app.use(cookieParser());
+app.use(requireSameOrigin);
 
 app.use(globalLimiter);
 
@@ -166,18 +167,24 @@ app.use(apiRouter);
 const publicDir = path.join(__dirname, "..", "public");
 app.use(express.static(publicDir));
 
-// Profile photos. Content-Disposition + nosniff keep any hostile upload that
-// slipped past magic-byte checks from executing in the page context.
+const uploadStaticHeaders = {
+  maxAge: "7d" as const,
+  immutable: true,
+  setHeaders: (res: Response) => {
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+  },
+};
+
+// Public samples + avatars only. Customer photos and generated memorials are
+// NOT served from disk — admins download via authenticated DB-backed routes.
 app.use(
-  "/uploads",
-  express.static(uploadDir(), {
-    maxAge: "7d",
-    immutable: true,
-    setHeaders: (res) => {
-      res.setHeader("Content-Disposition", "inline");
-      res.setHeader("X-Content-Type-Options", "nosniff");
-    },
-  })
+  "/uploads/graphics",
+  express.static(path.join(uploadDir(), "graphics"), uploadStaticHeaders)
+);
+app.use(
+  "/uploads/avatars",
+  express.static(path.join(uploadDir(), "avatars"), uploadStaticHeaders)
 );
 
 app.get("/", (_req, res) => {
@@ -243,6 +250,7 @@ app.use(
 );
 
 async function start() {
+  assertProductionSecurityEnv("web");
   if (!process.env.DATABASE_URL) {
     logger.error("DATABASE_URL is not set");
     process.exit(1);
