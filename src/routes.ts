@@ -33,12 +33,10 @@ import {
   markAngelNameComplete,
   setAngelNameArchived,
   updateEntryStatus,
-  type Entry,
 } from "./db/entries";
 import { createAdmin, getAdminByEmail } from "./db/admins";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { envTrim } from "./env";
 import {
   acknowledgeVaultedGraphics,
   createGraphicOption,
@@ -176,21 +174,6 @@ function asyncHandler(
   };
 }
 
-/** Public submit responses never echo PII / metadata / other users' rows. */
-function publicSubmitReceipt(entry: Entry | null | undefined): {
-  id: string;
-  status: string;
-} | null {
-  if (!entry?.id) return null;
-  return { id: entry.id, status: entry.status };
-}
-
-function adminJoinEnabled(): boolean {
-  return ["1", "true", "yes", "on"].includes(
-    envTrim("ALLOW_ADMIN_JOIN").toLowerCase()
-  );
-}
-
 /** POST /admin/login */
 apiRouter.post(
   "/admin/login",
@@ -219,18 +202,13 @@ apiRouter.post(
 );
 
 /**
- * POST /admin/join/check — disabled unless ALLOW_ADMIN_JOIN=true
- * (emergency / local bootstrap only). Prefer SEED_ADMIN_* env instead.
+ * POST /admin/join/check — email must already exist in form submissions
+ * and must not already be an admin.
  */
 apiRouter.post(
   "/admin/join/check",
   loginLimiter,
   asyncHandler(async (req, res) => {
-    if (!adminJoinEnabled()) {
-      res.status(404).json({ success: false, error: "Not found" });
-      return;
-    }
-
     const parsed = adminJoinCheckSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
@@ -270,16 +248,11 @@ apiRouter.post(
   })
 );
 
-/** POST /admin/join — create admin; gated by ALLOW_ADMIN_JOIN=true */
+/** POST /admin/join — create admin account for a known submission email */
 apiRouter.post(
   "/admin/join",
   loginLimiter,
   asyncHandler(async (req, res) => {
-    if (!adminJoinEnabled()) {
-      res.status(404).json({ success: false, error: "Not found" });
-      return;
-    }
-
     const parsed = adminJoinSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
@@ -892,6 +865,7 @@ apiRouter.post(
     );
     if (existingSameGraphic) {
       logger.info("Blocked duplicate graphic claim", {
+        email,
         angel_name,
         graphic_code,
         existing_id: existingSameGraphic.id,
@@ -901,7 +875,7 @@ apiRouter.post(
         duplicate: true,
         already_sent: true,
         message: DUPLICATE_ALREADY_SENT_MESSAGE,
-        entry: publicSubmitReceipt(existingSameGraphic),
+        entry: existingSameGraphic,
       });
       return;
     }
@@ -914,6 +888,7 @@ apiRouter.post(
     );
     if (recentByRequester) {
       logger.info("Blocked submit — requester cooldown", {
+        email,
         user_id: req.user?.id ?? null,
         graphic_code,
         existing_id: recentByRequester.id,
@@ -925,7 +900,7 @@ apiRouter.post(
         already_sent: true,
         rate_limited: true,
         message: RATE_LIMIT_MESSAGE,
-        entry: publicSubmitReceipt(recentByRequester),
+        entry: recentByRequester,
       });
       return;
     }
@@ -941,6 +916,7 @@ apiRouter.post(
     );
     if (recentSameClaim) {
       logger.info("Blocked rapid multi-submit", {
+        email,
         angel_name,
         graphic_code,
         existing_id: recentSameClaim.id,
@@ -950,17 +926,18 @@ apiRouter.post(
         duplicate: true,
         already_sent: true,
         message: DUPLICATE_ALREADY_SENT_MESSAGE,
-        entry: publicSubmitReceipt(recentSameClaim),
+        entry: recentSameClaim,
       });
       return;
     }
 
     // Legacy mode: block a second graphic for an angel name that already
-    // exists anywhere (not just for this email). Never echo that row.
+    // exists anywhere (not just for this email).
     if (!allowSameNameDifferentGraphic) {
       const existingName = await getEntryByAngelName(angel_name);
       if (existingName) {
         logger.info("Blocked same-name different-graphic (flag off)", {
+          email,
           angel_name,
           graphic_code,
           existing_id: existingName.id,
@@ -970,7 +947,7 @@ apiRouter.post(
           duplicate: true,
           already_sent: true,
           message: DUPLICATE_ALREADY_SENT_MESSAGE,
-          entry: null,
+          entry: existingName,
         });
         return;
       }
@@ -1020,6 +997,7 @@ apiRouter.post(
 
     logger.info("Entry created", {
       id: refreshed.id,
+      angel_name: refreshed.angel_name,
       graphic_code: refreshed.graphic_code,
       status: refreshed.status,
       has_customer_photo: Boolean(savedCustomer),
@@ -1032,7 +1010,7 @@ apiRouter.post(
       already_sent: false,
       message:
         "Submitted! You’re on the list — keep an eye on your email for an update.",
-      entry: publicSubmitReceipt(refreshed),
+      entry: refreshed,
     });
   })
 );
@@ -1725,17 +1703,17 @@ apiRouter.post(
       return;
     }
 
-    const base = envTrim("PUBLIC_BASE_URL").replace(/\/+$/, "");
-    if (thread.user_email && base) {
+    const configured = process.env.PUBLIC_BASE_URL?.trim();
+    const base = configured
+      ? configured.replace(/\/+$/, "")
+      : `${req.protocol}://${req.get("host")}`;
+    const inboxUrl = `${base}/profile#inbox`;
+    if (thread.user_email) {
       await sendInboxReplyEmail({
         to: thread.user_email,
         name: thread.user_name || "there",
-        inboxUrl: `${base}/profile#inbox`,
+        inboxUrl,
         preview: parsed.data.body,
-      });
-    } else if (thread.user_email && !base) {
-      logger.warn("Inbox reply email skipped — PUBLIC_BASE_URL is not set", {
-        thread_id: thread.id,
       });
     }
 

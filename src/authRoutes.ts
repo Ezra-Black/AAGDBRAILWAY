@@ -20,7 +20,6 @@ import {
   markThreadRead,
 } from "./db/messages";
 import { sendPasswordResetEmail } from "./email";
-import { isProduction, publicBaseUrlRequired } from "./env";
 import { logger } from "./logger";
 import {
   passwordResetLimiter,
@@ -73,16 +72,12 @@ function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-/**
- * Public site origin for links in emails (reset password, etc.).
- * Never falls back to the request Host header (poisoning risk).
- */
-function publicBaseUrl(_req: Request): string | null {
-  const configured = publicBaseUrlRequired();
-  if (configured) return configured;
-  if (isProduction()) return null;
-  // Local-only fallback when PUBLIC_BASE_URL is unset.
-  return "http://localhost:3000";
+/** Public site origin for links in emails (reset password, etc.). */
+function publicBaseUrl(req: Request): string {
+  const configured = process.env.PUBLIC_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  // trust proxy is enabled, so protocol/host reflect the Railway edge.
+  return `${req.protocol}://${req.get("host")}`;
 }
 
 /** POST /api/auth/register — create an account and log straight in. */
@@ -106,13 +101,9 @@ authRouter.post(
 
     const existing = await getUserByEmail(email);
     if (existing) {
-      // Equalize timing; do not reveal that the email is taken.
-      await hashPassword(password);
-      res.status(201).json({
-        success: true,
-        message:
-          "If this email is new, your account is ready. If you already have an account, please log in.",
-        user: null,
+      res.status(409).json({
+        success: false,
+        error: "An account with that email already exists. Please log in.",
       });
       return;
     }
@@ -373,20 +364,15 @@ authRouter.post(
 
     const user = await getUserByEmail(parsed.data.email);
     if (user) {
-      const base = publicBaseUrl(req);
-      if (!base) {
-        logger.error("PASSWORD reset skipped — PUBLIC_BASE_URL is not set");
-      } else {
-        const token = crypto.randomBytes(32).toString("hex");
-        await createPasswordResetToken(
-          user.id,
-          hashToken(token),
-          new Date(Date.now() + RESET_TOKEN_TTL_MS)
-        );
-        const resetUrl = `${base}/reset-password?token=${token}`;
-        const emailed = await sendPasswordResetEmail(user.email, resetUrl);
-        logger.info("Password reset requested", { user_id: user.id, emailed });
-      }
+      const token = crypto.randomBytes(32).toString("hex");
+      await createPasswordResetToken(
+        user.id,
+        hashToken(token),
+        new Date(Date.now() + RESET_TOKEN_TTL_MS)
+      );
+      const resetUrl = `${publicBaseUrl(req)}/reset-password?token=${token}`;
+      const emailed = await sendPasswordResetEmail(user.email, resetUrl);
+      logger.info("Password reset requested", { user_id: user.id, emailed });
     }
 
     res.json(genericResponse);
