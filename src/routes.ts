@@ -13,6 +13,8 @@ import {
   saveGraphicSample,
   deleteGraphicSample,
   saveCustomerPhoto,
+  saveNewsletterPhoto,
+  deleteNewsletterPhoto,
 } from "./uploads";
 import { getEntryPhoto, upsertEntryPhoto } from "./db/entryPhotos";
 import {
@@ -1337,10 +1339,35 @@ apiRouter.post(
   })
 );
 
-/** POST /admin/newsletter/posts — publish a newsletter post. */
+/**
+ * POST /admin/newsletter/posts — publish a newsletter post.
+ * Accepts JSON or multipart/form-data. Optional file field "photo"
+ * (jpeg/png/webp/gif, max 5 MB) is shown on the public newsletter page.
+ */
 apiRouter.post(
   "/admin/newsletter/posts",
   requireAdmin,
+  (req: Request, res: Response, next: NextFunction) => {
+    const contentType = String(req.headers["content-type"] || "");
+    if (!contentType.includes("multipart/form-data")) {
+      next();
+      return;
+    }
+    photoUpload.single("photo")(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({
+          success: false,
+          error: "Photo is too large — 5 MB max.",
+        });
+        return;
+      }
+      if (err) {
+        next(err);
+        return;
+      }
+      next();
+    });
+  },
   asyncHandler(async (req, res) => {
     const parsed = newsletterPostSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1352,13 +1379,36 @@ apiRouter.post(
       return;
     }
 
-    const post = await createNewsletterPost(parsed.data);
-    logger.info("Admin published newsletter post", {
-      id: post.id,
-      title: post.title,
-      author_name: post.author_name,
-    });
-    res.status(201).json({ success: true, post });
+    const file = (req as Request & { file?: { buffer?: Buffer } }).file;
+    let imageUrl: string | null = null;
+    if (file?.buffer?.length) {
+      imageUrl = await saveNewsletterPhoto(file.buffer);
+      if (!imageUrl) {
+        res.status(400).json({
+          success: false,
+          error:
+            "That file doesn’t look like an image. Use JPEG, PNG, WebP, or GIF.",
+        });
+        return;
+      }
+    }
+
+    try {
+      const post = await createNewsletterPost({
+        ...parsed.data,
+        image_url: imageUrl,
+      });
+      logger.info("Admin published newsletter post", {
+        id: post.id,
+        title: post.title,
+        author_name: post.author_name,
+        has_image: Boolean(imageUrl),
+      });
+      res.status(201).json({ success: true, post });
+    } catch (err) {
+      if (imageUrl) await deleteNewsletterPhoto(imageUrl);
+      throw err;
+    }
   })
 );
 
@@ -1373,12 +1423,19 @@ apiRouter.delete(
       return;
     }
 
+    const existing = await getNewsletterPostById(idCheck.data);
+    if (!existing) {
+      res.status(404).json({ success: false, error: "Post not found" });
+      return;
+    }
+
     const removed = await deleteNewsletterPost(idCheck.data);
     if (!removed) {
       res.status(404).json({ success: false, error: "Post not found" });
       return;
     }
 
+    await deleteNewsletterPhoto(existing.image_url);
     logger.info("Admin deleted newsletter post", { id: idCheck.data });
     res.json({ success: true });
   })

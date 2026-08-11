@@ -5,6 +5,7 @@ export interface NewsletterPost {
   title: string;
   author_name: string;
   body: string;
+  image_url: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -33,6 +34,7 @@ function mapPost(row: Record<string, unknown>): NewsletterPost {
     title: String(row.title),
     author_name: String(row.author_name),
     body: String(row.body),
+    image_url: row.image_url ? String(row.image_url) : null,
     created_at: row.created_at as Date,
     updated_at: row.updated_at as Date,
   };
@@ -41,7 +43,7 @@ function mapPost(row: Record<string, unknown>): NewsletterPost {
 /** Public feed — newest first. */
 export async function listNewsletterPosts(limit = 100): Promise<NewsletterPost[]> {
   const result = await query(
-    `SELECT id, title, author_name, body, created_at, updated_at
+    `SELECT id, title, author_name, body, image_url, created_at, updated_at
      FROM newsletter_posts
      ORDER BY created_at DESC
      LIMIT $1`,
@@ -54,7 +56,7 @@ export async function getNewsletterPostById(
   id: string
 ): Promise<NewsletterPost | null> {
   const result = await query(
-    `SELECT id, title, author_name, body, created_at, updated_at
+    `SELECT id, title, author_name, body, image_url, created_at, updated_at
      FROM newsletter_posts
      WHERE id = $1
      LIMIT 1`,
@@ -68,12 +70,13 @@ export async function createNewsletterPost(input: {
   title: string;
   author_name: string;
   body: string;
+  image_url?: string | null;
 }): Promise<NewsletterPost> {
   const result = await query(
-    `INSERT INTO newsletter_posts (title, author_name, body)
-     VALUES ($1, $2, $3)
-     RETURNING id, title, author_name, body, created_at, updated_at`,
-    [input.title, input.author_name, input.body]
+    `INSERT INTO newsletter_posts (title, author_name, body, image_url)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, title, author_name, body, image_url, created_at, updated_at`,
+    [input.title, input.author_name, input.body, input.image_url ?? null]
   );
   return mapPost(result.rows[0] as Record<string, unknown>);
 }

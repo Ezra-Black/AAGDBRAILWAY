@@ -121,9 +121,13 @@ export async function migrate(): Promise<void> {
       title        TEXT NOT NULL,
       author_name  TEXT NOT NULL,
       body         TEXT NOT NULL,
+      image_url    TEXT,
       created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE newsletter_posts
+      ADD COLUMN IF NOT EXISTS image_url TEXT;
 
     CREATE INDEX IF NOT EXISTS idx_newsletter_posts_created_at
       ON newsletter_posts (created_at DESC);
