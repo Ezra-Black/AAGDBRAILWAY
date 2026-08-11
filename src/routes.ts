@@ -60,6 +60,7 @@ import {
   getNewsletterPostById,
   listNewsletterPosts,
   toggleNewsletterReaction,
+  updateNewsletterPost,
 } from "./db/newsletter";
 import { logger } from "./logger";
 import {
@@ -1407,6 +1408,114 @@ apiRouter.post(
       res.status(201).json({ success: true, post });
     } catch (err) {
       if (imageUrl) await deleteNewsletterPhoto(imageUrl);
+      throw err;
+    }
+  })
+);
+
+/**
+ * PATCH /admin/newsletter/posts/:id — edit a published post.
+ * Same fields as create. Optional "photo" replaces the image.
+ * Set remove_photo=true to clear the existing image without uploading a new one.
+ */
+apiRouter.patch(
+  "/admin/newsletter/posts/:id",
+  requireAdmin,
+  (req: Request, res: Response, next: NextFunction) => {
+    const contentType = String(req.headers["content-type"] || "");
+    if (!contentType.includes("multipart/form-data")) {
+      next();
+      return;
+    }
+    photoUpload.single("photo")(req, res, (err: unknown) => {
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({
+          success: false,
+          error: "Photo is too large — 5 MB max.",
+        });
+        return;
+      }
+      if (err) {
+        next(err);
+        return;
+      }
+      next();
+    });
+  },
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid post ID" });
+      return;
+    }
+
+    const existing = await getNewsletterPostById(idCheck.data);
+    if (!existing) {
+      res.status(404).json({ success: false, error: "Post not found" });
+      return;
+    }
+
+    const parsed = newsletterPostSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    const file = (req as Request & { file?: { buffer?: Buffer } }).file;
+    const removePhoto = ["1", "true", "yes", "on"].includes(
+      String(req.body?.remove_photo || "")
+        .trim()
+        .toLowerCase()
+    );
+
+    let nextImageUrl = existing.image_url;
+    let uploadedUrl: string | null = null;
+
+    if (file?.buffer?.length) {
+      uploadedUrl = await saveNewsletterPhoto(file.buffer);
+      if (!uploadedUrl) {
+        res.status(400).json({
+          success: false,
+          error:
+            "That file doesn’t look like an image. Use JPEG, PNG, WebP, or GIF.",
+        });
+        return;
+      }
+      nextImageUrl = uploadedUrl;
+    } else if (removePhoto) {
+      nextImageUrl = null;
+    }
+
+    try {
+      const post = await updateNewsletterPost(idCheck.data, {
+        ...parsed.data,
+        image_url: nextImageUrl,
+      });
+      if (!post) {
+        if (uploadedUrl) await deleteNewsletterPhoto(uploadedUrl);
+        res.status(404).json({ success: false, error: "Post not found" });
+        return;
+      }
+
+      if (
+        existing.image_url &&
+        existing.image_url !== post.image_url
+      ) {
+        await deleteNewsletterPhoto(existing.image_url);
+      }
+
+      logger.info("Admin updated newsletter post", {
+        id: post.id,
+        title: post.title,
+        has_image: Boolean(post.image_url),
+      });
+      res.json({ success: true, post });
+    } catch (err) {
+      if (uploadedUrl) await deleteNewsletterPhoto(uploadedUrl);
       throw err;
     }
   })
