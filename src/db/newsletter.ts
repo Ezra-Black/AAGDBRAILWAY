@@ -81,6 +81,30 @@ export async function createNewsletterPost(input: {
   return mapPost(result.rows[0] as Record<string, unknown>);
 }
 
+export async function updateNewsletterPost(
+  id: string,
+  input: {
+    title: string;
+    author_name: string;
+    body: string;
+    image_url?: string | null;
+  }
+): Promise<NewsletterPost | null> {
+  const result = await query(
+    `UPDATE newsletter_posts
+     SET title = $2,
+         author_name = $3,
+         body = $4,
+         image_url = $5,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING id, title, author_name, body, image_url, created_at, updated_at`,
+    [id, input.title, input.author_name, input.body, input.image_url ?? null]
+  );
+  if (!result.rows[0]) return null;
+  return mapPost(result.rows[0] as Record<string, unknown>);
+}
+
 export async function deleteNewsletterPost(id: string): Promise<boolean> {
   const result = await query(
     `DELETE FROM newsletter_posts WHERE id = $1 RETURNING id`,

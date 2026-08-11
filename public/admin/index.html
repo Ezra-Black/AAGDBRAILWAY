@@ -1126,7 +1126,21 @@
         </div>
 
         <section class="glass-panel mb-8 rounded-[1.5rem] p-5 sm:p-6">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h3 id="post-form-heading" class="text-sm font-semibold text-cream/80">
+              New post
+            </h3>
+            <button
+              type="button"
+              id="post-cancel-edit"
+              class="hidden rounded-full border border-white/15 px-3 py-1.5 text-xs text-cream/60 transition hover:bg-white/5"
+              style="background:none;cursor:pointer"
+            >
+              Cancel edit
+            </button>
+          </div>
           <form id="post-form" class="space-y-4">
+            <input type="hidden" id="post_edit_id" value="" />
             <div class="grid gap-3 sm:grid-cols-[1.4fr_1fr]">
               <div class="field">
                 <label for="post_title">Subject title</label>
@@ -1171,7 +1185,8 @@
                   ?
                   <span class="help-bubble" role="tooltip">
                     Optional image shown with this post on the public newsletter
-                    page. JPEG, PNG, WebP, or GIF — 5 MB max.
+                    page. JPEG, PNG, WebP, or GIF — 5 MB max. When editing,
+                    uploading a new file replaces the current photo.
                   </span>
                 </span>
               </label>
@@ -1183,6 +1198,19 @@
                 style="padding:0.45rem 0.6rem;font-size:0.8rem"
               />
               <p id="post-photo-name" class="mt-1 hidden text-xs text-cream/40"></p>
+              <div id="post-current-photo" class="mt-2 hidden">
+                <img
+                  id="post-current-photo-img"
+                  src=""
+                  alt=""
+                  class="rounded-xl object-cover"
+                  style="max-height:160px;width:auto;background:rgba(0,0,0,0.2)"
+                />
+                <label class="mt-2 flex items-center gap-2 text-xs text-cream/55" style="cursor:pointer">
+                  <input id="post_remove_photo" type="checkbox" value="true" />
+                  Remove current photo
+                </label>
+              </div>
             </div>
             <div class="flex items-center justify-between gap-3">
               <p id="post-form-error" class="hidden text-sm text-rose-400"></p>
@@ -2715,9 +2743,60 @@
       const postForm = document.getElementById("post-form");
       const postPublishBtn = document.getElementById("post-publish-btn");
       const postFormError = document.getElementById("post-form-error");
+      const postFormHeading = document.getElementById("post-form-heading");
+      const postCancelEdit = document.getElementById("post-cancel-edit");
+      const postEditId = document.getElementById("post_edit_id");
       const adminPosts = document.getElementById("admin-posts");
       const adminPostsEmpty = document.getElementById("admin-posts-empty");
       const adminPostsError = document.getElementById("admin-posts-error");
+      const postPhotoInput = document.getElementById("post_photo");
+      const postPhotoName = document.getElementById("post-photo-name");
+      const postCurrentPhoto = document.getElementById("post-current-photo");
+      const postCurrentPhotoImg = document.getElementById("post-current-photo-img");
+      const postRemovePhoto = document.getElementById("post_remove_photo");
+      let adminPostsCache = [];
+
+      function clearPostPhotoUi() {
+        if (postPhotoInput) postPhotoInput.value = "";
+        if (postPhotoName) {
+          postPhotoName.textContent = "";
+          postPhotoName.classList.add("hidden");
+        }
+        if (postRemovePhoto) postRemovePhoto.checked = false;
+        if (postCurrentPhoto) postCurrentPhoto.classList.add("hidden");
+        if (postCurrentPhotoImg) postCurrentPhotoImg.src = "";
+      }
+
+      function resetPostForm(keepAuthor) {
+        const authorKeep =
+          keepAuthor || document.getElementById("post_author").value;
+        postForm.reset();
+        postEditId.value = "";
+        document.getElementById("post_author").value = authorKeep;
+        postFormHeading.textContent = "New post";
+        postPublishBtn.textContent = "Publish post";
+        postCancelEdit.classList.add("hidden");
+        postFormError.classList.add("hidden");
+        clearPostPhotoUi();
+      }
+
+      function beginEditPost(post) {
+        postEditId.value = post.id;
+        document.getElementById("post_title").value = post.title || "";
+        document.getElementById("post_author").value = post.author_name || "";
+        document.getElementById("post_body").value = post.body || "";
+        clearPostPhotoUi();
+        if (post.image_url && postCurrentPhoto && postCurrentPhotoImg) {
+          postCurrentPhotoImg.src = post.image_url;
+          postCurrentPhoto.classList.remove("hidden");
+        }
+        postFormHeading.textContent = "Edit post";
+        postPublishBtn.textContent = "Save changes";
+        postCancelEdit.classList.remove("hidden");
+        postFormError.classList.add("hidden");
+        postForm.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById("post_title").focus();
+      }
 
       async function loadAdminPosts() {
         adminPostsError.classList.add("hidden");
@@ -2731,6 +2810,7 @@
           }
           postsLoaded = true;
           const posts = data.posts || [];
+          adminPostsCache = posts;
           document.getElementById("posts-count").textContent =
             posts.length + " post" + (posts.length === 1 ? "" : "s");
           adminPosts.innerHTML = "";
@@ -2753,11 +2833,18 @@
               escapeHtml(formatRelativeAge(post.created_at)) +
               "</p>" +
               "</div>" +
+              '<div class="flex flex-wrap items-center gap-2">' +
+              '<button type="button" data-edit-post="' +
+              escapeAttr(post.id) +
+              '" class="rounded-full border border-white/15 px-3 py-1.5 text-xs text-cream/70 transition hover:bg-white/5" style="background:none;cursor:pointer">' +
+              "Edit" +
+              "</button>" +
               '<button type="button" data-delete-post="' +
               escapeAttr(post.id) +
               '" class="rounded-full border border-rose-500/40 px-3 py-1.5 text-xs text-rose-300 transition hover:bg-rose-500/10" style="background:none;cursor:pointer">' +
               "Delete" +
               "</button>" +
+              "</div>" +
               "</div>" +
               '<p class="mt-3 text-sm text-cream/65" style="white-space:pre-wrap;overflow-wrap:anywhere">' +
               escapeHtml(post.body) +
@@ -2769,6 +2856,14 @@
                 : "");
             adminPosts.appendChild(card);
           }
+
+          adminPosts.querySelectorAll("[data-edit-post]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const id = btn.getAttribute("data-edit-post");
+              const post = adminPostsCache.find((p) => p.id === id);
+              if (post) beginEditPost(post);
+            });
+          });
 
           adminPosts.querySelectorAll("[data-delete-post]").forEach((btn) => {
             btn.addEventListener("click", async () => {
@@ -2785,6 +2880,7 @@
                   window.location.href = "/admin/login";
                   return;
                 }
+                if (postEditId.value === id) resetPostForm(true);
                 await loadAdminPosts();
               } catch {
                 adminPostsError.textContent = "Network error deleting post";
@@ -2799,14 +2895,13 @@
         }
       }
 
-      const postPhotoInput = document.getElementById("post_photo");
-      const postPhotoName = document.getElementById("post-photo-name");
       if (postPhotoInput && postPhotoName) {
         postPhotoInput.addEventListener("change", () => {
           const file = postPhotoInput.files && postPhotoInput.files[0];
           if (file) {
             postPhotoName.textContent = file.name;
             postPhotoName.classList.remove("hidden");
+            if (postRemovePhoto) postRemovePhoto.checked = false;
           } else {
             postPhotoName.textContent = "";
             postPhotoName.classList.add("hidden");
@@ -2814,11 +2909,17 @@
         });
       }
 
+      if (postCancelEdit) {
+        postCancelEdit.addEventListener("click", () => resetPostForm(true));
+      }
+
       postForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         postFormError.classList.add("hidden");
         postPublishBtn.disabled = true;
-        postPublishBtn.textContent = "Publishing…";
+        const editingId = (postEditId.value || "").trim();
+        const isEdit = Boolean(editingId);
+        postPublishBtn.textContent = isEdit ? "Saving…" : "Publishing…";
 
         try {
           const body = new FormData();
@@ -2831,12 +2932,20 @@
           const photoFile =
             postPhotoInput && postPhotoInput.files && postPhotoInput.files[0];
           if (photoFile) body.append("photo", photoFile);
+          if (isEdit && postRemovePhoto && postRemovePhoto.checked && !photoFile) {
+            body.append("remove_photo", "true");
+          }
 
-          const res = await fetch("/admin/newsletter/posts", {
-            method: "POST",
-            credentials: "include",
-            body,
-          });
+          const res = await fetch(
+            isEdit
+              ? "/admin/newsletter/posts/" + encodeURIComponent(editingId)
+              : "/admin/newsletter/posts",
+            {
+              method: isEdit ? "PATCH" : "POST",
+              credentials: "include",
+              body,
+            }
+          );
           if (res.status === 401) {
             window.location.href = "/admin/login";
             return;
@@ -2845,24 +2954,26 @@
           if (!res.ok || !data.success) {
             postFormError.textContent =
               data.error ||
-              (data.details ? Object.values(data.details).flat().join(" ") : "Could not publish post");
+              (data.details
+                ? Object.values(data.details).flat().join(" ")
+                : isEdit
+                  ? "Could not save changes"
+                  : "Could not publish post");
             postFormError.classList.remove("hidden");
             return;
           }
-          const authorKeep = document.getElementById("post_author").value;
-          postForm.reset();
-          document.getElementById("post_author").value = authorKeep;
-          if (postPhotoName) {
-            postPhotoName.textContent = "";
-            postPhotoName.classList.add("hidden");
-          }
+          resetPostForm(true);
           await loadAdminPosts();
         } catch {
-          postFormError.textContent = "Network error publishing post";
+          postFormError.textContent = isEdit
+            ? "Network error saving post"
+            : "Network error publishing post";
           postFormError.classList.remove("hidden");
         } finally {
           postPublishBtn.disabled = false;
-          postPublishBtn.textContent = "Publish post";
+          postPublishBtn.textContent = postEditId.value
+            ? "Save changes"
+            : "Publish post";
         }
       });
 
