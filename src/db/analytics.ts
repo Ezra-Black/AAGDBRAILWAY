@@ -51,8 +51,11 @@ export interface DailyTraffic {
   returning_visitors: number;
 }
 
+export type AnalyticsGranularity = "hour" | "day";
+
 export interface AnalyticsSummary {
   range_days: number;
+  granularity: AnalyticsGranularity;
   totals: {
     views: number;
     visitors: number;
@@ -71,8 +74,27 @@ export interface AnalyticsSummary {
   devices: { device: string; views: number }[];
 }
 
-function dayKey(value: unknown): string {
-  const d = value instanceof Date ? value : new Date(String(value));
+/** Parse a UTC day/hour key returned from SQL to_char (not a JS Date). */
+function bucketKeyFromSql(value: unknown, granularity: AnalyticsGranularity): string {
+  const raw = String(value ?? "");
+  if (granularity === "hour") {
+    const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2})/);
+    if (m) return `${m[1]}T${m[2]}:00:00.000Z`;
+  } else {
+    const m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+  }
+  const d = value instanceof Date ? value : new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  if (granularity === "hour") {
+    const utc = Date.UTC(
+      d.getUTCFullYear(),
+      d.getUTCMonth(),
+      d.getUTCDate(),
+      d.getUTCHours()
+    );
+    return new Date(utc).toISOString();
+  }
   return d.toISOString().slice(0, 10);
 }
 
@@ -81,8 +103,26 @@ function dayRange(days: number): string[] {
   const out: string[] = [];
   const now = new Date();
   for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i));
+    const d = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - i)
+    );
     out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+/** Build a continuous list of hour keys (UTC) covering the last N hours. */
+function hourRange(hours: number): string[] {
+  const out: string[] = [];
+  const now = new Date();
+  const currentHour = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    now.getUTCHours()
+  );
+  for (let i = hours - 1; i >= 0; i--) {
+    out.push(new Date(currentHour - i * 3_600_000).toISOString());
   }
   return out;
 }
@@ -91,9 +131,19 @@ export async function getAnalyticsSummary(
   days: number
 ): Promise<AnalyticsSummary> {
   const rangeDays = Math.min(Math.max(Math.floor(days) || 30, 1), 365);
+  const granularity: AnalyticsGranularity = rangeDays === 1 ? "hour" : "day";
+  const truncUnit = granularity === "hour" ? "hour" : "day";
+  const bucketFmt =
+    granularity === "hour"
+      ? 'YYYY-MM-DD"T"HH24:00:00.000"Z"'
+      : "YYYY-MM-DD";
+  const bucketKeys =
+    granularity === "hour" ? hourRange(24) : dayRange(rangeDays);
 
-  // Per-day views / visitors / new visitors. A "new" visitor's first-ever
-  // page view falls on that day; everyone else that day is returning.
+  // Per-bucket views / visitors / new visitors. A "new" visitor's first-ever
+  // page view falls in that bucket; everyone else in the bucket is returning.
+  // Bucket keys are formatted in SQL so node-pg Date timezone parsing can't
+  // shift hour/day boundaries.
   const dailyRes = await query(
     `WITH firsts AS (
        SELECT visitor_key, MIN(created_at) AS first_seen
@@ -102,7 +152,7 @@ export async function getAnalyticsSummary(
      ),
      in_range AS (
        SELECT
-         date_trunc('day', pv.created_at AT TIME ZONE 'UTC') AS day,
+         date_trunc($2::text, pv.created_at AT TIME ZONE 'UTC') AS bucket,
          pv.visitor_key,
          f.first_seen
        FROM page_views pv
@@ -110,26 +160,26 @@ export async function getAnalyticsSummary(
        WHERE pv.created_at > NOW() - make_interval(days => $1::int)
      )
      SELECT
-       day,
+       to_char(bucket, $3::text) AS bucket,
        COUNT(*)::int AS views,
        COUNT(DISTINCT visitor_key)::int AS visitors,
        COUNT(DISTINCT visitor_key)
          FILTER (
-           WHERE date_trunc('day', first_seen AT TIME ZONE 'UTC') = day
+           WHERE date_trunc($2::text, first_seen AT TIME ZONE 'UTC') = bucket
          )::int AS new_visitors
      FROM in_range
-     GROUP BY day
-     ORDER BY day`,
-    [rangeDays]
+     GROUP BY bucket
+     ORDER BY bucket`,
+    [rangeDays, truncUnit, bucketFmt]
   );
 
-  const byDay = new Map<string, DailyTraffic>();
+  const byBucket = new Map<string, DailyTraffic>();
   for (const row of dailyRes.rows) {
-    const key = dayKey(row.day);
+    const key = bucketKeyFromSql(row.bucket, granularity);
     const views = Number(row.views);
     const visitors = Number(row.visitors);
     const newVisitors = Number(row.new_visitors);
-    byDay.set(key, {
+    byBucket.set(key, {
       day: key,
       views,
       visitors,
@@ -138,9 +188,9 @@ export async function getAnalyticsSummary(
     });
   }
 
-  const daily: DailyTraffic[] = dayRange(rangeDays).map(
+  const daily: DailyTraffic[] = bucketKeys.map(
     (day) =>
-      byDay.get(day) ?? {
+      byBucket.get(day) ?? {
         day,
         views: 0,
         visitors: 0,
@@ -218,21 +268,27 @@ export async function getAnalyticsSummary(
   );
 
   const submissionsDailyRes = await query(
-    `SELECT date_trunc('day', created_at AT TIME ZONE 'UTC') AS day,
+    `SELECT to_char(
+              date_trunc($2::text, created_at AT TIME ZONE 'UTC'),
+              $3::text
+            ) AS bucket,
             COUNT(*)::int AS count
      FROM entries
      WHERE created_at > NOW() - make_interval(days => $1::int)
-     GROUP BY day
-     ORDER BY day`,
-    [rangeDays]
+     GROUP BY 1
+     ORDER BY 1`,
+    [rangeDays, truncUnit, bucketFmt]
   );
-  const submissionsByDay = new Map<string, number>();
+  const submissionsByBucket = new Map<string, number>();
   for (const row of submissionsDailyRes.rows) {
-    submissionsByDay.set(dayKey(row.day), Number(row.count));
+    submissionsByBucket.set(
+      bucketKeyFromSql(row.bucket, granularity),
+      Number(row.count)
+    );
   }
-  const submissionsDaily = dayRange(rangeDays).map((day) => ({
+  const submissionsDaily = bucketKeys.map((day) => ({
     day,
-    count: submissionsByDay.get(day) ?? 0,
+    count: submissionsByBucket.get(day) ?? 0,
   }));
 
   const businessRes = await query(
@@ -247,13 +303,16 @@ export async function getAnalyticsSummary(
 
   return {
     range_days: rangeDays,
+    granularity,
     totals: {
       views,
       visitors,
       new_visitors: newVisitors,
       returning_visitors: returningVisitors,
-      returning_rate: visitors > 0 ? Math.round((returningVisitors / visitors) * 100) : 0,
-      views_per_visitor: visitors > 0 ? Math.round((views / visitors) * 10) / 10 : 0,
+      returning_rate:
+        visitors > 0 ? Math.round((returningVisitors / visitors) * 100) : 0,
+      views_per_visitor:
+        visitors > 0 ? Math.round((views / visitors) * 10) / 10 : 0,
       submissions: Number(business.submissions) || 0,
       newsletter_subscribers: Number(business.newsletter_subscribers) || 0,
       contact_messages: Number(business.contact_messages) || 0,

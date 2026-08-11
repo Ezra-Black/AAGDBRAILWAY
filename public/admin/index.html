@@ -556,6 +556,7 @@
             </p>
           </div>
           <div class="flex items-center gap-2" role="group" aria-label="Date range">
+            <button type="button" class="range-btn" data-range="1">24 hours</button>
             <button type="button" class="range-btn" data-range="7">7 days</button>
             <button type="button" class="range-btn active" data-range="30">30 days</button>
             <button type="button" class="range-btn" data-range="90">90 days</button>
@@ -615,7 +616,7 @@
           <div class="flex flex-wrap items-baseline justify-between gap-2">
             <div>
               <p class="chart-title">Traffic over time</p>
-              <p class="chart-sub">Daily page views and unique visitors</p>
+              <p id="chart-traffic-sub" class="chart-sub">Daily page views and unique visitors</p>
             </div>
           </div>
           <div style="position:relative;height:260px;margin-top:0.9rem">
@@ -636,7 +637,7 @@
           <!-- Submissions -->
           <section class="chart-card">
             <p class="chart-title">Graphic requests</p>
-            <p class="chart-sub">Form submissions per day</p>
+            <p id="chart-submissions-sub" class="chart-sub">Form submissions per day</p>
             <div style="position:relative;height:220px;margin-top:0.9rem">
               <canvas id="chart-submissions"></canvas>
             </div>
@@ -3163,12 +3164,24 @@
       }
 
       function shortDay(iso) {
-        const d = new Date(iso + "T00:00:00Z");
+        const d = new Date(iso.includes("T") ? iso : iso + "T00:00:00Z");
         return d.toLocaleDateString(undefined, {
           month: "short",
           day: "numeric",
           timeZone: "UTC",
         });
+      }
+
+      function shortHour(iso) {
+        const d = new Date(iso);
+        return d.toLocaleTimeString(undefined, {
+          hour: "numeric",
+          timeZone: "UTC",
+        });
+      }
+
+      function bucketLabel(iso, granularity) {
+        return granularity === "hour" ? shortHour(iso) : shortDay(iso);
       }
 
       function renderChart(id, config) {
@@ -3178,12 +3191,15 @@
         charts[id] = new Chart(ctx, config);
       }
 
-      function axisOptions(stacked) {
+      function axisOptions(stacked, granularity) {
         return {
           x: {
             stacked: Boolean(stacked),
             grid: { display: false },
-            ticks: { maxTicksLimit: 10, maxRotation: 0 },
+            ticks: {
+              maxTicksLimit: granularity === "hour" ? 12 : 10,
+              maxRotation: 0,
+            },
           },
           y: {
             stacked: Boolean(stacked),
@@ -3195,8 +3211,8 @@
         };
       }
 
-      function renderTraffic(daily) {
-        const labels = daily.map((d) => shortDay(d.day));
+      function renderTraffic(daily, granularity) {
+        const labels = daily.map((d) => bucketLabel(d.day, granularity));
         renderChart("chart-traffic", {
           type: "line",
           data: {
@@ -3230,13 +3246,13 @@
             responsive: true,
             maintainAspectRatio: false,
             interaction: { mode: "index", intersect: false },
-            scales: axisOptions(false),
+            scales: axisOptions(false, granularity),
           },
         });
       }
 
-      function renderAudience(daily) {
-        const labels = daily.map((d) => shortDay(d.day));
+      function renderAudience(daily, granularity) {
+        const labels = daily.map((d) => bucketLabel(d.day, granularity));
         renderChart("chart-audience", {
           type: "bar",
           data: {
@@ -3247,14 +3263,14 @@
                 data: daily.map((d) => d.new_visitors),
                 backgroundColor: AMBER,
                 borderRadius: 3,
-                maxBarThickness: 18,
+                maxBarThickness: granularity === "hour" ? 12 : 18,
               },
               {
                 label: "Returning",
                 data: daily.map((d) => d.returning_visitors),
                 backgroundColor: EMERALD,
                 borderRadius: 3,
-                maxBarThickness: 18,
+                maxBarThickness: granularity === "hour" ? 12 : 18,
               },
             ],
           },
@@ -3262,23 +3278,23 @@
             responsive: true,
             maintainAspectRatio: false,
             interaction: { mode: "index", intersect: false },
-            scales: axisOptions(true),
+            scales: axisOptions(true, granularity),
           },
         });
       }
 
-      function renderSubmissions(rows) {
+      function renderSubmissions(rows, granularity) {
         renderChart("chart-submissions", {
           type: "bar",
           data: {
-            labels: rows.map((r) => shortDay(r.day)),
+            labels: rows.map((r) => bucketLabel(r.day, granularity)),
             datasets: [
               {
                 label: "Requests",
                 data: rows.map((r) => r.count),
                 backgroundColor: GOLD,
                 borderRadius: 3,
-                maxBarThickness: 18,
+                maxBarThickness: granularity === "hour" ? 12 : 18,
               },
             ],
           },
@@ -3286,7 +3302,7 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: axisOptions(false),
+            scales: axisOptions(false, granularity),
           },
         });
       }
@@ -3370,11 +3386,23 @@
           }
 
           const t = data.totals;
+          const granularity = data.granularity === "hour" ? "hour" : "day";
+          const is24h = data.range_days === 1 || granularity === "hour";
           const perDay = data.range_days
             ? Math.round((t.views / data.range_days) * 10) / 10
             : 0;
-          setStat("m-views", t.views.toLocaleString(), "m-views-sub", "~" + perDay + " per day");
-          setStat("m-visitors", t.visitors.toLocaleString(), "m-visitors-sub", "in last " + data.range_days + " days");
+          setStat(
+            "m-views",
+            t.views.toLocaleString(),
+            "m-views-sub",
+            is24h ? "in last 24 hours" : "~" + perDay + " per day"
+          );
+          setStat(
+            "m-visitors",
+            t.visitors.toLocaleString(),
+            "m-visitors-sub",
+            is24h ? "in last 24 hours" : "in last " + data.range_days + " days"
+          );
           setStat(
             "m-returning",
             t.returning_visitors.toLocaleString(),
@@ -3387,11 +3415,24 @@
           document.getElementById("m-contact").textContent = t.contact_messages.toLocaleString();
           document.getElementById("m-vpv").textContent = t.views_per_visitor || "—";
 
+          const trafficSub = document.getElementById("chart-traffic-sub");
+          if (trafficSub) {
+            trafficSub.textContent = is24h
+              ? "Hourly page views and unique visitors (UTC)"
+              : "Daily page views and unique visitors";
+          }
+          const submissionsSub = document.getElementById("chart-submissions-sub");
+          if (submissionsSub) {
+            submissionsSub.textContent = is24h
+              ? "Form submissions per hour (UTC)"
+              : "Form submissions per day";
+          }
+
           dashEmpty.classList.toggle("hidden", t.views > 0);
 
-          renderTraffic(data.daily);
-          renderAudience(data.daily);
-          renderSubmissions(data.submissions_daily);
+          renderTraffic(data.daily, granularity);
+          renderAudience(data.daily, granularity);
+          renderSubmissions(data.submissions_daily, granularity);
           renderDevices(data.devices);
           renderList("top-pages", data.top_pages, "path", "views", "views");
           renderList("top-referrers", data.top_referrers, "referrer_host", "views", "views");
