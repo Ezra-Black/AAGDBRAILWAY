@@ -3,13 +3,13 @@ import bcrypt from "bcryptjs";
 import { closePool, query } from "./pool";
 import { logger } from "../logger";
 
-const SEED_ADMIN_EMAIL = "allaudrey22@gmail.com";
-const SEED_ADMIN_PASSWORD = "EzraIsAwesome1!";
-
 /**
  * Creates / extends schema. Safe to re-run on every boot.
  * graphic_options feeds the request-form dropdown (managed in DB, not seeded here).
  * admins table holds login accounts (password hashes only).
+ *
+ * Optional first admin: set SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD in env.
+ * Never hardcode credentials in source.
  */
 export async function migrate(): Promise<void> {
   await query(`
@@ -562,13 +562,22 @@ export async function migrate(): Promise<void> {
       )
   `);
 
-  const passwordHash = await bcrypt.hash(SEED_ADMIN_PASSWORD, 12);
-  await query(
-    `INSERT INTO admins (email, password_hash)
-     VALUES ($1, $2)
-     ON CONFLICT (email) DO NOTHING`,
-    [SEED_ADMIN_EMAIL, passwordHash]
-  );
+  const seedEmail = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+  const seedPassword = process.env.SEED_ADMIN_PASSWORD?.trim();
+  if (seedEmail && seedPassword) {
+    const passwordHash = await bcrypt.hash(seedPassword, 12);
+    await query(
+      `INSERT INTO admins (email, password_hash)
+       VALUES ($1, $2)
+       ON CONFLICT (email) DO NOTHING`,
+      [seedEmail, passwordHash]
+    );
+    logger.info("Admin seed checked", { email: seedEmail });
+  } else {
+    logger.info(
+      "Skipping admin seed (set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD to create one)"
+    );
+  }
 
   logger.info("Database migration complete");
 }

@@ -197,14 +197,16 @@ curl -X POST https://YOUR_APP.up.railway.app/submit \
 ### Example: poll pending (automation)
 
 ```bash
-curl https://YOUR_APP.up.railway.app/pending?limit=20
+curl https://YOUR_APP.up.railway.app/pending?limit=20 \
+  -H "x-api-key: $AUTOMATION_API_KEY"
 ```
 
 ### Example: mark processed
 
 ```bash
 curl -X PATCH https://YOUR_APP.up.railway.app/entry/ENTRY_UUID/status \
-  -H 'Content-Type: application/json' \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $AUTOMATION_API_KEY" \
   -d '{"status":"processed","metadata":{"photo_url":"https://..."}}'
 ```
 
@@ -320,8 +322,12 @@ npm run db:migrate
      - Start: `npm start`
      - Health check: `/health`
 
-7. **Variables for user accounts** (web service → **Variables**)
-   - `PUBLIC_BASE_URL` = your public domain (e.g. `https://your-app.up.railway.app`) — used in password-reset email links.
+7. **Required security variables** (web service → **Variables**)
+   - `PUBLIC_BASE_URL` = your public domain (e.g. `https://your-app.up.railway.app`) — password-reset + inbox email links. **Required in production** (boot fails without it).
+   - `CORS_ORIGIN` = same public origin (comma-separated if you have more than one). **Required in production.**
+   - `AUTOMATION_API_KEY` = long random secret for `/pending`, `/entries`, `/lookup`, `/entry/*`. **Required in production.**
+   - `ANALYTICS_SALT` = long random secret for visitor hashing. **Required in production.**
+   - Optional first admin: `SEED_ADMIN_EMAIL` + `SEED_ADMIN_PASSWORD` (no hardcoded seed password in the repo).
    - SMTP vars (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, optional `SMTP_PORT`/`SMTP_FROM`) — required for password-reset emails; the rest of auth works without them.
    - No JWT secret is needed: sessions are opaque random tokens stored (hashed) in Postgres.
 
