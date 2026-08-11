@@ -31,6 +31,7 @@ export function ensureUploadDir(): void {
   fs.mkdirSync(path.join(uploadDir(), "graphics"), { recursive: true });
   fs.mkdirSync(path.join(uploadDir(), "customer"), { recursive: true });
   fs.mkdirSync(path.join(uploadDir(), "generated"), { recursive: true });
+  fs.mkdirSync(path.join(uploadDir(), "newsletter"), { recursive: true });
 }
 
 export const photoUpload = multer({
@@ -138,6 +139,40 @@ export async function deleteGraphicSample(
     await fs.promises.unlink(filePath);
   } catch (err) {
     logger.info("Old graphic sample not removed", { error: String(err) });
+  }
+}
+
+/**
+ * Persist a photo attached to a newsletter post.
+ * Returns the public URL path or null when the file isn't a valid image.
+ */
+export async function saveNewsletterPhoto(
+  buffer: Buffer
+): Promise<string | null> {
+  const kind = detectImageKind(buffer);
+  if (!kind) return null;
+
+  ensureUploadDir();
+  const name = `${crypto.randomBytes(16).toString("hex")}.${kind.ext}`;
+  const filePath = path.join(uploadDir(), "newsletter", name);
+  await fs.promises.writeFile(filePath, buffer);
+  return `/uploads/newsletter/${name}`;
+}
+
+/** Remove a previously stored newsletter photo. Ignores paths outside our dir. */
+export async function deleteNewsletterPhoto(
+  urlPath: string | null
+): Promise<void> {
+  if (!urlPath || !urlPath.startsWith("/uploads/newsletter/")) return;
+
+  const name = path.basename(urlPath);
+  if (!/^[0-9a-f]+\.(jpg|png|webp|gif)$/i.test(name)) return;
+
+  const filePath = path.join(uploadDir(), "newsletter", name);
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (err) {
+    logger.info("Old newsletter photo not removed", { error: String(err) });
   }
 }
 

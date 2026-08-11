@@ -1164,6 +1164,26 @@
                 style="padding:0.7rem 0.9rem;font-size:0.875rem;min-height:150px"
               ></textarea>
             </div>
+            <div class="field">
+              <label for="post_photo">
+                Photo
+                <span class="help-tip" tabindex="0" role="button" aria-label="What is the post photo for?" style="margin-left:0.25rem">
+                  ?
+                  <span class="help-bubble" role="tooltip">
+                    Optional image shown with this post on the public newsletter
+                    page. JPEG, PNG, WebP, or GIF — 5 MB max.
+                  </span>
+                </span>
+              </label>
+              <input
+                id="post_photo"
+                name="photo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+                style="padding:0.45rem 0.6rem;font-size:0.8rem"
+              />
+              <p id="post-photo-name" class="mt-1 hidden text-xs text-cream/40"></p>
+            </div>
             <div class="flex items-center justify-between gap-3">
               <p id="post-form-error" class="hidden text-sm text-rose-400"></p>
               <button
@@ -2741,7 +2761,12 @@
               "</div>" +
               '<p class="mt-3 text-sm text-cream/65" style="white-space:pre-wrap;overflow-wrap:anywhere">' +
               escapeHtml(post.body) +
-              "</p>";
+              "</p>" +
+              (post.image_url
+                ? '<img src="' +
+                  escapeAttr(post.image_url) +
+                  '" alt="" class="mt-3 w-full rounded-xl object-cover" style="max-height:280px;background:rgba(0,0,0,0.2)" loading="lazy" />'
+                : "");
             adminPosts.appendChild(card);
           }
 
@@ -2774,6 +2799,21 @@
         }
       }
 
+      const postPhotoInput = document.getElementById("post_photo");
+      const postPhotoName = document.getElementById("post-photo-name");
+      if (postPhotoInput && postPhotoName) {
+        postPhotoInput.addEventListener("change", () => {
+          const file = postPhotoInput.files && postPhotoInput.files[0];
+          if (file) {
+            postPhotoName.textContent = file.name;
+            postPhotoName.classList.remove("hidden");
+          } else {
+            postPhotoName.textContent = "";
+            postPhotoName.classList.add("hidden");
+          }
+        });
+      }
+
       postForm.addEventListener("submit", async (e) => {
         e.preventDefault();
         postFormError.classList.add("hidden");
@@ -2781,15 +2821,21 @@
         postPublishBtn.textContent = "Publishing…";
 
         try {
+          const body = new FormData();
+          body.append("title", document.getElementById("post_title").value.trim());
+          body.append(
+            "author_name",
+            document.getElementById("post_author").value.trim()
+          );
+          body.append("body", document.getElementById("post_body").value.trim());
+          const photoFile =
+            postPhotoInput && postPhotoInput.files && postPhotoInput.files[0];
+          if (photoFile) body.append("photo", photoFile);
+
           const res = await fetch("/admin/newsletter/posts", {
             method: "POST",
             credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: document.getElementById("post_title").value.trim(),
-              author_name: document.getElementById("post_author").value.trim(),
-              body: document.getElementById("post_body").value.trim(),
-            }),
+            body,
           });
           if (res.status === 401) {
             window.location.href = "/admin/login";
@@ -2806,6 +2852,10 @@
           const authorKeep = document.getElementById("post_author").value;
           postForm.reset();
           document.getElementById("post_author").value = authorKeep;
+          if (postPhotoName) {
+            postPhotoName.textContent = "";
+            postPhotoName.classList.add("hidden");
+          }
           await loadAdminPosts();
         } catch {
           postFormError.textContent = "Network error publishing post";
