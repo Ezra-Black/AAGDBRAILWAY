@@ -154,16 +154,14 @@ export function detectJpegOrPng(buffer: Buffer): ImageKind | null {
  * Returns the public path under /uploads/customer/ or null if not jpg/png.
  */
 export async function saveCustomerPhoto(
-  _entryId: string,
+  entryId: string,
   buffer: Buffer
 ): Promise<{ path: string; contentType: string; ext: string } | null> {
   const kind = detectJpegOrPng(buffer);
   if (!kind) return null;
 
   ensureUploadDir();
-  // Unguessable name (entry id is not embedded). Disk path is metadata-only;
-  // /uploads/customer is not publicly served — admins use DB-backed downloads.
-  const name = `${crypto.randomBytes(16).toString("hex")}.${kind.ext}`;
+  const name = `${entryId}-${crypto.randomBytes(8).toString("hex")}.${kind.ext}`;
   const filePath = path.join(uploadDir(), "customer", name);
   await fs.promises.writeFile(filePath, buffer);
   return {

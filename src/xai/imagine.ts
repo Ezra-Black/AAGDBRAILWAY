@@ -1,5 +1,4 @@
 import { logger } from "../logger";
-import { isPublicHttpUrl } from "../uploadPaths";
 
 const XAI_EDITS_URL = "https://api.x.ai/v1/images/edits";
 const DEFAULT_TIMEOUT_MS = 180_000;
@@ -101,13 +100,9 @@ export async function editAngelGraphic(input: {
 
   const item = json.data?.[0];
   if (item?.url) {
-    if (!isPublicHttpUrl(item.url)) {
-      throw new Error("xAI result URL rejected (private or non-http host)");
-    }
     logger.info("Downloading xAI result image");
     const imgRes = await fetch(item.url, {
       signal: AbortSignal.timeout(60_000),
-      redirect: "error",
     });
     if (!imgRes.ok) {
       throw new Error(`Failed to download generated image (${imgRes.status})`);

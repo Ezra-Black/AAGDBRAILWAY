@@ -173,9 +173,8 @@ export const readLimiter = rateLimit({
 });
 
 /**
- * API key for automation/debug endpoints (/entries, /pending, /lookup, …).
- * Production: always required (boot also asserts AUTOMATION_API_KEY is set).
- * Development: open only when AUTOMATION_API_KEY is unset (local convenience).
+ * Optional API key for automation/debug endpoints.
+ * When AUTOMATION_API_KEY is set, require header: x-api-key: <key>
  */
 export function requireAutomationKeyIfConfigured(
   req: Request,
@@ -183,13 +182,7 @@ export function requireAutomationKeyIfConfigured(
   next: NextFunction
 ): void {
   const expected = process.env.AUTOMATION_API_KEY?.trim();
-  const isProd = process.env.NODE_ENV === "production";
-
   if (!expected) {
-    if (isProd) {
-      res.status(401).json({ success: false, error: "Unauthorized" });
-      return;
-    }
     next();
     return;
   }

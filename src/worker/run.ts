@@ -10,7 +10,6 @@
  *      FAILURE_ALERT_EMAIL, POLL_SECONDS, UPLOAD_DIR
  */
 import "dotenv/config";
-import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
 import {
@@ -28,7 +27,6 @@ import {
   sendGraphicDeliveryEmail,
   sendPipelineFailureEmail,
 } from "../email";
-import { assertProductionSecurityEnv } from "../env";
 import { logger } from "../logger";
 import { editAngelGraphic } from "../xai/imagine";
 import { upsertEntryPhoto } from "../db/entryPhotos";
@@ -68,7 +66,7 @@ function uploadRoot(): string {
 }
 
 async function saveGenerated(
-  _entryId: string,
+  entryId: string,
   buffer: Buffer,
   contentType: string
 ): Promise<string> {
@@ -79,8 +77,7 @@ async function saveGenerated(
       : "jpg";
   const dir = path.join(uploadRoot(), "generated");
   await fs.mkdir(dir, { recursive: true });
-  // Unguessable name — never embed entry UUID in the public path.
-  const filename = `${crypto.randomBytes(16).toString("hex")}.${ext}`;
+  const filename = `${entryId}.${ext}`;
   const full = path.join(dir, filename);
   await fs.writeFile(full, buffer);
   return `/uploads/generated/${filename}`;
@@ -103,12 +100,14 @@ async function failEntry(entry: Entry, error: string): Promise<void> {
 
   logger.error("Graphic pipeline failed", {
     id: entry.id,
+    angel_name: entry.angel_name,
+    email: entry.email,
     graphic_code: entry.graphic_code,
     graphic_label: graphicDisplay,
     error,
   });
   console.error(
-    `[pipeline-fail] entry=${entry.id} graphic=${graphicDisplay} (${entry.graphic_code || "n/a"}) error=${error}`
+    `[pipeline-fail] entry=${entry.id} angel=${entry.angel_name} graphic=${graphicDisplay} (${entry.graphic_code || "n/a"}) error=${error}`
   );
 
   await updateEntryStatus(entry.id, "failed", {
@@ -232,7 +231,7 @@ async function processEntry(entry: Entry): Promise<void> {
     bytes: edited.buffer.length,
   });
 
-  logger.info("Sending delivery email", { id: entry.id });
+  logger.info("Sending delivery email", { id: entry.id, to: email });
   const sent = await sendGraphicDeliveryEmail({
     to: email,
     angelName: entry.angel_name,
@@ -260,6 +259,8 @@ async function processEntry(entry: Entry): Promise<void> {
 
   logger.info("Graphic delivered", {
     id: entry.id,
+    angel_name: entry.angel_name,
+    to: email,
     photo_path: storedPath,
   });
 }
@@ -303,14 +304,13 @@ async function tick(cutoff: Date): Promise<void> {
     await processEntry(entry);
   } catch (err) {
     console.error(
-      `[pipeline-fail] unhandled entry=${entry.id} graphic=${entry.graphic_code || "n/a"} error=${String(err)}`
+      `[pipeline-fail] unhandled entry=${entry.id} angel=${entry.angel_name} graphic=${entry.graphic_code || "n/a"} error=${String(err)}`
     );
     await failEntry(entry, String(err));
   }
 }
 
 async function main(): Promise<void> {
-  assertProductionSecurityEnv("worker");
   if (!process.env.DATABASE_URL?.trim()) {
     logger.error("DATABASE_URL is required for the graphic worker");
     process.exit(1);
