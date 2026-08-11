@@ -55,6 +55,7 @@
     }
     renderNav();
     document.dispatchEvent(new CustomEvent("aag:auth", { detail: { user: currentUser } }));
+    if (currentUser) maybeShowHello(currentUser);
     return currentUser;
   }
 
@@ -145,6 +146,33 @@
     });
   }
 
+  /* ── Hello overlay (task) ──────────────────────────────── */
+
+  function maybeShowHello(user) {
+    if (!user) return;
+    var path = location.pathname;
+    if (path !== "/profile" && path !== "/form") return;
+    var uid = user.id;
+    if (!uid) return;
+    var key = "hello_dismissed_" + uid;
+    if (localStorage.getItem(key)) return;
+
+    var name = (user.real_name || user.name || "friend").split(/\s+/)[0];
+    var overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4";
+    overlay.innerHTML =
+      '<div class="glass-panel max-w-xs w-full rounded-2xl p-6 text-center">' +
+      '  <p class="text-lg font-semibold text-cream">Hello, ' + name + '!</p>' +
+      '  <button type="button" class="btn-primary mt-4 w-full">Got it</button>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+    overlay.querySelector("button").addEventListener("click", function () {
+      localStorage.setItem(key, "1");
+      overlay.remove();
+    });
+  }
+
   /* ── Login / register modal ────────────────────────────── */
 
   var activeModal = null;
@@ -196,7 +224,7 @@
       // Register pane
       '  <form data-auth-pane="register" style="display:none;margin-top:0.4rem">' +
       fieldHtml("auth-reg-name", "Your name", "text", "Who you are IRL", "name") +
-      fieldHtml("auth-reg-angel", "Angel’s name (optional)", "text", "Your loved one’s name for graphics", "off",
+      fieldHtml("auth-reg-angel", "Angel's name (optional)", "text", "Your loved one's name for graphics", "off",
         "The name of your deceased loved one, used on their graphics. You can add or change it later.") +
       fieldHtml("auth-reg-email", "Email", "email", "you@email.com", "email") +
       fieldHtml("auth-reg-password", "Password", "password", "10+ chars, mixed case, number, symbol", "new-password",
@@ -256,8 +284,11 @@
       backdrop.classList.remove("show");
       setTimeout(function () { backdrop.remove(); }, 450);
       document.removeEventListener("keydown", onKey);
-      if (succeeded) resolvePromise(user);
-      else rejectPromise(new Error("auth_dismissed"));
+      if (succeeded) {
+        refreshSession().then(function (u) { resolvePromise(u || user); });
+      } else {
+        rejectPromise(new Error("dismissed"));
+      }
     }
 
     function onKey(e) {
@@ -265,149 +296,102 @@
     }
     document.addEventListener("keydown", onKey);
 
+    // wire close
     backdrop.querySelector("[data-auth-close]").addEventListener("click", function () { close(false); });
     backdrop.addEventListener("click", function (e) {
       if (e.target === backdrop) close(false);
     });
 
+    // tabs
     backdrop.querySelectorAll("[data-auth-tab]").forEach(function (tab) {
-      tab.addEventListener("click", function () { showPane(tab.getAttribute("data-auth-tab")); });
+      tab.addEventListener("click", function () {
+        showPane(tab.getAttribute("data-auth-tab"));
+      });
     });
-    backdrop.querySelector("[data-auth-forgot]").addEventListener("click", function () { showPane("forgot"); });
-    backdrop.querySelector("[data-auth-back]").addEventListener("click", function () { showPane("login"); });
 
-    // Optional starting pane: "login" | "register" | "forgot"
-    var startTab = options && options.tab;
-    if (startTab === "register" || startTab === "forgot" || startTab === "login") {
-      showPane(startTab);
-    }
-
-    function busy(form, isBusy, label) {
-      var btn = form.querySelector("button[type='submit']");
-      btn.disabled = isBusy;
-      if (isBusy) { btn.dataset.label = btn.textContent; btn.textContent = label; }
-      else if (btn.dataset.label) { btn.textContent = btn.dataset.label; }
-    }
-
-    async function finishAuth(user, message) {
-      currentUser = user;
-      renderNav();
-      document.dispatchEvent(new CustomEvent("aag:auth", { detail: { user: user } }));
-      setNote(message || "You’re in!", true);
-      setTimeout(function () { close(true, user); }, 700);
-    }
-
-    // Log in
-    backdrop.querySelector("[data-auth-pane='login']").addEventListener("submit", async function (e) {
+    // login form
+    var loginForm = backdrop.querySelector('[data-auth-pane="login"]');
+    loginForm.addEventListener("submit", async function (e) {
       e.preventDefault();
-      var form = e.currentTarget;
       setNote("");
-      busy(form, true, "Logging in…");
-      try {
-        var result = await api("/api/auth/login", {
-          method: "POST",
-          body: {
-            email: backdrop.querySelector("#auth-login-email").value.trim(),
-            password: backdrop.querySelector("#auth-login-password").value,
-          },
-        });
-        if (!result.ok || !result.data || !result.data.success) {
-          setNote(errorText(result, "Invalid email or password."));
-          return;
-        }
-        await finishAuth(result.data.user, "Welcome back!");
-      } catch (err) {
-        setNote("Network glitch. Try again in a sec.");
-      } finally {
-        busy(form, false);
+      var email = loginForm.querySelector("#auth-login-email").value.trim();
+      var pass = loginForm.querySelector("#auth-login-password").value;
+      var res = await api("/api/auth/login", { method: "POST", body: { email: email, password: pass } });
+      if (res.ok && res.data && res.data.success) {
+        close(true, res.data.user);
+      } else {
+        setNote(errorText(res, "Login failed"));
       }
     });
 
-    // Register
-    backdrop.querySelector("[data-auth-pane='register']").addEventListener("submit", async function (e) {
+    // register form
+    var regForm = backdrop.querySelector('[data-auth-pane="register"]');
+    regForm.addEventListener("submit", async function (e) {
       e.preventDefault();
-      var form = e.currentTarget;
       setNote("");
-      busy(form, true, "Creating…");
-      try {
-        var body = {
-          name: backdrop.querySelector("#auth-reg-name").value.trim(),
-          email: backdrop.querySelector("#auth-reg-email").value.trim(),
-          password: backdrop.querySelector("#auth-reg-password").value,
-        };
-        var angel = backdrop.querySelector("#auth-reg-angel").value.trim();
-        if (angel) body.angel_name = angel;
-
-        var result = await api("/api/auth/register", { method: "POST", body: body });
-        if (!result.ok || !result.data || !result.data.success) {
-          setNote(errorText(result, "Could not create your account."));
-          return;
-        }
-        await finishAuth(result.data.user, "Account created — welcome!");
-      } catch (err) {
-        setNote("Network glitch. Try again in a sec.");
-      } finally {
-        busy(form, false);
+      var payload = {
+        name: regForm.querySelector("#auth-reg-name").value.trim(),
+        angel_name: regForm.querySelector("#auth-reg-angel").value.trim() || null,
+        email: regForm.querySelector("#auth-reg-email").value.trim(),
+        password: regForm.querySelector("#auth-reg-password").value,
+      };
+      var res = await api("/api/auth/register", { method: "POST", body: payload });
+      if (res.ok && res.data && res.data.success) {
+        close(true, res.data.user);
+      } else {
+        setNote(errorText(res, "Could not create account"));
       }
     });
 
-    // Forgot password
-    backdrop.querySelector("[data-auth-pane='forgot']").addEventListener("submit", async function (e) {
-      e.preventDefault();
-      var form = e.currentTarget;
-      setNote("");
-      busy(form, true, "Sending…");
-      try {
-        var result = await api("/api/auth/forgot-password", {
-          method: "POST",
-          body: { email: backdrop.querySelector("#auth-forgot-email").value.trim() },
-        });
-        if (!result.ok || !result.data || !result.data.success) {
-          setNote(errorText(result, "Could not send the reset email."));
-          return;
+    // forgot
+    var forgotBtn = backdrop.querySelector("[data-auth-forgot]");
+    if (forgotBtn) {
+      forgotBtn.addEventListener("click", function () {
+        showPane("forgot");
+      });
+    }
+    var backBtn = backdrop.querySelector("[data-auth-back]");
+    if (backBtn) {
+      backBtn.addEventListener("click", function () { showPane("login"); });
+    }
+    var forgotForm = backdrop.querySelector('[data-auth-pane="forgot"]');
+    if (forgotForm) {
+      forgotForm.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        setNote("");
+        var email = forgotForm.querySelector("#auth-forgot-email").value.trim();
+        var res = await api("/api/auth/forgot-password", { method: "POST", body: { email: email } });
+        if (res.ok) {
+          setNote("Check your inbox for the reset link.", true);
+        } else {
+          setNote(errorText(res, "Could not send reset"));
         }
-        setNote(result.data.message, true);
-      } catch (err) {
-        setNote("Network glitch. Try again in a sec.");
-      } finally {
-        busy(form, false);
-      }
-    });
+      });
+    }
 
+    // show
     requestAnimationFrame(function () { backdrop.classList.add("show"); });
     return promise;
   }
 
-  /**
-   * Gate an action behind an account. Resolves immediately with the user
-   * when already logged in; otherwise opens the modal and resolves after a
-   * successful login/register so the caller can continue the interrupted
-   * action. Rejects when the visitor dismisses the modal.
-   */
-  async function requireAuth(options) {
-    await readyPromise;
-    if (currentUser) return currentUser;
-    return openModal(options);
-  }
-
-  /* ── Boot ──────────────────────────────────────────────── */
-
-  function boot() {
-    refreshSession().then(function () { readyResolve(currentUser); });
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
-  }
+  /* ── Public API ────────────────────────────────────────── */
 
   window.AAGAuth = {
-    ready: readyPromise,
-    getUser: function () { return currentUser; },
-    requireAuth: requireAuth,
-    openModal: openModal,
+    ready: function () { return readyPromise; },
+    currentUser: function () { return currentUser; },
+    requireAuth: function (opts) {
+      if (currentUser) return Promise.resolve(currentUser);
+      return openModal(opts || {});
+    },
     logout: logout,
     refresh: refreshSession,
   };
+
+  // initial load
+  refreshSession().finally(function () {
+    if (readyResolve) readyResolve(currentUser);
+  });
+
+  // also refresh when other scripts ask
+  document.addEventListener("aag:auth:refresh", refreshSession);
 })();
