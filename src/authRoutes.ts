@@ -19,7 +19,7 @@ import {
   listThreadsForUser,
   markThreadRead,
 } from "./db/messages";
-import { sendPasswordResetEmail } from "./email";
+import { mailerConfigured, sendPasswordResetEmail } from "./email";
 import { logger } from "./logger";
 import {
   passwordResetLimiter,
@@ -339,7 +339,8 @@ authRouter.post(
 
 /**
  * POST /api/auth/forgot-password — email a single-use reset link.
- * Always responds with the same message so emails can't be enumerated.
+ * Always responds with the same message so emails can't be enumerated,
+ * except when SMTP is down — then 503 for everyone (no account leak).
  */
 authRouter.post(
   "/forgot-password",
@@ -352,6 +353,16 @@ authRouter.post(
         success: false,
         error: "Enter a valid email",
         details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+
+    if (!mailerConfigured()) {
+      logger.warn("Password reset skipped — SMTP is not configured");
+      res.status(503).json({
+        success: false,
+        error:
+          "Password reset email isn't available right now. Please try again later.",
       });
       return;
     }

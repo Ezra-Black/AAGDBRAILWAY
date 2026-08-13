@@ -82,10 +82,31 @@ export function contactInboxAddress(): string {
   return process.env.CONTACT_EMAIL_TO?.trim() || DEFAULT_CONTACT_TO;
 }
 
+/** Pull an email out of SMTP_FROM even when the display name is malformed. */
+function extractEmail(raw: string): string | null {
+  const angled = raw.match(/<([^<>]+@[^<>]+)>/);
+  if (angled) return angled[1].trim();
+  const bare = raw.trim();
+  if (/^[^\s<>]+@[^\s<>]+\.[^\s<>]+$/.test(bare)) return bare;
+  const tokens = raw.match(/[^\s<>]+@[^\s<>]+\.[^\s<>]+/g);
+  return tokens?.length ? tokens[tokens.length - 1] : null;
+}
+
+/**
+ * Proton requires a real mailbox From, matching the SMTP token user.
+ * Always emit a quoted display name + angle-bracket address so a messy
+ * SMTP_FROM (apostrophe, missing brackets) cannot 553 the send.
+ */
+function fromAddress(): string {
+  const user = (process.env.SMTP_USER || "").trim();
+  const raw = (process.env.SMTP_FROM || "").trim();
+  const email = (raw && extractEmail(raw)) || user;
+  return `"Audrey's Angel Graphics" <${email}>`;
+}
+
 /**
  * Send a password-reset link to a user. Returns true when handed to SMTP.
- * When SMTP isn't configured the caller still responds generically (never
- * revealing whether the email exists) and the reset simply can't complete.
+ * When SMTP isn't configured the caller should 503 before looking up the user.
  */
 export async function sendPasswordResetEmail(
   to: string,
@@ -100,9 +121,7 @@ export async function sendPasswordResetEmail(
 
   try {
     await sendMailWithTimeout({
-      from:
-        process.env.SMTP_FROM?.trim() ||
-        `"Audrey's Angel Graphics" <${process.env.SMTP_USER!.trim()}>`,
+      from: fromAddress(),
       to,
       subject: "Reset your Audrey's Angel Graphics password",
       text:
@@ -119,13 +138,6 @@ export async function sendPasswordResetEmail(
     });
     return false;
   }
-}
-
-function fromAddress(): string {
-  return (
-    process.env.SMTP_FROM?.trim() ||
-    `"Audrey's Angel Graphics" <${process.env.SMTP_USER!.trim()}>`
-  );
 }
 
 export function failureAlertAddress(): string {
@@ -301,9 +313,7 @@ export async function sendContactEmail(input: {
 
   try {
     await sendMailWithTimeout({
-      from:
-        process.env.SMTP_FROM?.trim() ||
-        `"Audrey's Angel Graphics" <${process.env.SMTP_USER!.trim()}>`,
+      from: fromAddress(),
       to: contactInboxAddress(),
       replyTo: `"${input.name.replace(/"/g, "'")}" <${input.email}>`,
       subject: `New contact message from ${input.name}`,

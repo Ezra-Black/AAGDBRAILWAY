@@ -12,6 +12,7 @@ import { vaultExpiredGraphics } from "./db/graphics";
 import { migrate } from "./db/migrate";
 import { closePool } from "./db/pool";
 import { markPurchaseStatusByIntent } from "./db/shop";
+import { mailerConfigured } from "./email";
 import { logger } from "./logger";
 import { authRouter } from "./authRoutes";
 import { apiRouter } from "./routes";
@@ -283,6 +284,7 @@ async function start() {
   const server = app.listen(PORT, "0.0.0.0", () => {
     logger.info(`Server listening on port ${PORT}`, {
       env: process.env.NODE_ENV ?? "development",
+      has_smtp: mailerConfigured(),
     });
   });
 
