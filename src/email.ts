@@ -82,6 +82,35 @@ export function contactInboxAddress(): string {
   return process.env.CONTACT_EMAIL_TO?.trim() || DEFAULT_CONTACT_TO;
 }
 
+/**
+ * Apex aaggraphics.com is Squarespace and 301s to www while dropping
+ * the path and query — so reset links must never use the bare domain.
+ */
+export function canonicalSiteOrigin(raw: string): string {
+  const base = raw.trim().replace(/\/+$/, "");
+  if (!base) return base;
+  try {
+    const url = new URL(base.includes("://") ? base : `https://${base}`);
+    if (url.hostname.toLowerCase() === "aaggraphics.com") {
+      url.hostname = "www.aaggraphics.com";
+    }
+    return url.origin;
+  } catch {
+    return base;
+  }
+}
+
+export function siteOriginFromRequest(req: {
+  protocol: string;
+  get(name: string): string | undefined;
+}): string {
+  const configured = process.env.PUBLIC_BASE_URL?.trim();
+  const raw = configured
+    ? configured.replace(/\/+$/, "")
+    : `${req.protocol}://${req.get("host") || "www.aaggraphics.com"}`;
+  return canonicalSiteOrigin(raw);
+}
+
 /** Pull an email out of SMTP_FROM even when the display name is malformed. */
 function extractEmail(raw: string): string | null {
   const angled = raw.match(/<([^<>]+@[^<>]+)>/);
@@ -130,6 +159,12 @@ export async function sendPasswordResetEmail(
         `${resetUrl}\n\n` +
         `If you didn't ask for this, you can safely ignore this email — ` +
         `your password will not change.\n`,
+      html:
+        `<p>We received a request to reset the password for your account.</p>` +
+        `<p><a href="${resetUrl}">Choose a new password</a> (this link works once and is valid for 1 hour).</p>` +
+        `<p>If the button does not open, paste this into your browser:</p>` +
+        `<p style="word-break:break-all">${resetUrl}</p>` +
+        `<p>If you didn't ask for this, you can ignore this email — your password will not change.</p>`,
     });
     return true;
   } catch (err) {

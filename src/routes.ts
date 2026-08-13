@@ -139,7 +139,7 @@ import {
   facebookConfigured,
   verifyFacebookToken,
 } from "./facebook";
-import { sendContactEmail, sendInboxReplyEmail } from "./email";
+import { sendContactEmail, sendInboxReplyEmail, siteOriginFromRequest } from "./email";
 import { isAiWorkerEnabled, setAiWorkerEnabled } from "./db/settings";
 import {
   adminGraphicCreateSchema,
@@ -1869,11 +1869,7 @@ apiRouter.post(
       return;
     }
 
-    const configured = process.env.PUBLIC_BASE_URL?.trim();
-    const base = configured
-      ? configured.replace(/\/+$/, "")
-      : `${req.protocol}://${req.get("host")}`;
-    const inboxUrl = `${base}/profile#inbox`;
+    const inboxUrl = `${siteOriginFromRequest(req)}/profile#inbox`;
     if (thread.user_email) {
       await sendInboxReplyEmail({
         to: thread.user_email,
