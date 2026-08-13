@@ -19,7 +19,10 @@ Designed so an external automation script can poll for `pending` rows and trigge
 | `angel_name`   | TEXT        | Required                                   |
 | `email`        | TEXT        | Required on submit                         |
 | `graphic_code` | TEXT        | Selected from `graphic_options.code`       |
-| `status`       | TEXT        | `pending` \| `processing` \| `processed` \| `failed` |
+| `status`       | TEXT        | `pending` \| `processing` \| `validated` \| `applied` \| `processed` \| `failed` \| `escalated` |
+| `version`      | INT         | Bumped once per completed delivery; guards stale writes |
+| `attempt_count`| INT         | Delivery attempts made so far (cap 3, then escalate) |
+| `next_retry_at`| TIMESTAMPTZ | When a backed-off failure becomes eligible again |
 | `created_at`   | TIMESTAMPTZ | Set on insert                              |
 | `updated_at`   | TIMESTAMPTZ | Updated on status changes                  |
 | `metadata`     | JSONB       | Extensible bag (photo URLs, errors, etc.)  |
@@ -46,6 +49,7 @@ Migrations run automatically on app boot.
 | `PATCH` | `/admin/graphics/:id/requires-photo` | Toggle customer photo requirement on a graphic (admin) |
 | `GET` | `/admin/entries/:id/photo/generated` | Download worker-generated graphic (admin) |
 | `GET` | `/admin/entries/:id/photo/customer` | Download customer form upload (admin) |
+| `POST` | `/admin/entries/:id/allow-resend` | Permit one more delivery attempt for a stopped request (admin) |
 | `PATCH` | `/admin/graphics/:id/vault` | Vault an offer immediately, before its timer ends (admin) |
 | `POST` | `/newsletter/subscribe` | `{ "email" }` → mailing-list opt-in (popup / footer forms) |
 | `POST` | `/contact` | `{ "name", "email", "message" }` → save message + forward to the ProtonMail inbox |
@@ -212,14 +216,68 @@ A ready-made poller lives at [`scripts/poll_pending.py`](scripts/poll_pending.py
 
 ### Graphic worker (xAI Imagine + Resend)
 
-Unattended pipeline for Audrey’s Angel Graphics:
+Unattended pipeline for Audrey’s Angel Graphics, in two stages so a retry can
+tell which half of the job already happened. Design notes and the discovery
+answers behind it live in [`ebflow.config.json`](ebflow.config.json).
 
-1. Form submit inserts `entries` with `status = pending`
-2. Worker atomically claims the oldest pending row → `processing`
-3. Loads the placeholder from `archive_graphics.image_url` (never mutates originals)
-4. Calls **xAI** `POST /v1/images/edits` to replace the sample name with `angel_name`
-5. Emails the customer via **Resend SMTP** with Audrey’s soft-tone copy + attachment
-6. Marks `processed` (or `failed` + email `FAILURE_ALERT_EMAIL` + admin banner)
+**Generate** (`pending → processing → validated`)
+
+1. Form submit inserts `entries` with `status = pending` and `version = 1`
+2. Worker atomically claims the oldest eligible pending row → `processing`
+3. If a graphic was already generated on an earlier attempt, it is reused —
+   xAI is never paid twice for the same request
+4. Otherwise: load the placeholder from `archive_graphics.image_url` (originals
+   are never mutated) and call **xAI** `POST /v1/images/edits` to replace the
+   sample name with `angel_name`
+5. Store the result in `entry_photos`, then mark `validated`
+
+**Deliver** (`validated → applied → processed`)
+
+6. Record the delivery intent in `graphic_deliveries` **before** sending, and
+   mark the row `applied`, in one transaction
+7. Email the customer via **Resend SMTP** with Audrey’s soft-tone copy + attachment
+8. On a confirmed send: mark `processed`, bump `version`, close the delivery key
+
+`processed` is the final state, unchanged from before, so the admin portal and
+every existing query keep working.
+
+**Why the delivery key exists.** The email is the one irreversible step. If the
+worker is killed, or SMTP accepts the message but takes longer than
+`SMTP_TIMEOUT_MS` to say so, the old pipeline had no record that a send was ever
+attempted and would generate and email again. Now the attempt is durable before
+the send, and the unique key on it means Postgres refuses the second attempt.
+
+**Three send outcomes, not two:**
+
+| Outcome | Meaning | What happens |
+|---------|---------|--------------|
+| `sent` | SMTP accepted the message | `processed`, version bumped, key closed |
+| `not_sent` | Provably never sent (bad auth, bad recipient, no connection) | Retry with backoff |
+| `unknown` | Timed out or the socket dropped; may have arrived | `escalated`, never retried automatically |
+
+Failures retry after 1, 5 and 15 minutes, then stop as `escalated`. Anything
+that can never succeed on its own (no customer email, no graphic code, no
+placeholder artwork) escalates immediately instead of burning retries.
+Escalations email `FAILURE_ALERT_EMAIL` and raise the admin banner and bell.
+
+**Releasing a held request.** When a send outcome was never confirmed, the
+request waits for a person. Check the customer's inbox, then use **Allow one
+more send** in the admin bell (`POST /admin/entries/:id/allow-resend`) to permit
+one further attempt, or mark the angel name complete if the graphic did arrive.
+
+**Guards.** Every worker transition is a compare-and-set on `(id, status,
+version)`, so a claim made before a requeue can never overwrite newer state. A
+row left in `applied` is aged out to `escalated` after `DELIVERY_REVIEW_MINUTES`
+(default 15) rather than retried. Every status change is appended to
+`entry_transitions` with actor and reason, so "where did this stop and why" is
+answerable from the database without reading worker logs:
+
+```sql
+SELECT from_status, to_status, actor, reason, at
+FROM entry_transitions
+WHERE entry_id = 'ENTRY_UUID'
+ORDER BY at;
+```
 
 Local:
 
@@ -247,9 +305,17 @@ Give that service the same `DATABASE_URL` reference as web, plus:
 | `PUBLIC_BASE_URL` | public site URL (helps resolve `/assets/...` placeholders) |
 | `UPLOAD_DIR` | `/data/uploads` if you attach a volume for generated files |
 
-Optional: `XAI_IMAGE_MODEL` (default `grok-imagine-image-quality`), `POLL_SECONDS` (default `10`), `GRAPHIC_REPLY_TO`.
+Optional: `XAI_IMAGE_MODEL` (default `grok-imagine-image-quality`), `POLL_SECONDS`
+(default `10`), `GRAPHIC_REPLY_TO`, `DELIVERY_REVIEW_MINUTES` (default `15`),
+`SMTP_TIMEOUT_MS` (default `25000`).
 
-Duplicate deliveries are skipped: same email + angel name + graphic with `photo_sent=true` is not emailed again.
+Duplicate deliveries are impossible for the same customer + angel name +
+graphic: that combination is a unique key in `graphic_deliveries`, written
+before the send.
+
+**Deploy order no longer matters.** Both the web service and the worker run
+migrations on boot behind a Postgres advisory lock, so either can deploy first
+without the other crashing on missing columns.
 
 ---
 
@@ -280,6 +346,23 @@ Schema is created/updated on startup. You can also run:
 ```bash
 npm run db:migrate
 ```
+
+### 4. Tests
+
+Both suites need a throwaway Postgres database, never a production one.
+
+```bash
+export DATABASE_URL=postgresql://user:pass@localhost:5432/aagdb_test
+
+npm run test:pipeline   # status machine, version guards, backoff, escalation
+npm run test:e2e        # spawns the real worker against stub xAI and SMTP
+```
+
+`test:e2e` is the one that matters for delivery: it counts message bodies at a
+stub SMTP server, so a duplicate customer email cannot pass. It covers the
+happy path, a relay that never confirms, a worker killed after the message was
+accepted, and a repeat of an already-delivered request. Set `E2E_VERBOSE=1` to
+see the worker's own logs.
 
 ---
 
@@ -392,11 +475,13 @@ LIMIT 50;
 │   ├── uploads.ts         # Profile photo storage (multer + magic-byte checks)
 │   ├── validation.ts      # Zod schemas
 │   ├── logger.ts
+│   ├── worker/run.ts      # Graphic pipeline: generate stage + deliver stage
 │   └── db/
-│       ├── pool.ts
+│       ├── pool.ts        # Pool + transaction / advisory-lock helpers
 │       ├── migrate.ts
 │       ├── users.ts       # Users, sessions, reset tokens, activity
-│       ├── entries.ts
+│       ├── entries.ts     # Requests, status machine, version guards
+│       ├── deliveries.ts  # One-send-only delivery keys
 │       ├── contact.ts
 │       └── stats.ts
 ├── scripts/poll_pending.py

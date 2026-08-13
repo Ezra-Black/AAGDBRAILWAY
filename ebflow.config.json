@@ -1,0 +1,105 @@
+{
+  "name": "aagdb-graphic-pipeline",
+  "domain": "Turn a customer's angel-name request into a personalised graphic and email it to them exactly once.",
+  "success_definition": "The customer received one email containing their angel graphic, and the mail server confirmed the send.",
+  "out_of_scope": [
+    "Graphics whose option has requires_photo = true: those are drawn by hand from a customer upload and the worker never claims them.",
+    "Shop orders (purchases table) — separate Stripe flow, not part of this pipeline.",
+    "Requests created before the worker's automation cutoff (WORKER_MIN_CREATED_AT)."
+  ],
+  "entry": {
+    "channel": "website",
+    "surface": "POST /submit from the request form at /form",
+    "auth_required": false,
+    "idempotency_key_source": "lower(email) | lower(angel_name) | lower(graphic_code)"
+  },
+  "data": {
+    "database": "postgres",
+    "host": "railway",
+    "request_table": "entries",
+    "delivery_table": "graphic_deliveries",
+    "audit_table": "entry_transitions",
+    "artifact_table": "entry_photos"
+  },
+  "status_chain": ["pending", "processing", "validated", "applied", "processed"],
+  "terminal_statuses": ["failed", "escalated"],
+  "status_notes": {
+    "processing": "Claimed by the generate stage.",
+    "validated": "Graphic generated and stored in entry_photos. Nothing emailed yet.",
+    "applied": "Delivery intent recorded and the email handed to SMTP. Outcome not yet known.",
+    "processed": "Delivery confirmed. Kept as the final state name rather than 'completed' so the existing admin portal and queries are unchanged.",
+    "escalated": "Automation has stopped on purpose. A person must decide."
+  },
+  "version": {
+    "start": 1,
+    "bump_on": "processed",
+    "bumper": "deliver stage (worker)",
+    "guard": "Every worker transition is a compare-and-set on (id, status, version). A mismatch aborts the write."
+  },
+  "concurrency": {
+    "claim": "SELECT ... FOR UPDATE SKIP LOCKED",
+    "note": "Row-level claims replace a debounce window: the poll loop is single-tick and a locked row is invisible to another worker. Duplicate sends are prevented by the unique delivery key rather than by timing."
+  },
+  "validation": {
+    "stage": "generate",
+    "idempotent": true,
+    "checks": [
+      "customer email present",
+      "graphic_code present and not a requires_photo graphic",
+      "placeholder image_url resolvable",
+      "graphic bytes stored in entry_photos before the row is marked validated"
+    ],
+    "reuses_prior_output": "A retry reuses the stored generated photo instead of calling xAI again.",
+    "max_attempts": 3,
+    "backoff_minutes": [1, 5, 15]
+  },
+  "apply": {
+    "stage": "deliver",
+    "irreversible": true,
+    "guard": "graphic_deliveries.idempotency_key is UNIQUE and the row is written before the send.",
+    "outcomes": {
+      "sent": "SMTP accepted the message. Delivery key is closed forever; entry goes to processed with a version bump.",
+      "not_sent": "Proven never sent (bad auth, bad recipient, no connection). Retry is allowed.",
+      "unknown": "Timeout or dropped socket. The message may have arrived, so the entry is escalated and never retried automatically."
+    }
+  },
+  "escalation": {
+    "channel": "email to FAILURE_ALERT_EMAIL plus the admin portal banner and bell",
+    "always_escalate": [
+      "delivery outcome unconfirmed",
+      "retry attempts exhausted",
+      "permanent failure (missing email, missing graphic, no placeholder artwork)"
+    ],
+    "human_release": "POST /admin/entries/:id/allow-resend, after checking the customer's inbox"
+  },
+  "routes": [
+    {
+      "match": { "action": "generate_graphic" },
+      "route": "api",
+      "target": "xai.images.edits",
+      "irreversible": false,
+      "note": "Costs money, so it is never repeated for an entry that already has stored output."
+    },
+    {
+      "match": { "action": "deliver_graphic" },
+      "route": "api",
+      "target": "smtp.send",
+      "irreversible": true
+    }
+  ],
+  "runtimes": {
+    "entry_surface": "express web service (npm start)",
+    "generate": "graphic worker service (npm run worker:start)",
+    "deliver": "graphic worker service (npm run worker:start)"
+  },
+  "loop_policy": {
+    "reenter_only_if_completed_and_new_version": true,
+    "auto_iterate_without_new_user_request": false,
+    "note": "A processed entry is never re-claimed. New work arrives only as a new form submission, an admin release for resend, or a backoff requeue of a failure."
+  },
+  "kill_switch": {
+    "setting": "site_settings.ai_worker_enabled",
+    "control": "PATCH /admin/ai-worker",
+    "effect": "No new work is claimed. Housekeeping sweeps keep running."
+  }
+}
