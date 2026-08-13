@@ -449,6 +449,21 @@
     }, POPUP_DELAY_MS);
   }
 
+  function initLegalFooter() {
+    var footer = document.querySelector("footer");
+    if (!footer || footer.querySelector("[data-legal-links]")) return;
+    var inner = footer.querySelector(".mx-auto") || footer;
+    var nav = document.createElement("nav");
+    nav.setAttribute("data-legal-links", "");
+    nav.setAttribute("aria-label", "Legal");
+    nav.className = "mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1";
+    nav.innerHTML =
+      '<a href="/privacy" class="footer-link" style="font-size:11px">Privacy</a>' +
+      '<a href="/terms" class="footer-link" style="font-size:11px">Terms</a>' +
+      '<a href="/refunds" class="footer-link" style="font-size:11px">Refunds</a>';
+    inner.appendChild(nav);
+  }
+
   /* ── Boot ──────────────────────────────────────────────── */
   function boot() {
     initReveal();
@@ -457,6 +472,7 @@
     initPopup();
     bindNewsletterForms();
     initFacebook();
+    initLegalFooter();
   }
 
   if (document.readyState === "loading") {

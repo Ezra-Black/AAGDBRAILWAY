@@ -213,6 +213,18 @@ app.get("/profile", (_req, res) => {
   res.sendFile(path.join(publicDir, "profile.html"));
 });
 
+app.get(["/privacy", "/privacy/"], (_req, res) => {
+  res.sendFile(path.join(publicDir, "privacy.html"));
+});
+
+app.get(["/terms", "/terms/"], (_req, res) => {
+  res.sendFile(path.join(publicDir, "terms.html"));
+});
+
+app.get(["/refunds", "/refunds/"], (_req, res) => {
+  res.sendFile(path.join(publicDir, "refunds.html"));
+});
+
 app.get(["/reset-password", "/reset-password/"], (_req, res) => {
   res.sendFile(path.join(publicDir, "reset-password.html"));
 });
