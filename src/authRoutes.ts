@@ -19,7 +19,7 @@ import {
   listThreadsForUser,
   markThreadRead,
 } from "./db/messages";
-import { mailerConfigured, sendPasswordResetEmail } from "./email";
+import { mailerConfigured, sendPasswordResetEmail, siteOriginFromRequest } from "./email";
 import { logger } from "./logger";
 import {
   passwordResetLimiter,
@@ -74,10 +74,7 @@ function hashToken(token: string): string {
 
 /** Public site origin for links in emails (reset password, etc.). */
 function publicBaseUrl(req: Request): string {
-  const configured = process.env.PUBLIC_BASE_URL?.trim();
-  if (configured) return configured.replace(/\/+$/, "");
-  // trust proxy is enabled, so protocol/host reflect the Railway edge.
-  return `${req.protocol}://${req.get("host")}`;
+  return siteOriginFromRequest(req);
 }
 
 /** POST /api/auth/register — create an account and log straight in. */
