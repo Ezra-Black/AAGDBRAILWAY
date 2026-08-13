@@ -71,6 +71,18 @@ export async function logoutAdmin(req: Request, res: Response): Promise<void> {
   clearSessionCookie(res);
 }
 
+/** True when the request carries a live admin session cookie. */
+export async function hasValidAdminSession(req: Request): Promise<boolean> {
+  const token = req.cookies?.[COOKIE_NAME] as string | undefined;
+  if (!token) return false;
+  try {
+    const adminId = await getAdminIdBySessionTokenHash(hashToken(token));
+    return Boolean(adminId);
+  } catch {
+    return false;
+  }
+}
+
 export async function requireAdmin(
   req: AdminRequest,
   res: Response,

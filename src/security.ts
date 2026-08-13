@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction, RequestHandler } from "express";
 import rateLimit from "express-rate-limit";
+import { hasValidAdminSession } from "./auth";
 
 const jsonLimitMessage = {
   success: false,
@@ -20,6 +21,9 @@ export const globalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: jsonLimitMessage,
+  // Authenticated admin UI traffic (API + static) blows past 120/15m easily.
+  // Validate the session — don't skip on cookie presence alone.
+  skip: (req) => hasValidAdminSession(req),
 });
 
 /** Tight limit on public form submits (per IP). */

@@ -363,7 +363,7 @@
           body: { email: backdrop.querySelector("#auth-forgot-email").value.trim() },
         });
         if (!result.ok || !result.data || !result.data.success) {
-          setNote(errorText(result, "Could not send the reset email."));
+          setNote(errorText(result, "Reset email isn't available right now. Try again later."));
           return;
         }
         setNote(result.data.message, true);
