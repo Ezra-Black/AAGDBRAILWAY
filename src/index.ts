@@ -213,7 +213,7 @@ app.get("/profile", (_req, res) => {
   res.sendFile(path.join(publicDir, "profile.html"));
 });
 
-app.get("/reset-password", (_req, res) => {
+app.get(["/reset-password", "/reset-password/"], (_req, res) => {
   res.sendFile(path.join(publicDir, "reset-password.html"));
 });
 
