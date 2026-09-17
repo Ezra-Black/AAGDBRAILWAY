@@ -53,15 +53,16 @@ const graphicCodeField = z
       .refine((v) => !/[<>{};`$\\]/.test(v), "Invalid graphic code")
   );
 
-/** Public submit — strict object, no extra fields (incl. no free-form metadata). */
+/** Public submit — graphic only. Names come from the member profile. */
 export const submitSchema = z
   .object({
-    real_name: nameField,
-    angel_name: nameField,
-    email: emailField,
     graphic_code: graphicCodeField,
     // Honeypot — must be empty/omitted (bots that fill it are caught earlier).
     website: z.string().max(0).optional(),
+    // Ignored if posted by an old client — names come from the profile.
+    real_name: z.string().optional(),
+    angel_name: z.string().optional(),
+    email: z.string().optional(),
   })
   .strict();
 
@@ -126,8 +127,7 @@ export const userRegisterSchema = z
     email: emailField,
     password: strongPasswordField,
     name: nameField,
-    // The custom name for a deceased loved one used on graphics. Optional
-    // at signup — it can be added later from the profile portal.
+    // Optional first angel name at signup. Extra names are added on the profile.
     angel_name: nameField.optional().or(z.literal("").transform(() => undefined)),
     // Honeypot — must be empty/omitted.
     website: z.string().max(0).optional(),
@@ -142,21 +142,46 @@ export const userLoginSchema = z
   })
   .strict();
 
-/** PUT /api/auth/profile — all fields optional, only provided ones change. */
+/** PUT /api/auth/profile — email / display name only. Angel names have their own routes. */
 export const userProfileUpdateSchema = z
   .object({
     email: emailField.optional(),
     name: nameField.optional(),
-    angel_name: nameField
-      .optional()
-      .or(z.literal("").transform(() => null))
-      .or(z.null()),
   })
   .strict()
   .refine(
     (data) => Object.values(data).some((v) => v !== undefined),
     "Provide at least one field to update"
   );
+
+export const addAngelNameSchema = z
+  .object({
+    name: nameField,
+  })
+  .strict();
+
+export const angelNameRequestSchema = z
+  .object({
+    user_note: z
+      .string()
+      .transform(sanitizeText)
+      .pipe(z.string().max(500, "Keep the note under 500 characters"))
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+  })
+  .strict();
+
+export const reviewAngelNameRequestSchema = z
+  .object({
+    status: z.enum(["approved", "denied"]),
+    admin_note: z
+      .string()
+      .transform(sanitizeText)
+      .pipe(z.string().max(500))
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+  })
+  .strict();
 
 /** POST /api/auth/password — change while logged in. */
 export const userChangePasswordSchema = z
@@ -221,14 +246,13 @@ export const contactSchema = z
   })
   .strict();
 
-/** Shop checkout — the $5 AAG Archive Graphic purchase. */
+/** Shop checkout — retired. Kept so old clients get a clean error. */
 export const shopCheckoutSchema = z
   .object({
-    graphic_code: graphicCodeField,
-    angel_name: nameField,
-    real_name: nameField,
-    email: emailField,
-    // Honeypot — must be empty/omitted.
+    graphic_code: graphicCodeField.optional(),
+    angel_name: z.string().optional(),
+    real_name: z.string().optional(),
+    email: z.string().optional(),
     website: z.string().max(0).optional(),
   })
   .strict();

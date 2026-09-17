@@ -17,6 +17,8 @@ export interface User {
   name: string;
   angel_name: string | null;
   profile_photo_url: string | null;
+  extra_angel_slots: number;
+  stripe_customer_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -50,6 +52,8 @@ function mapUser(row: Record<string, unknown>): User {
     name: row.name as string,
     angel_name: (row.angel_name as string) ?? null,
     profile_photo_url: (row.profile_photo_url as string) ?? null,
+    extra_angel_slots: Math.max(0, Number(row.extra_angel_slots ?? 0)),
+    stripe_customer_id: (row.stripe_customer_id as string) ?? null,
     created_at: row.created_at as Date,
     updated_at: row.updated_at as Date,
   };

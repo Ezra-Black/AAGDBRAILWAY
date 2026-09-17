@@ -14,14 +14,16 @@ import { closePool } from "./db/pool";
 import { markPurchaseStatusByIntent } from "./db/shop";
 import { mailerConfigured } from "./email";
 import { logger } from "./logger";
-import { authRouter } from "./authRoutes";
+import { logger } from "./logger";
 import { apiRouter } from "./routes";
 import { deleteExpiredUserSessions } from "./db/users";
 import { ensureUploadDir, uploadDir } from "./uploads";
 import { globalLimiter } from "./security";
 import { getStripe, stripeConfigured } from "./stripe";
+import { syncCheckoutSession, syncStripeSubscription } from "./stripeSync";
 
 const PORT = Number(process.env.PORT) || 3000;
+const publicDir = path.join(__dirname, "..", "public");
 
 const app = express();
 
@@ -134,6 +136,14 @@ app.post(
         const intent = event.data.object;
         await markPurchaseStatusByIntent(intent.id, "failed");
         logger.info("Webhook: purchase failed", { payment_intent: intent.id });
+      } else if (event.type === "checkout.session.completed") {
+        await syncCheckoutSession(event.data.object, getStripe());
+      } else if (
+        event.type === "customer.subscription.created" ||
+        event.type === "customer.subscription.updated" ||
+        event.type === "customer.subscription.deleted"
+      ) {
+        await syncStripeSubscription(event.data.object);
       }
 
       res.json({ received: true });
@@ -164,7 +174,16 @@ app.use((_req, res, next) => {
 app.use("/api/auth", authRouter);
 app.use(apiRouter);
 
-const publicDir = path.join(__dirname, "..", "public");
+/**
+ * Membership page is public. Registered before static.
+ */
+app.get("/subscription", (_req, res) => {
+  res.sendFile(path.join(publicDir, "subscription.html"));
+});
+app.get("/subscription.html", (_req, res) => {
+  res.sendFile(path.join(publicDir, "subscription.html"));
+});
+
 app.use(express.static(publicDir));
 
 // Profile photos. Content-Disposition + nosniff keep any hostile upload that

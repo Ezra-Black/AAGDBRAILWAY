@@ -158,6 +158,16 @@
         opacity: 0.55;
         cursor: wait;
       }
+      .ai-kill-btn.readonly {
+        cursor: default;
+        pointer-events: none;
+      }
+      .ai-kill-btn.readonly.on:hover {
+        background: rgba(220, 38, 38, 0.85);
+      }
+      .ai-kill-btn.readonly.off:hover {
+        background: rgba(4, 120, 87, 0.75);
+      }
       .stat-card {
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -501,6 +511,14 @@
           >
             AI ON
           </button>
+          <a
+            href="/subscription"
+            class="btn-secondary"
+            style="padding:0.55rem 1.2rem;font-size:0.8125rem;text-decoration:none"
+            title="Internal membership preview"
+          >
+            Membership preview
+          </a>
           <button
             id="logout-btn"
             type="button"
@@ -2049,16 +2067,24 @@
 
       const aiKillBtn = document.getElementById("ai-kill-btn");
       let aiWorkerEnabled = true;
+      let aiWorkerCanToggle = false;
 
       function renderAiKillBtn() {
         if (!aiKillBtn) return;
         aiKillBtn.classList.toggle("on", aiWorkerEnabled);
         aiKillBtn.classList.toggle("off", !aiWorkerEnabled);
+        aiKillBtn.classList.toggle("readonly", !aiWorkerCanToggle);
         aiKillBtn.setAttribute("aria-pressed", String(aiWorkerEnabled));
         aiKillBtn.textContent = aiWorkerEnabled ? "AI ON" : "AI OFF";
-        aiKillBtn.title = aiWorkerEnabled
-          ? "AI graphic worker is running. Click to pause automation."
-          : "AI graphic worker is paused. Click to turn automation back on.";
+        if (aiWorkerCanToggle) {
+          aiKillBtn.title = aiWorkerEnabled
+            ? "AI graphic worker is running. Click to pause automation."
+            : "AI graphic worker is paused. Click to turn automation back on.";
+        } else {
+          aiKillBtn.title = aiWorkerEnabled
+            ? "AI graphic worker is running. Only the owner can pause it."
+            : "AI graphic worker is paused. Only the owner can turn it back on.";
+        }
       }
 
       async function loadAiWorkerState() {
@@ -2073,6 +2099,7 @@
           const data = await res.json();
           if (data.success) {
             aiWorkerEnabled = data.enabled !== false;
+            aiWorkerCanToggle = data.can_toggle === true;
             renderAiKillBtn();
           }
         } catch {
@@ -2083,6 +2110,7 @@
       if (aiKillBtn) {
         renderAiKillBtn();
         aiKillBtn.addEventListener("click", async () => {
+          if (!aiWorkerCanToggle) return;
           const next = !aiWorkerEnabled;
           const confirmMsg = next
             ? "Turn AI graphic automation back ON? New pending requests (without required customer photos) will be processed again."
@@ -2101,11 +2129,18 @@
               return;
             }
             const data = await res.json();
+            if (res.status === 403) {
+              aiWorkerCanToggle = false;
+              renderAiKillBtn();
+              alert(data.error || "Only the owner account can turn AI on or off");
+              return;
+            }
             if (!res.ok || !data.success) {
               alert(data.error || "Could not update AI worker switch");
               return;
             }
             aiWorkerEnabled = data.enabled === true;
+            aiWorkerCanToggle = data.can_toggle !== false;
             renderAiKillBtn();
           } catch {
             alert("Network error updating AI worker switch");
@@ -3608,6 +3643,10 @@
         if (!admin) return;
         adminEmail = admin.email;
         subtitle.textContent = admin.email;
+        aiWorkerCanToggle =
+          String(admin.email || "").trim().toLowerCase() ===
+          "allaudrey22@gmail.com";
+        renderAiKillBtn();
 
         // Sensible default author name for newsletter posts (editable).
         const authorInput = document.getElementById("post_author");

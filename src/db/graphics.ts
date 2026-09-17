@@ -177,6 +177,18 @@ export async function getGraphicImageUrl(
 }
 
 export async function graphicCodeExists(code: string): Promise<boolean> {
+  const archive = await query(
+    `SELECT 1 FROM archive_graphics
+     WHERE COALESCE(active, true) = true
+       AND (
+         lower(trim(code)) = lower(trim($1))
+         OR lower(trim(label)) = lower(trim($1))
+       )
+     LIMIT 1`,
+    [code]
+  );
+  if ((archive.rowCount ?? 0) > 0) return true;
+
   const result = await query(
     `SELECT 1 FROM graphic_options
      WHERE ${OFFER_OPEN_CLAUSE}
@@ -208,12 +220,28 @@ export async function getGraphicLabel(code: string): Promise<string | null> {
     : String(label).trim();
 }
 
-/** Whether an open graphic option requires a customer photo upload. */
+/** Whether this graphic requires a customer photo (archive or offer). */
 export async function graphicRequiresPhoto(code: string): Promise<boolean> {
+  const archive = await query(
+    `SELECT requires_photo FROM archive_graphics
+     WHERE COALESCE(active, true) = true
+       AND (
+         lower(trim(code)) = lower(trim($1))
+         OR lower(trim(label)) = lower(trim($1))
+       )
+     LIMIT 1`,
+    [code]
+  );
+  const archiveRow = archive.rows[0] as { requires_photo?: unknown } | undefined;
+  if (archiveRow) {
+    return (
+      archiveRow.requires_photo === true || archiveRow.requires_photo === "true"
+    );
+  }
+
   const result = await query(
     `SELECT requires_photo FROM graphic_options
-     WHERE ${OFFER_OPEN_CLAUSE}
-       AND (
+     WHERE (
          lower(trim(code)) = lower(trim($1))
          OR lower(trim(label)) = lower(trim($1))
        )

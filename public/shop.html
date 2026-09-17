@@ -392,6 +392,10 @@
         Questions or need a hand?
         <a href="/contact" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">We’re happy to help.</a>
       </p>
+      <p id="admin-membership-link" class="mt-3 hidden text-center text-xs text-cream/35">
+        <a href="/subscription" class="underline decoration-honey/30 underline-offset-2 hover:text-cream/55">Membership preview</a>
+        <span class="text-cream/25"> · admin only</span>
+      </p>
     </main>
 
     <!-- Ad 1 -->
@@ -445,6 +449,14 @@
       document.getElementById("leave-review-btn")?.addEventListener("click", () => {
         window.AAGReviews.open({ source: "shop" });
       });
+      // Surface the membership preview only when an admin session is present.
+      fetch("/admin/me", { credentials: "include" })
+        .then((r) => {
+          if (r.ok) {
+            document.getElementById("admin-membership-link")?.classList.remove("hidden");
+          }
+        })
+        .catch(() => {});
     </script>
     <script>
       document.getElementById("year").textContent = new Date().getFullYear();

@@ -566,6 +566,89 @@ export async function migrate(): Promise<void> {
       )
   `);
 
+  await query(`
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS extra_angel_slots INT NOT NULL DEFAULT 0;
+    ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_stripe_customer
+      ON users (stripe_customer_id)
+      WHERE stripe_customer_id IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS user_angel_names (
+      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id              UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name                 TEXT NOT NULL,
+      slot_kind            TEXT NOT NULL DEFAULT 'standard'
+                           CHECK (slot_kind IN ('standard', 'extra')),
+      created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      removed_at           TIMESTAMPTZ,
+      removed_by_admin_id  UUID REFERENCES admins(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_angel_names_user
+      ON user_angel_names (user_id, created_at ASC);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_angel_names_live
+      ON user_angel_names (user_id, lower(name))
+      WHERE removed_at IS NULL;
+
+    CREATE TABLE IF NOT EXISTS angel_name_requests (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type            TEXT NOT NULL CHECK (type IN ('remove', 'extra_slot')),
+      angel_name_id   UUID REFERENCES user_angel_names(id) ON DELETE SET NULL,
+      requested_name  TEXT,
+      status          TEXT NOT NULL DEFAULT 'pending'
+                      CHECK (status IN ('pending', 'approved', 'denied')),
+      user_note       TEXT,
+      admin_note      TEXT,
+      reviewed_by     UUID REFERENCES admins(id) ON DELETE SET NULL,
+      reviewed_at     TIMESTAMPTZ,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_angel_name_requests_status
+      ON angel_name_requests (status, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_angel_name_requests_user
+      ON angel_name_requests (user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id                  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      stripe_customer_id       TEXT,
+      stripe_subscription_id   TEXT UNIQUE,
+      status                   TEXT NOT NULL DEFAULT 'incomplete',
+      current_period_end       TIMESTAMPTZ,
+      cancel_at_period_end     BOOLEAN NOT NULL DEFAULT false,
+      created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriptions_user
+      ON subscriptions (user_id);
+
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_status
+      ON subscriptions (status);
+  `);
+
+  await query(`
+    INSERT INTO user_angel_names (user_id, name, slot_kind)
+    SELECT u.id, trim(u.angel_name), 'standard'
+    FROM users u
+    WHERE u.angel_name IS NOT NULL
+      AND trim(u.angel_name) <> ''
+      AND NOT EXISTS (
+        SELECT 1 FROM user_angel_names n
+        WHERE n.user_id = u.id
+          AND n.removed_at IS NULL
+          AND lower(n.name) = lower(trim(u.angel_name))
+      )
+  `);
+
   const passwordHash = await bcrypt.hash(SEED_ADMIN_PASSWORD, 12);
   await query(
     `INSERT INTO admins (email, password_hash)

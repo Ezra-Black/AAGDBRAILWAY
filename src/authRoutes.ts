@@ -13,6 +13,12 @@ import {
   updateUserProfile,
 } from "./db/users";
 import {
+  addAngelName,
+  createAngelNameRequest,
+  listLiveAngelNames,
+} from "./db/angelNames";
+import { buildAccountPayload } from "./account";
+import {
   addMessageToThread,
   getThreadById,
   listMessagesForThread,
@@ -39,6 +45,8 @@ import {
 } from "./userAuth";
 import {
   PASSWORD_RULES,
+  addAngelNameSchema,
+  angelNameRequestSchema,
   threadReplySchema,
   userChangePasswordSchema,
   userForgotPasswordSchema,
@@ -113,13 +121,24 @@ authRouter.post(
       angel_name: angel_name ?? null,
     });
 
+    if (angel_name) {
+      try {
+        await addAngelName({ userId: user.id, name: angel_name });
+      } catch (err) {
+        logger.warn("Could not add signup angel name", {
+          user_id: user.id,
+          error: String(err),
+        });
+      }
+    }
+
     await issueSession(res, user.id);
     logger.info("User registered", { user_id: user.id });
 
     res.status(201).json({
       success: true,
       message: "Welcome! Your account is ready.",
-      user: toPublicUser(user),
+      ...(await buildAccountPayload(user)),
     });
   })
 );
@@ -149,7 +168,7 @@ authRouter.post(
 
     await issueSession(res, user.id);
     logger.info("User logged in", { user_id: user.id });
-    res.json({ success: true, user: toPublicUser(user) });
+    res.json({ success: true, ...(await buildAccountPayload(user)) });
   })
 );
 
@@ -167,7 +186,7 @@ authRouter.get(
   "/me",
   requireUser,
   asyncHandler(async (req: UserRequest, res) => {
-    res.json({ success: true, user: toPublicUser(req.user!) });
+    res.json({ success: true, ...(await buildAccountPayload(req.user!)) });
   })
 );
 
@@ -207,14 +226,13 @@ authRouter.put(
     const updated = await updateUserProfile(user.id, {
       email: patch.email,
       name: patch.name,
-      angel_name: patch.angel_name,
     });
 
     logger.info("User profile updated", { user_id: user.id });
     res.json({
       success: true,
       message: "Profile saved.",
-      user: toPublicUser(updated!),
+      ...(await buildAccountPayload(updated!)),
     });
   })
 );
@@ -288,6 +306,142 @@ authRouter.delete(
     });
     await deleteProfilePhoto(previous);
     res.json({ success: true, user: toPublicUser(updated!) });
+  })
+);
+
+/** GET /api/auth/angel-names — live names on the profile. */
+authRouter.get(
+  "/angel-names",
+  requireUser,
+  asyncHandler(async (req: UserRequest, res) => {
+    const names = await listLiveAngelNames(req.user!.id);
+    res.json({ success: true, names });
+  })
+);
+
+/** POST /api/auth/angel-names — add a name (up to 5, plus granted extras). */
+authRouter.post(
+  "/angel-names",
+  requireUser,
+  profileLimiter,
+  asyncHandler(async (req: UserRequest, res) => {
+    const parsed = addAngelNameSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+    try {
+      await addAngelName({ userId: req.user!.id, name: parsed.data.name });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      const message =
+        err instanceof Error ? err.message : "Could not add that name.";
+      const status =
+        code === "CAP_REACHED" || code === "DUPLICATE_NAME" ? 409 : 400;
+      res.status(status).json({ success: false, error: message, code });
+      return;
+    }
+    logger.info("User added angel name", { user_id: req.user!.id });
+    res.status(201).json({
+      success: true,
+      message: "Angel name added to your profile.",
+      ...(await buildAccountPayload(req.user!)),
+    });
+  })
+);
+
+/** POST /api/auth/angel-names/:id/remove-request */
+authRouter.post(
+  "/angel-names/:id/remove-request",
+  requireUser,
+  profileLimiter,
+  asyncHandler(async (req: UserRequest, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid name id" });
+      return;
+    }
+    const parsed = angelNameRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+    try {
+      await createAngelNameRequest({
+        userId: req.user!.id,
+        type: "remove",
+        angelNameId: idCheck.data,
+        userNote: parsed.data.user_note ?? null,
+      });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      const message =
+        err instanceof Error ? err.message : "Could not send that request.";
+      const status =
+        code === "NOT_FOUND" ? 404 : code === "ALREADY_PENDING" ? 409 : 400;
+      res.status(status).json({ success: false, error: message, code });
+      return;
+    }
+    logger.info("User requested angel name removal", {
+      user_id: req.user!.id,
+      angel_name_id: idCheck.data,
+    });
+    res.status(201).json({
+      success: true,
+      message:
+        "Request sent. That name stays on your profile until the AAG team approves the removal.",
+      ...(await buildAccountPayload(req.user!)),
+    });
+  })
+);
+
+/** POST /api/auth/angel-names/extra-request — ask for more than 5 names. */
+authRouter.post(
+  "/angel-names/extra-request",
+  requireUser,
+  profileLimiter,
+  asyncHandler(async (req: UserRequest, res) => {
+    const parsed = angelNameRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+    try {
+      await createAngelNameRequest({
+        userId: req.user!.id,
+        type: "extra_slot",
+        userNote: parsed.data.user_note ?? null,
+      });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      const message =
+        err instanceof Error ? err.message : "Could not send that request.";
+      res
+        .status(code === "ALREADY_PENDING" ? 409 : 400)
+        .json({ success: false, error: message, code });
+      return;
+    }
+    logger.info("User requested extra angel name slot", {
+      user_id: req.user!.id,
+    });
+    res.status(201).json({
+      success: true,
+      message:
+        "Request sent. The AAG team will review a special accommodation for extra names.",
+      ...(await buildAccountPayload(req.user!)),
+    });
   })
 );
 
