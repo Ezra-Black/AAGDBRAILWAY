@@ -51,6 +51,29 @@
         font-size: 0.75rem;
         font-weight: 600;
       }
+      .status-processing {
+        color: #93c5fd;
+        background: rgba(96, 165, 250, 0.12);
+        border: 1px solid rgba(96, 165, 250, 0.35);
+        border-radius: 9999px;
+        padding: 0.2rem 0.7rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+      .status-failed {
+        color: #fda4af;
+        background: rgba(251, 113, 133, 0.12);
+        border: 1px solid rgba(251, 113, 133, 0.35);
+        border-radius: 9999px;
+        padding: 0.2rem 0.7rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .status-failed:hover {
+        background: rgba(251, 113, 133, 0.22);
+      }
       .status-paid {
         color: #6ee7b7;
         cursor: pointer;
@@ -515,9 +538,9 @@
             href="/subscription"
             class="btn-secondary"
             style="padding:0.55rem 1.2rem;font-size:0.8125rem;text-decoration:none"
-            title="Internal membership preview"
+            title="Public membership page"
           >
-            Membership preview
+            Membership
           </a>
           <button
             id="logout-btn"
@@ -556,6 +579,9 @@
       <nav class="mb-8 inline-flex items-center gap-1 rounded-full border border-white/10 p-1" style="background:rgba(255,255,255,0.03)">
         <button type="button" id="tab-dashboard" class="tab-btn active">Dashboard</button>
         <button type="button" id="tab-requests" class="tab-btn">Requests</button>
+        <button type="button" id="tab-members" class="tab-btn">
+          Members<span id="tab-members-badge" class="tab-badge hidden">0</span>
+        </button>
         <button type="button" id="tab-orders" class="tab-btn">Orders</button>
         <button type="button" id="tab-messages" class="tab-btn">
           Messages<span id="tab-messages-badge" class="tab-badge hidden">0</span>
@@ -698,7 +724,7 @@
       <!-- Stats -->
       <section class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div class="stat-card">
-          <p class="col-header">Angel names</p>
+          <p class="col-header">On this page</p>
           <p id="stat-total" class="gold-text mt-1.5 text-2xl font-bold" style="letter-spacing:-0.03em">—</p>
         </div>
         <div class="stat-card">
@@ -706,11 +732,11 @@
           <p id="stat-pending" class="mt-1.5 text-2xl font-bold text-amber-300" style="letter-spacing:-0.03em">—</p>
         </div>
         <div class="stat-card">
-          <p class="col-header">Duplicates</p>
-          <p id="stat-duplicates" class="mt-1.5 text-2xl font-bold text-rose-300" style="letter-spacing:-0.03em">—</p>
+          <p class="col-header">Failed</p>
+          <p id="stat-failed" class="mt-1.5 text-2xl font-bold text-rose-300" style="letter-spacing:-0.03em">—</p>
         </div>
         <div class="stat-card">
-          <p class="col-header">Total submissions</p>
+          <p class="col-header">Total</p>
           <p id="stat-submissions" class="mt-1.5 text-2xl font-bold text-cream" style="letter-spacing:-0.03em">—</p>
         </div>
       </section>
@@ -723,7 +749,7 @@
             <p class="mt-1 text-xs text-cream/45">
               Add or remove options on the public form. Set or adjust a timer (in days)
               on any open offer — it shows as a live countdown on the newsletter page,
-              and when it hits zero the offer is auto-vaulted into the archive shop.
+              and when it hits zero the offer is auto-vaulted into the archive.
             </p>
           </div>
         </div>
@@ -867,7 +893,10 @@
           <select id="filter_status" class="min-w-[150px]" style="padding:0.6rem 0.9rem;font-size:0.875rem">
             <option value="">All statuses</option>
             <option value="pending">Pending</option>
-            <option value="complete">Complete</option>
+            <option value="processing">Processing</option>
+            <option value="processed">Processed</option>
+            <option value="failed">Failed</option>
+            <option value="complete">Complete (processed + failed)</option>
           </select>
         </div>
         <div class="field" style="flex:1;min-width:220px">
@@ -884,25 +913,11 @@
       <!-- Requests table -->
       <div id="list" class="glass-panel rounded-[1.5rem]">
         <div
-          class="hidden gap-4 border-b border-white/5 px-5 py-3.5 sm:grid sm:grid-cols-[1fr_1fr_1.2fr_0.6fr_0.6fr_0.55fr] sm:items-end"
+          class="hidden gap-4 border-b border-white/5 px-5 py-3.5 sm:grid sm:grid-cols-[1fr_1fr_1.2fr_0.7fr_0.85fr] sm:items-end"
         >
           <span class="col-header">Angel name</span>
-          <span class="col-header">Graphics</span>
-          <span class="col-header">Emails</span>
-          <span class="col-header">
-            <span class="flex flex-col items-start gap-1">
-              <span class="help-tip" tabindex="0" role="button" aria-label="What does duplicate mean?">
-                ?
-                <span class="help-bubble" role="tooltip">
-                  “Yes” means this angel name was requested more than once —
-                  multiple submissions are on file for it, so more than one
-                  person may be waiting on the same name. “No” means it was
-                  only requested a single time.
-                </span>
-              </span>
-              Duplicate
-            </span>
-          </span>
+          <span class="col-header">Graphic</span>
+          <span class="col-header">Email</span>
           <span class="col-header">Status</span>
           <span class="col-header">Actions</span>
         </div>
@@ -911,19 +926,53 @@
 
       <p id="empty" class="mt-6 hidden text-sm text-cream/40">No requests yet.</p>
       <p id="error" class="mt-6 hidden text-sm text-rose-400"></p>
+      <div id="requests-pager" class="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-cream/45"></div>
       <p class="mt-4 text-xs text-cream/40">
-        Tip: click <span class="text-amber-300">pending</span> to mark every claim for that angel name complete.
-        Archiving tucks finished names away without deleting anything — restore them anytime from the Archived tab.
+        Each row is one request for one angel name. Click <span class="text-amber-300">pending</span>
+        to mark that request complete. Failed rows can be retried. Archiving tucks a finished request away without deleting it.
       </p>
       </div><!-- /view-requests -->
+
+      <!-- ═══════════ Members view ═══════════ -->
+      <div id="view-members" class="hidden">
+        <div class="mb-6">
+          <h2 class="text-lg font-semibold text-cream">Members</h2>
+          <p class="mt-1 text-xs text-cream/45">
+            Name removals and extra-name requests need approval. Subscriptions sync from Stripe.
+          </p>
+        </div>
+
+        <section class="mb-8">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h3 class="text-sm font-semibold text-cream/80">Name requests</h3>
+            <div class="inline-flex items-center gap-2" role="group" aria-label="Name request status">
+              <button type="button" class="range-btn active" data-name-req-status="pending">Pending</button>
+              <button type="button" class="range-btn" data-name-req-status="all">All</button>
+            </div>
+          </div>
+          <div class="glass-panel rounded-[1.5rem]">
+            <div id="member-name-rows" class="divide-y divide-white/5"></div>
+          </div>
+          <p id="member-name-empty" class="mt-4 hidden text-sm text-cream/40">No name requests.</p>
+        </section>
+
+        <section>
+          <h3 class="mb-3 text-sm font-semibold text-cream/80">Subscriptions</h3>
+          <div class="glass-panel rounded-[1.5rem]">
+            <div id="member-sub-rows" class="divide-y divide-white/5"></div>
+          </div>
+          <p id="member-sub-empty" class="mt-4 hidden text-sm text-cream/40">No subscriptions yet.</p>
+        </section>
+        <p id="members-error" class="mt-6 hidden text-sm text-rose-400"></p>
+      </div><!-- /view-members -->
 
       <!-- ═══════════ Orders view ═══════════ -->
       <div id="view-orders" class="hidden">
         <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 class="text-lg font-semibold text-cream">Archive shop orders</h2>
+            <h2 class="text-lg font-semibold text-cream">Legacy archive orders</h2>
             <p class="mt-1 text-xs text-cream/45">
-              $5 archive graphic purchases — click <span class="text-emerald-300">paid</span> to mark delivered when the graphic is sent.
+              Historical $5 purchases. New requests go through membership. Click <span class="text-emerald-300">paid</span> to mark delivered.
             </p>
           </div>
         </div>
@@ -1275,6 +1324,8 @@
       let adminEmail = "";
       let graphicsCache = [];
       let requestsArchived = false;
+      let requestsOffset = 0;
+      const REQUESTS_LIMIT = 50;
       let graphicsClockSkewMs = 0;
       let graphicsTickInterval = null;
 
@@ -1753,13 +1804,23 @@
         }
       });
 
-      filterSelect.addEventListener("change", () => loadEntries());
-      statusSelect.addEventListener("change", () => loadEntries());
-      searchRequests.addEventListener("input", debounce(() => loadEntries(), 300));
+      filterSelect.addEventListener("change", () => {
+        requestsOffset = 0;
+        loadEntries();
+      });
+      statusSelect.addEventListener("change", () => {
+        requestsOffset = 0;
+        loadEntries();
+      });
+      searchRequests.addEventListener("input", debounce(() => {
+        requestsOffset = 0;
+        loadEntries();
+      }, 300));
 
       function setRequestsArchived(archived) {
         if (requestsArchived === archived) return;
         requestsArchived = archived;
+        requestsOffset = 0;
         reqTabActive.classList.toggle("active", !archived);
         reqTabArchived.classList.toggle("active", archived);
         reqArchiveCompleteBtn.style.display = archived ? "none" : "";
@@ -1789,15 +1850,15 @@
         }
       });
 
-      async function setNameArchived(angelName, archived, buttonEl) {
+      async function setEntryArchived(id, archived, buttonEl) {
         buttonEl.textContent = "…";
         buttonEl.disabled = true;
         try {
-          const res = await fetch("/admin/angel-names/archive", {
+          const res = await fetch("/admin/entries/" + id + "/archive", {
             method: "PATCH",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ angel_name: angelName, archived }),
+            body: JSON.stringify({ archived }),
           });
           if (res.status === 401) {
             window.location.href = "/admin/login";
@@ -1815,15 +1876,13 @@
         await loadEntries();
       }
 
-      async function markComplete(angelName, buttonEl) {
+      async function markComplete(id, buttonEl) {
         buttonEl.textContent = "…";
         buttonEl.style.pointerEvents = "none";
         try {
-          const res = await fetch("/admin/angel-names/complete", {
+          const res = await fetch("/admin/entries/" + id + "/complete", {
             method: "PATCH",
             credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ angel_name: angelName }),
           });
           if (res.status === 401) {
             window.location.href = "/admin/login";
@@ -1842,72 +1901,70 @@
         }
       }
 
-      function renderStatus(group) {
-        if (group.has_pending) {
+      async function retryEntry(id, buttonEl) {
+        buttonEl.textContent = "…";
+        buttonEl.disabled = true;
+        try {
+          const res = await fetch("/admin/entries/" + id + "/retry", {
+            method: "POST",
+            credentials: "include",
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            errorEl.textContent = data.error || "Could not retry";
+            errorEl.classList.remove("hidden");
+          }
+          await loadEntries();
+        } catch {
+          errorEl.textContent = "Network error retrying request";
+          errorEl.classList.remove("hidden");
+          await loadEntries();
+        }
+      }
+
+      function renderStatus(entry) {
+        const status = entry.status || "pending";
+        if (status === "pending") {
           return (
-            '<button type="button" data-complete-name="' +
-            escapeAttr(group.angel_name) +
-            '" class="status-pending" title="Mark complete">' +
+            '<button type="button" data-complete-id="' +
+            escapeAttr(entry.id) +
+            '" class="status-pending" title="Mark this request complete">' +
             "pending" +
             "</button>"
           );
         }
-        return '<span class="status-complete">complete</span>';
-      }
-
-      function isDuplicate(group) {
-        if (typeof group.duplicate === "boolean") return group.duplicate;
-        return (group.entry_ids?.length || 0) > 1;
-      }
-
-      function renderDuplicate(group) {
-        const count =
-          group.submission_count ?? (group.entry_ids?.length || 0);
-        if (isDuplicate(group)) {
+        if (status === "processing") {
+          return '<span class="status-processing">processing</span>';
+        }
+        if (status === "failed") {
           return (
-            '<span class="dup-yes" title="' +
-            count +
-            ' submissions on file for this angel name">Yes · ' +
-            count +
-            "</span>"
+            '<button type="button" data-retry-id="' +
+            escapeAttr(entry.id) +
+            '" class="status-failed" title="Retry this request">failed</button>'
           );
         }
-        return '<span class="dup-no" title="Only one submission on file">No</span>';
+        return '<span class="status-complete">processed</span>';
       }
 
-      function renderEmails(emails) {
-        if (!emails?.length) {
-          return '<span class="text-cream/35">—</span>';
-        }
-        return (
-          '<ul class="space-y-1 text-sm text-cream/70">' +
-          emails
-            .map((email) => '<li class="break-all">' + escapeHtml(email) + "</li>")
-            .join("") +
-          "</ul>"
-        );
-      }
-
-      /** Download links for generated art vs customer uploads (separate stores). */
-      function renderPhotoLinks(group) {
-        const photos = Array.isArray(group.photos) ? group.photos : [];
-        if (!photos.length) return "";
+      function renderPhotoLinks(entry) {
         const links = [];
-        for (const p of photos) {
-          if (p.has_generated_photo) {
-            links.push(
-              '<a class="archive-btn" style="text-decoration:none" href="/admin/entries/' +
-                escapeAttr(p.entry_id) +
-                '/photo/generated" download>Generated</a>'
-            );
-          }
-          if (p.has_customer_photo) {
-            links.push(
-              '<a class="archive-btn" style="text-decoration:none" href="/admin/entries/' +
-                escapeAttr(p.entry_id) +
-                '/photo/customer" download>Customer photo</a>'
-            );
-          }
+        if (entry.has_generated_photo) {
+          links.push(
+            '<a class="archive-btn" style="text-decoration:none" href="/admin/entries/' +
+              escapeAttr(entry.id) +
+              '/photo/generated" download>Generated</a>'
+          );
+        }
+        if (entry.has_customer_photo) {
+          links.push(
+            '<a class="archive-btn" style="text-decoration:none" href="/admin/entries/' +
+              escapeAttr(entry.id) +
+              '/photo/customer" download>Customer photo</a>'
+          );
         }
         if (!links.length) return "";
         return (
@@ -1917,17 +1974,56 @@
         );
       }
 
-      function updateStats(groups) {
-        const pending = groups.filter((g) => g.has_pending).length;
-        const duplicates = groups.filter((g) => isDuplicate(g)).length;
-        const submissions = groups.reduce(
-          (sum, g) => sum + (g.submission_count ?? (g.entry_ids?.length || 0)),
-          0
-        );
-        document.getElementById("stat-total").textContent = groups.length;
+      function updateStats(entries, total) {
+        const pending = entries.filter((e) => e.status === "pending").length;
+        const failed = entries.filter((e) => e.status === "failed").length;
+        document.getElementById("stat-total").textContent = entries.length;
         document.getElementById("stat-pending").textContent = pending;
-        document.getElementById("stat-duplicates").textContent = duplicates;
-        document.getElementById("stat-submissions").textContent = submissions;
+        const failedEl = document.getElementById("stat-failed");
+        if (failedEl) failedEl.textContent = failed;
+        document.getElementById("stat-submissions").textContent = total;
+      }
+
+      function renderPager(total) {
+        const pager = document.getElementById("requests-pager");
+        if (!pager) return;
+        if (total <= REQUESTS_LIMIT) {
+          pager.innerHTML =
+            total > 0 ? "Showing " + total + " request" + (total === 1 ? "" : "s") : "";
+          return;
+        }
+        const from = requestsOffset + 1;
+        const to = Math.min(requestsOffset + REQUESTS_LIMIT, total);
+        pager.innerHTML =
+          "<span>Showing " +
+          from +
+          "–" +
+          to +
+          " of " +
+          total +
+          "</span>" +
+          '<div class="flex gap-2">' +
+          '<button type="button" class="archive-btn" id="req-prev"' +
+          (requestsOffset <= 0 ? " disabled" : "") +
+          ">Previous</button>" +
+          '<button type="button" class="archive-btn" id="req-next"' +
+          (requestsOffset + REQUESTS_LIMIT >= total ? " disabled" : "") +
+          ">Next</button>" +
+          "</div>";
+        const prev = document.getElementById("req-prev");
+        const next = document.getElementById("req-next");
+        if (prev) {
+          prev.addEventListener("click", () => {
+            requestsOffset = Math.max(0, requestsOffset - REQUESTS_LIMIT);
+            loadEntries();
+          });
+        }
+        if (next) {
+          next.addEventListener("click", () => {
+            requestsOffset += REQUESTS_LIMIT;
+            loadEntries();
+          });
+        }
       }
 
       async function loadEntries() {
@@ -1939,8 +2035,9 @@
         const q = searchRequests.value.trim();
         if (q) params.set("q", q);
         if (requestsArchived) params.set("archived", "1");
-        const qs = params.toString();
-        const url = "/admin/entries" + (qs ? "?" + qs : "");
+        params.set("limit", String(REQUESTS_LIMIT));
+        params.set("offset", String(requestsOffset));
+        const url = "/admin/entries?" + params.toString();
         const res = await fetch(url, { credentials: "include" });
         if (res.status === 401) {
           window.location.href = "/admin/login";
@@ -1953,94 +2050,105 @@
           return;
         }
 
-        const groups = data.groups || [];
+        const entries = data.entries || [];
+        const total = Number(data.total || entries.length);
         const filterLabel = code
           ? graphicsCache.find((g) => g.code === code)?.label || code
           : null;
         subtitle.textContent =
           (adminEmail || "Admin") +
           " · " +
-          groups.length +
-          " angel names" +
+          total +
+          " request" +
+          (total === 1 ? "" : "s") +
           (filterLabel ? " · " + filterLabel : "");
 
-        updateStats(groups);
+        updateStats(entries, total);
+        renderPager(total);
 
         rowsEl.innerHTML = "";
-        empty.classList.toggle("hidden", groups.length > 0);
+        empty.classList.toggle("hidden", entries.length > 0);
         empty.textContent = requestsArchived
           ? "Nothing archived yet — use Archive on a finished request to tidy it away."
           : q || filterLabel || statusSelect.value
           ? "No requests match these filters."
           : "No requests yet.";
 
-        if (!groups.length) return;
+        if (!entries.length) return;
 
-        const archiveBtn = (name) =>
-          '<button type="button" data-archive-name="' +
-          escapeAttr(name) +
-          '" class="archive-btn">' +
-          (requestsArchived ? "Restore" : "Archive") +
-          "</button>";
-
-        for (const group of groups) {
+        for (const entry of entries) {
           const row = document.createElement("div");
           row.className =
-            "grid gap-3 px-5 py-4 sm:grid-cols-[1fr_1fr_1.2fr_0.6fr_0.6fr_0.55fr] sm:gap-4 sm:items-start";
+            "grid gap-3 px-5 py-4 sm:grid-cols-[1fr_1fr_1.2fr_0.7fr_0.85fr] sm:gap-4 sm:items-start";
+          const archiveBtn =
+            '<button type="button" data-archive-id="' +
+            escapeAttr(entry.id) +
+            '" class="archive-btn">' +
+            (requestsArchived ? "Restore" : "Archive") +
+            "</button>";
+          const extra =
+            entry.status === "failed"
+              ? '<button type="button" data-retry-id="' +
+                escapeAttr(entry.id) +
+                '" class="archive-btn">Retry</button>'
+              : "";
           row.innerHTML =
             '<div class="min-w-0">' +
             '<p class="font-medium text-cream">' +
-            escapeHtml(group.angel_name) +
+            escapeHtml(entry.angel_name) +
             "</p>" +
             '<p class="mt-1 text-xs text-cream/40" title="' +
-            escapeAttr(absoluteDateTitle(group.created_at || group.latest_at)) +
+            escapeAttr(absoluteDateTitle(entry.created_at)) +
             '">' +
-            formatRelativeAge(group.created_at || group.latest_at) +
-            " · " +
-            (group.emails?.length || 0) +
-            " email" +
-            ((group.emails?.length || 0) === 1 ? "" : "s") +
+            formatRelativeAge(entry.created_at) +
+            (entry.real_name ? " · " + escapeHtml(entry.real_name) : "") +
             "</p>" +
-            '<div class="mt-2 flex items-center gap-2 sm:hidden">' +
-            renderDuplicate(group) +
-            renderStatus(group) +
-            archiveBtn(group.angel_name) +
+            '<div class="mt-2 flex flex-wrap items-center gap-2 sm:hidden">' +
+            renderStatus(entry) +
+            extra +
+            archiveBtn +
             "</div>" +
-            renderPhotoLinks(group) +
+            renderPhotoLinks(entry) +
             "</div>" +
             '<div class="min-w-0 text-sm text-cream/70">' +
-            '<p class="col-header mb-1 sm:hidden">Graphics</p>' +
-            escapeHtml(graphicText(group.graphics)) +
+            '<p class="col-header mb-1 sm:hidden">Graphic</p>' +
+            escapeHtml(entry.graphic_label || entry.graphic_code || "—") +
             "</div>" +
-            '<div class="min-w-0">' +
-            '<p class="col-header mb-1 sm:hidden">Emails</p>' +
-            renderEmails(group.emails) +
+            '<div class="min-w-0 text-sm text-cream/70">' +
+            '<p class="col-header mb-1 sm:hidden">Email</p>' +
+            '<p class="break-all">' +
+            escapeHtml(entry.email || "—") +
+            "</p>" +
+            (entry.subscription_active
+              ? '<p class="mt-1 text-xs text-emerald-300/80">member</p>'
+              : "") +
             "</div>" +
             '<div class="hidden sm:block">' +
-            renderDuplicate(group) +
+            renderStatus(entry) +
             "</div>" +
-            '<div class="hidden sm:block">' +
-            renderStatus(group) +
-            "</div>" +
-            '<div class="hidden sm:block">' +
-            archiveBtn(group.angel_name) +
+            '<div class="hidden sm:flex sm:flex-wrap sm:gap-2">' +
+            extra +
+            archiveBtn +
             "</div>";
           rowsEl.appendChild(row);
         }
 
-        rowsEl.querySelectorAll("[data-complete-name]").forEach((btn) => {
+        rowsEl.querySelectorAll("[data-complete-id]").forEach((btn) => {
           btn.addEventListener("click", () => {
-            const name = btn.getAttribute("data-complete-name");
-            if (!name) return;
-            markComplete(name, btn);
+            const id = btn.getAttribute("data-complete-id");
+            if (id) markComplete(id, btn);
           });
         });
-
-        rowsEl.querySelectorAll("[data-archive-name]").forEach((btn) => {
+        rowsEl.querySelectorAll("[data-retry-id]").forEach((btn) => {
           btn.addEventListener("click", () => {
-            const name = btn.getAttribute("data-archive-name");
-            if (!name) return;
-            setNameArchived(name, !requestsArchived, btn);
+            const id = btn.getAttribute("data-retry-id");
+            if (id) retryEntry(id, btn);
+          });
+        });
+        rowsEl.querySelectorAll("[data-archive-id]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const id = btn.getAttribute("data-archive-id");
+            if (id) setEntryArchived(id, !requestsArchived, btn);
           });
         });
       }
@@ -2156,9 +2264,11 @@
       const dashEmpty = document.getElementById("dash-empty");
       const viewDashboard = document.getElementById("view-dashboard");
       const viewRequests = document.getElementById("view-requests");
+      const viewMembers = document.getElementById("view-members");
       const viewOrders = document.getElementById("view-orders");
       const tabDashboard = document.getElementById("tab-dashboard");
       const tabRequests = document.getElementById("tab-requests");
+      const tabMembers = document.getElementById("tab-members");
       const tabOrders = document.getElementById("tab-orders");
 
       let currentRange = 30;
@@ -2277,21 +2387,27 @@
       const VIEW_TITLES = {
         dashboard: "Dashboard",
         requests: "Requests",
+        members: "Members",
         orders: "Orders",
         messages: "Messages",
         reviews: "Reviews",
         newsletter: "Newsletter",
       };
 
+      let nameReqStatus = "pending";
+      let membersLoaded = false;
+
       function switchView(view) {
         viewDashboard.classList.toggle("hidden", view !== "dashboard");
         viewRequests.classList.toggle("hidden", view !== "requests");
+        if (viewMembers) viewMembers.classList.toggle("hidden", view !== "members");
         viewOrders.classList.toggle("hidden", view !== "orders");
         viewMessages.classList.toggle("hidden", view !== "messages");
         viewReviews.classList.toggle("hidden", view !== "reviews");
         viewNewsletter.classList.toggle("hidden", view !== "newsletter");
         tabDashboard.classList.toggle("active", view === "dashboard");
         tabRequests.classList.toggle("active", view === "requests");
+        if (tabMembers) tabMembers.classList.toggle("active", view === "members");
         tabOrders.classList.toggle("active", view === "orders");
         tabMessages.classList.toggle("active", view === "messages");
         tabReviews.classList.toggle("active", view === "reviews");
@@ -2301,14 +2417,168 @@
         if (view === "newsletter" && !postsLoaded) loadAdminPosts();
         if (view === "messages") loadThreads();
         if (view === "reviews") loadAdminReviews();
+        if (view === "members") loadMembers();
       }
 
       tabDashboard.addEventListener("click", () => switchView("dashboard"));
       tabRequests.addEventListener("click", () => switchView("requests"));
+      if (tabMembers) tabMembers.addEventListener("click", () => switchView("members"));
       tabOrders.addEventListener("click", () => switchView("orders"));
       tabMessages.addEventListener("click", () => switchView("messages"));
       tabReviews.addEventListener("click", () => switchView("reviews"));
       tabNewsletter.addEventListener("click", () => switchView("newsletter"));
+
+      document.querySelectorAll("[data-name-req-status]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          nameReqStatus = btn.getAttribute("data-name-req-status") || "pending";
+          document.querySelectorAll("[data-name-req-status]").forEach((b) => {
+            b.classList.toggle("active", b === btn);
+          });
+          loadMembers();
+        });
+      });
+
+      function setMembersBadge(count) {
+        const badge = document.getElementById("tab-members-badge");
+        if (!badge) return;
+        if (count > 0) {
+          badge.hidden = false;
+          badge.classList.remove("hidden");
+          badge.textContent = String(count);
+        } else {
+          badge.classList.add("hidden");
+        }
+      }
+
+      async function reviewNameRequest(id, status) {
+        const errEl = document.getElementById("members-error");
+        errEl.classList.add("hidden");
+        try {
+          const res = await fetch("/admin/members/name-requests/" + id, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status }),
+          });
+          if (res.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            errEl.textContent = data.error || "Could not review that request";
+            errEl.classList.remove("hidden");
+            return;
+          }
+          await loadMembers();
+        } catch {
+          errEl.textContent = "Network error reviewing name request";
+          errEl.classList.remove("hidden");
+        }
+      }
+
+      async function loadMembers() {
+        const errEl = document.getElementById("members-error");
+        const nameRows = document.getElementById("member-name-rows");
+        const nameEmpty = document.getElementById("member-name-empty");
+        const subRows = document.getElementById("member-sub-rows");
+        const subEmpty = document.getElementById("member-sub-empty");
+        errEl.classList.add("hidden");
+        try {
+          const [reqRes, subRes] = await Promise.all([
+            fetch(
+              "/admin/members/name-requests?status=" +
+                encodeURIComponent(nameReqStatus),
+              { credentials: "include", cache: "no-store" }
+            ),
+            fetch("/admin/members/subscriptions", {
+              credentials: "include",
+              cache: "no-store",
+            }),
+          ]);
+          if (reqRes.status === 401 || subRes.status === 401) {
+            window.location.href = "/admin/login";
+            return;
+          }
+          const reqData = await reqRes.json();
+          const subData = await subRes.json();
+          if (!reqRes.ok || !reqData.success) {
+            errEl.textContent = reqData.error || "Could not load name requests";
+            errEl.classList.remove("hidden");
+            return;
+          }
+          membersLoaded = true;
+          setMembersBadge(Number(reqData.pending || 0));
+          const requests = reqData.requests || [];
+          nameEmpty.classList.toggle("hidden", requests.length > 0);
+          nameRows.innerHTML = requests
+            .map((r) => {
+              const label =
+                r.type === "extra_slot"
+                  ? "Extra name slot"
+                  : "Remove “" + (r.angel_name || r.requested_name || "name") + "”";
+              const actions =
+                r.status === "pending"
+                  ? '<button type="button" class="btn-primary" data-review="' +
+                    escapeAttr(r.id) +
+                    '" data-status="approved" style="padding:0.35rem 0.8rem;font-size:0.72rem">Approve</button>' +
+                    '<button type="button" class="btn-secondary" data-review="' +
+                    escapeAttr(r.id) +
+                    '" data-status="denied" style="padding:0.35rem 0.8rem;font-size:0.72rem">Deny</button>'
+                  : '<span class="status-complete">' + escapeHtml(r.status) + "</span>";
+              return (
+                '<div class="flex flex-wrap items-start justify-between gap-3 px-5 py-4">' +
+                "<div><p class=\"font-medium text-cream\">" +
+                escapeHtml(label) +
+                "</p>" +
+                '<p class="mt-1 text-xs text-cream/40">' +
+                escapeHtml(r.user_display_name || "") +
+                " · " +
+                escapeHtml(r.user_email || "") +
+                (r.user_note ? " · “" + escapeHtml(r.user_note) + "”" : "") +
+                "</p></div>" +
+                '<div class="flex flex-wrap gap-2">' +
+                actions +
+                "</div></div>"
+              );
+            })
+            .join("");
+          nameRows.querySelectorAll("[data-review]").forEach((btn) => {
+            btn.addEventListener("click", () =>
+              reviewNameRequest(
+                btn.getAttribute("data-review"),
+                btn.getAttribute("data-status")
+              )
+            );
+          });
+
+          const subscriptions = (subData && subData.subscriptions) || [];
+          subEmpty.classList.toggle("hidden", subscriptions.length > 0);
+          subRows.innerHTML = subscriptions
+            .map((s) => {
+              const active =
+                s.status === "active" || s.status === "trialing";
+              return (
+                '<div class="flex flex-wrap items-start justify-between gap-3 px-5 py-4">' +
+                "<div><p class=\"font-medium text-cream\">" +
+                escapeHtml(s.name || s.email) +
+                "</p>" +
+                '<p class="mt-1 text-xs text-cream/40">' +
+                escapeHtml(s.email) +
+                "</p></div>" +
+                '<span class="' +
+                (active ? "status-complete" : "status-failed") +
+                '">' +
+                escapeHtml(s.status) +
+                "</span></div>"
+              );
+            })
+            .join("");
+        } catch {
+          errEl.textContent = "Network error loading members";
+          errEl.classList.remove("hidden");
+        }
+      }
 
       /* ═══════════ Reviews moderation ═══════════ */
 
@@ -3660,6 +3930,7 @@
         await loadAnalytics();
         await loadGraphics();
         await loadEntries();
+        await loadMembers();
         await loadVaultAlerts();
         await loadAiWorkerState();
         await loadThreadCounts();

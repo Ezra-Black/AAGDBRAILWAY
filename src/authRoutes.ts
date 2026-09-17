@@ -354,6 +354,50 @@ authRouter.post(
   })
 );
 
+/** POST /api/auth/angel-names/extra-request — ask for more than 5 names.
+ *  Registered before :id so “extra-request” is never parsed as a name id.
+ */
+authRouter.post(
+  "/angel-names/extra-request",
+  requireUser,
+  profileLimiter,
+  asyncHandler(async (req: UserRequest, res) => {
+    const parsed = angelNameRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+    try {
+      await createAngelNameRequest({
+        userId: req.user!.id,
+        type: "extra_slot",
+        userNote: parsed.data.user_note ?? null,
+      });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      const message =
+        err instanceof Error ? err.message : "Could not send that request.";
+      res
+        .status(code === "ALREADY_PENDING" ? 409 : 400)
+        .json({ success: false, error: message, code });
+      return;
+    }
+    logger.info("User requested extra angel name slot", {
+      user_id: req.user!.id,
+    });
+    res.status(201).json({
+      success: true,
+      message:
+        "Request sent. The AAG team will review a special accommodation for extra names.",
+      ...(await buildAccountPayload(req.user!)),
+    });
+  })
+);
+
 /** POST /api/auth/angel-names/:id/remove-request */
 authRouter.post(
   "/angel-names/:id/remove-request",
@@ -398,48 +442,6 @@ authRouter.post(
       success: true,
       message:
         "Request sent. That name stays on your profile until the AAG team approves the removal.",
-      ...(await buildAccountPayload(req.user!)),
-    });
-  })
-);
-
-/** POST /api/auth/angel-names/extra-request — ask for more than 5 names. */
-authRouter.post(
-  "/angel-names/extra-request",
-  requireUser,
-  profileLimiter,
-  asyncHandler(async (req: UserRequest, res) => {
-    const parsed = angelNameRequestSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      res.status(400).json({
-        success: false,
-        error: "Validation failed",
-        details: parsed.error.flatten().fieldErrors,
-      });
-      return;
-    }
-    try {
-      await createAngelNameRequest({
-        userId: req.user!.id,
-        type: "extra_slot",
-        userNote: parsed.data.user_note ?? null,
-      });
-    } catch (err) {
-      const code = (err as { code?: string }).code;
-      const message =
-        err instanceof Error ? err.message : "Could not send that request.";
-      res
-        .status(code === "ALREADY_PENDING" ? 409 : 400)
-        .json({ success: false, error: message, code });
-      return;
-    }
-    logger.info("User requested extra angel name slot", {
-      user_id: req.user!.id,
-    });
-    res.status(201).json({
-      success: true,
-      message:
-        "Request sent. The AAG team will review a special accommodation for extra names.",
       ...(await buildAccountPayload(req.user!)),
     });
   })

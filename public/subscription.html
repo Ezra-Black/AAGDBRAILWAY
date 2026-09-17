@@ -4,10 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Membership — Audrey’s Angel Graphics</title>
-    <meta name="robots" content="noindex, nofollow" />
     <meta
       name="description"
-      content="Internal preview of the membership subscription experience."
+      content="$10 a month for every graphic AAG has ever made. Request from your account — one email per angel name."
     />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -141,7 +140,7 @@
           <a href="/" class="nav-link">Home</a>
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
-          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/shop" class="nav-link">Archive</a>
           <a href="/subscription" class="nav-link active">Membership</a>
           <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
@@ -165,7 +164,7 @@
           <a href="/" class="nav-link">Home</a>
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
-          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/shop" class="nav-link">Archive</a>
           <a href="/subscription" class="nav-link active">Membership</a>
           <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
@@ -176,17 +175,16 @@
 
     <main class="relative z-10 mx-auto max-w-2xl px-5 pb-20 pt-36 sm:pt-44">
       <section class="reveal text-center">
-        <p class="preview-banner mb-4">Internal preview · admin only</p>
         <p class="eyebrow">Membership</p>
         <h1 class="headline mt-4 text-4xl font-bold text-cream sm:text-5xl">
-          Stay close to<br />the <span class="gold-text">archive</span>.
+          Every graphic,<br />for <span class="gold-text">$10 a month</span>.
         </h1>
         <p class="mx-auto mt-5 max-w-lg text-base font-light leading-relaxed text-cream/60 sm:text-lg">
-          A simple subscription for ongoing access and member perks.
-          Copy and pricing here are placeholders until we lock the offer.
+          Members request from their account. We use the angel names on your
+          profile — each name gets its own graphic and its own email.
         </p>
         <p class="mt-5">
-          <span class="price-badge" id="price-badge">✦ Choose a plan below</span>
+          <span class="price-badge" id="price-badge">✦ $10 / month</span>
         </p>
       </section>
 
@@ -196,19 +194,19 @@
         </div>
 
         <div id="sub-error" class="hidden py-10 text-center">
-          <p class="text-lg text-cream/70">Couldn’t load membership plans.</p>
+          <p class="text-lg text-cream/70">Couldn’t load membership.</p>
           <p class="mt-2 text-sm text-cream/45">
-            Confirm you’re signed in as admin, then refresh.
+            Refresh, or
+            <a href="/contact" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">send us a message</a>.
           </p>
         </div>
 
         <div id="sub-body" class="hidden">
           <h2 class="headline text-2xl font-semibold text-cream">
-            Pick a plan
+            AAG Membership
           </h2>
           <p class="mt-2 text-[15px] font-light leading-relaxed text-cream/55">
-            Generic tiers for layout and flow. Checkout isn’t wired yet —
-            this screen is for design and product review only.
+            Ten dollars a month. Cancel anytime in Stripe’s billing portal.
           </p>
 
           <div id="plan-list" class="mt-6 grid gap-3 sm:grid-cols-2" role="listbox" aria-label="Membership plans"></div>
@@ -239,16 +237,24 @@
             Continue to checkout
           </button>
           <p id="subscribe-hint" class="mt-3 text-center text-xs text-cream/40">
-            Preview only — Stripe subscriptions aren’t connected yet.
+            Secure checkout powered by Stripe.
+          </p>
+          <p id="already-member" class="mt-4 hidden text-center text-sm text-emerald-300">
+            You’re already a member.
+            <a href="/profile" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">Open your profile</a>
+            to request graphics or manage billing.
+          </p>
+          <p id="canceled-note" class="mt-4 hidden text-center text-sm text-cream/55">
+            Checkout was canceled. You can try again whenever you’re ready.
           </p>
         </div>
       </section>
 
       <p class="reveal mt-8 text-center text-sm text-cream/45" style="--reveal-delay:0.2s">
         Back to the
-        <a href="/shop" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">archive shop</a>
+        <a href="/shop" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">archive</a>
         or
-        <a href="/admin/" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">admin</a>.
+        <a href="/form" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">request form</a>.
       </p>
     </main>
 
@@ -263,7 +269,7 @@
             <a href="/refunds" class="footer-link" style="font-size:11px">Refunds</a>
           </nav>
           <div class="flex items-center gap-4">
-            <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
+            <a href="/shop" class="footer-link" style="font-size:11px">Archive</a>
             <a href="/admin/" class="footer-link" style="font-size:11px">Admin</a>
           </div>
         </div>
@@ -398,7 +404,13 @@
 
           const btn = document.getElementById("subscribe-btn");
           const hint = document.getElementById("subscribe-hint");
-          if (data.checkout_enabled) {
+          const already = document.getElementById("already-member");
+          if (data.subscription && data.subscription.active) {
+            btn.disabled = true;
+            btn.textContent = "You’re a member";
+            already.classList.remove("hidden");
+            hint.textContent = "Manage billing from your profile.";
+          } else if (data.checkout_enabled) {
             btn.disabled = false;
             hint.textContent = "Secure checkout powered by Stripe";
           } else {
@@ -406,12 +418,53 @@
             btn.textContent = "Checkout coming soon";
             hint.textContent =
               data.checkout_hint ||
-              "Preview only — Stripe subscriptions aren’t connected yet.";
+              "Membership checkout isn’t available yet.";
           }
+
+          btn.addEventListener("click", async () => {
+            hint.textContent = "";
+            try {
+              await AAGAuth.requireAuth({
+                title: "Log in to subscribe",
+                message: "Create an account or log in, then we’ll send you to Stripe.",
+              });
+            } catch {
+              hint.textContent = "Log in first so we can attach the membership to your account.";
+              return;
+            }
+            btn.disabled = true;
+            btn.textContent = "Opening Stripe…";
+            try {
+              const checkout = await fetch("/subscription/checkout", {
+                method: "POST",
+                credentials: "include",
+              });
+              const result = await checkout.json();
+              if (result.already_member && result.url) {
+                window.location.href = result.url;
+                return;
+              }
+              if (!checkout.ok || !result.url) {
+                hint.textContent = result.error || "Couldn’t start checkout.";
+                btn.disabled = false;
+                btn.textContent = "Continue to checkout";
+                return;
+              }
+              window.location.href = result.url;
+            } catch {
+              hint.textContent = "Network glitch. Try again in a sec.";
+              btn.disabled = false;
+              btn.textContent = "Continue to checkout";
+            }
+          });
         } catch {
           document.getElementById("sub-loading").classList.add("hidden");
           document.getElementById("sub-error").classList.remove("hidden");
         }
+      }
+
+      if (new URLSearchParams(location.search).get("canceled") === "1") {
+        document.getElementById("canceled-note").classList.remove("hidden");
       }
 
       boot();

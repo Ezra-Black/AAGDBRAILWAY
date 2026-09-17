@@ -251,7 +251,8 @@
           <a href="/" class="nav-link">Home</a>
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link active">Newsletter</a>
-          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/shop" class="nav-link">Archive</a>
+          <a href="/subscription" class="nav-link">Membership</a>
           <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta">Request yours</a>
@@ -274,7 +275,8 @@
           <a href="/" class="nav-link">Home</a>
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link active">Newsletter</a>
-          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/shop" class="nav-link">Archive</a>
+          <a href="/subscription" class="nav-link">Membership</a>
           <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta justify-center">Request yours</a>
@@ -300,8 +302,8 @@
           <div>
             <h2 class="headline text-2xl font-bold text-cream">Before they’re vaulted</h2>
             <p class="mt-1.5 text-sm font-light text-cream/55">
-              Every graphic below is open for free requests — until its countdown hits zero.
-              Then it’s locked into the archive and off the request form forever.
+              Every graphic below is a current drop with a countdown.
+              When the timer hits zero it stays in the archive — members can still request it.
             </p>
           </div>
         </div>
@@ -362,7 +364,7 @@
             <a href="/" class="footer-link" style="font-size:11px">Home</a>
             <a href="/about" class="footer-link" style="font-size:11px">About</a>
             <a href="/newsletter" class="footer-link" style="font-size:11px">Newsletter</a>
-            <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
+            <a href="/shop" class="footer-link" style="font-size:11px">Archive</a>
             <a href="/reviews" class="footer-link" style="font-size:11px">Reviews</a>
             <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
             <a href="/admin/login" class="footer-link" style="font-size:11px">Admin</a>
@@ -444,7 +446,7 @@
             '<p class="text-xs leading-relaxed text-cream/45" data-fomo>' +
             "When this hits zero, <strong class=\"text-cream/70\">" +
             escapeHtml(g.label) +
-            "</strong> is vaulted into the archive — no more free requests." +
+            "</strong> is vaulted into the archive. Members can still request it." +
             "</p>"
           : '<p class="text-xs leading-relaxed text-cream/45">' +
             "No vault date set yet — but offers can close at any time, so don’t sit on it." +
@@ -468,7 +470,7 @@
           '<div class="relative mt-auto">' +
           '<a href="/form?graphic=' +
           encodeURIComponent(g.code) +
-          '" class="btn-primary w-full" data-cta style="padding:0.7rem 1.4rem;font-size:0.85rem">Request it free →</a>' +
+          '" class="btn-primary w-full" data-cta style="padding:0.7rem 1.4rem;font-size:0.85rem">Request it →</a>' +
           "</div>";
         return card;
       }
@@ -484,14 +486,14 @@
         const fomo = card.querySelector("[data-fomo]");
         if (fomo) {
           fomo.innerHTML =
-            "This one’s gone into the vault. You can still get it as a print-ready archive graphic in the shop.";
+            "This one’s in the archive. Members can still request it."
         }
         const cta = card.querySelector("[data-cta]");
         if (cta) {
           cta.className = "btn-secondary w-full";
           cta.style.cssText = "padding:0.7rem 1.4rem;font-size:0.85rem";
           cta.href = "/shop";
-          cta.textContent = "Find it in the archive shop";
+          cta.textContent = "Find it in the archive";
         }
       }
 

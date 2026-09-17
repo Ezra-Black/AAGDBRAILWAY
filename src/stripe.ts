@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 
 let stripe: Stripe | null = null;
+let cachedMembershipPrice: MembershipPrice | null = null;
 
 export function stripeConfigured(): boolean {
   return Boolean(
@@ -28,15 +29,77 @@ export function shopPriceCents(): number {
   return Number.isFinite(raw) && raw >= 50 ? Math.floor(raw) : 500;
 }
 
-export function membershipPriceCents(): number {
-  const raw = Number(process.env.MEMBERSHIP_PRICE_CENTS);
-  return Number.isFinite(raw) && raw >= 100 ? Math.floor(raw) : 1000;
-}
-
 export const SHOP_CURRENCY = "usd";
 export const SHOP_PRODUCT_NAME = "AAG Archive Graphic";
 export const MEMBERSHIP_PRODUCT_NAME = "AAG Membership";
 export const MEMBERSHIP_INTERVAL = "month" as const;
+export const MEMBERSHIP_PRODUCT_ID = "prod_VH4tnTPpUSwYtz";
+
+export function membershipProductId(): string {
+  return process.env.STRIPE_MEMBERSHIP_PRODUCT_ID?.trim() || MEMBERSHIP_PRODUCT_ID;
+}
+
+export interface MembershipPrice {
+  product_id: string;
+  price_id: string;
+  price_cents: number;
+  currency: string;
+  interval: string;
+}
+
+export function membershipPriceCentsFallback(): number {
+  const raw = Number(process.env.MEMBERSHIP_PRICE_CENTS);
+  return Number.isFinite(raw) && raw >= 100 ? Math.floor(raw) : 1000;
+}
+
+export async function resolveMembershipPrice(): Promise<MembershipPrice> {
+  if (cachedMembershipPrice) return cachedMembershipPrice;
+
+  const productId = membershipProductId();
+  const envPrice = process.env.STRIPE_MEMBERSHIP_PRICE_ID?.trim();
+  const stripeClient = getStripe();
+
+  let price: Stripe.Price | null = null;
+  if (envPrice) {
+    price = await stripeClient.prices.retrieve(envPrice);
+  } else {
+    const product = await stripeClient.products.retrieve(productId, {
+      expand: ["default_price"],
+    });
+    const defaultPrice = product.default_price;
+    if (typeof defaultPrice === "string") {
+      price = await stripeClient.prices.retrieve(defaultPrice);
+    } else if (defaultPrice && typeof defaultPrice === "object") {
+      price = defaultPrice;
+    } else {
+      const listed = await stripeClient.prices.list({
+        product: productId,
+        active: true,
+        type: "recurring",
+        limit: 10,
+      });
+      price =
+        listed.data.find((row) => row.recurring?.interval === "month") ||
+        listed.data[0] ||
+        null;
+    }
+  }
+
+  if (!price?.id) {
+    throw new Error(
+      `No active recurring price found for Stripe product ${productId}`
+    );
+  }
+
+  cachedMembershipPrice = {
+    product_id: typeof price.product === "string" ? price.product : productId,
+    price_id: price.id,
+    price_cents: price.unit_amount ?? membershipPriceCentsFallback(),
+    currency: (price.currency || SHOP_CURRENCY).toLowerCase(),
+    interval: price.recurring?.interval || MEMBERSHIP_INTERVAL,
+  };
+  return cachedMembershipPrice;
+}
 
 export function membershipPeriodEnd(
   sub: Stripe.Subscription
@@ -59,6 +122,7 @@ export async function createMembershipCheckoutSession(input: {
   cancelUrl: string;
 }): Promise<Stripe.Checkout.Session> {
   const stripeClient = getStripe();
+  const offer = await resolveMembershipPrice();
   const params: Stripe.Checkout.SessionCreateParams = {
     mode: "subscription",
     client_reference_id: input.userId,
@@ -70,21 +134,7 @@ export async function createMembershipCheckoutSession(input: {
     subscription_data: {
       metadata: { user_id: input.userId },
     },
-    line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: SHOP_CURRENCY,
-          unit_amount: membershipPriceCents(),
-          recurring: { interval: MEMBERSHIP_INTERVAL },
-          product_data: {
-            name: MEMBERSHIP_PRODUCT_NAME,
-            description:
-              "Every AAG graphic, requested from your account for the angel names on your profile.",
-          },
-        },
-      },
-    ],
+    line_items: [{ price: offer.price_id, quantity: 1 }],
   };
 
   if (input.customerId) {

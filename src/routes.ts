@@ -23,6 +23,7 @@ import {
   createEntry,
   emailExistsInEntries,
   findOpenGraphicClaimForUser,
+  getEntryByAngelName,
   getEntryById,
   getEntryByRealName,
   listAdminEntries,
@@ -84,21 +85,15 @@ import { getAnalyticsSummary, recordPageView } from "./db/analytics";
 import {
   archiveGraphicOption,
   archivePaidPurchases,
-  createPurchase,
-  getArchiveGraphicByCode,
   getPurchaseById,
-  getPurchaseByIntent,
   listArchiveGraphics,
   listPurchasesForAdmin,
-  markPurchaseStatusByIntent,
-  mergePurchaseMetadata,
   setArchiveGraphicRequiresPhoto,
   setPurchaseArchived,
   setPurchaseStatus,
 } from "./db/shop";
 import {
   getPurchasePhoto,
-  upsertPurchasePhoto,
 } from "./db/purchasePhotos";
 import {
   createReview,
@@ -121,14 +116,11 @@ import {
 import {
   createBillingPortalSession,
   createMembershipCheckoutSession,
-  getStripe,
-  membershipPeriodEnd,
-  membershipPriceCents,
   MEMBERSHIP_INTERVAL,
   MEMBERSHIP_PRODUCT_NAME,
+  membershipPriceCentsFallback,
+  resolveMembershipPrice,
   SHOP_CURRENCY,
-  SHOP_PRODUCT_NAME,
-  shopPriceCents,
   stripeConfigured,
   stripePublishableKey,
 } from "./stripe";
@@ -167,7 +159,6 @@ import {
   pageViewSchema,
   PASSWORD_RULES,
   reviewAngelNameRequestSchema,
-  shopConfirmSchema,
   statusSchema,
   submitSchema,
   threadReplySchema,
@@ -185,7 +176,6 @@ import {
   listSubscriptionsForAdmin,
   userHasActiveSubscription,
 } from "./db/subscriptions";
-import { getUserById } from "./db/users";
 import { buildAccountPayload } from "./account";
 import { safeAngelFilename } from "./worker/placeholders";
 
@@ -2082,12 +2072,23 @@ apiRouter.get(
   "/shop/config",
   readLimiter,
   asyncHandler(async (_req, res) => {
+    let priceCents = membershipPriceCentsFallback();
+    let currency = SHOP_CURRENCY;
+    if (stripeConfigured()) {
+      try {
+        const offer = await resolveMembershipPrice();
+        priceCents = offer.price_cents;
+        currency = offer.currency;
+      } catch {
+        /* fall back */
+      }
+    }
     res.json({
       success: true,
       enabled: true,
       priced: false,
-      membership_price_cents: membershipPriceCents(),
-      currency: SHOP_CURRENCY,
+      membership_price_cents: priceCents,
+      currency,
       product_name: MEMBERSHIP_PRODUCT_NAME,
       stripe_enabled: stripeConfigured(),
       publishable_key: stripeConfigured() ? stripePublishableKey() : "",
@@ -2099,6 +2100,19 @@ apiRouter.get(
   "/subscription/config",
   attachUserIfPresent,
   asyncHandler(async (req: UserRequest, res) => {
+    let priceCents = membershipPriceCentsFallback();
+    let currency = SHOP_CURRENCY;
+    let interval: string = MEMBERSHIP_INTERVAL;
+    if (stripeConfigured()) {
+      try {
+        const offer = await resolveMembershipPrice();
+        priceCents = offer.price_cents;
+        currency = offer.currency;
+        interval = offer.interval;
+      } catch {
+        /* fall back */
+      }
+    }
     const account = req.user ? await buildAccountPayload(req.user) : null;
     res.json({
       success: true,
@@ -2107,9 +2121,9 @@ apiRouter.get(
       checkout_hint: stripeConfigured()
         ? null
         : "Membership checkout isn’t available yet — Stripe keys aren’t set.",
-      currency: SHOP_CURRENCY,
-      price_cents: membershipPriceCents(),
-      interval: MEMBERSHIP_INTERVAL,
+      currency,
+      price_cents: priceCents,
+      interval,
       product_name: MEMBERSHIP_PRODUCT_NAME,
       subscription: account?.subscription ?? null,
       plans: [
@@ -2118,9 +2132,9 @@ apiRouter.get(
           name: "AAG Membership",
           description:
             "Ten dollars a month. Every graphic AAG has ever made, requested from your account.",
-          price_cents: membershipPriceCents(),
-          currency: SHOP_CURRENCY,
-          interval: MEMBERSHIP_INTERVAL,
+          price_cents: priceCents,
+          currency,
+          interval,
           featured: true,
           features: [
             "Every graphic AAG has ever made, included",
@@ -2211,226 +2225,29 @@ apiRouter.get(
 );
 
 /**
- * POST /shop/checkout — start a purchase.
- * Validates the order, creates a Stripe PaymentIntent for the fixed price
- * (amount is always set server-side), and records a pending purchase.
- * Accepts JSON or multipart/form-data. Field "customer_photo" (jpg/png)
- * is required when the selected archive graphic has requires_photo enabled.
+ * POST /shop/checkout and /shop/confirm — retired. Membership covers the archive.
  */
 apiRouter.post(
   "/shop/checkout",
   checkoutLimiter,
-  (req: Request, res: Response, next: NextFunction) => {
-    const contentType = String(req.headers["content-type"] || "");
-    if (!contentType.includes("multipart/form-data")) {
-      next();
-      return;
-    }
-    photoUpload.single("customer_photo")(req, res, (err: unknown) => {
-      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-        res.status(413).json({
-          success: false,
-          error: "Photo is too large — 5 MB max. Use JPG or PNG.",
-        });
-        return;
-      }
-      if (err) {
-        next(err);
-        return;
-      }
-      next();
-    });
-  },
-  rejectHoneypot,
-  attachUserIfPresent,
-  asyncHandler(async (req: UserRequest, res) => {
+  asyncHandler(async (_req, res) => {
     res.status(410).json({
       success: false,
       error:
         "Per-graphic purchases are retired. A $10 membership includes every graphic. Request from your account.",
       membership_required: true,
     });
-    return;
-
-    if (!stripeConfigured()) {
-      res.status(503).json({
-        success: false,
-        error: "The shop isn’t available right now. Please try again later.",
-      });
-      return;
-    }
-
-    const parsed = shopCheckoutSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        success: false,
-        error: "Validation failed",
-        details: parsed.error.flatten().fieldErrors,
-      });
-      return;
-    }
-
-    const graphic = await getArchiveGraphicByCode(parsed.data.graphic_code);
-    if (!graphic) {
-      res.status(400).json({
-        success: false,
-        error: "Please pick a graphic from the list.",
-        details: { graphic_code: ["Unknown archive graphic"] },
-      });
-      return;
-    }
-
-    const file = (
-      req as Request & { file?: { buffer?: Buffer; originalname?: string } }
-    ).file;
-    if (graphic.requires_photo && !file?.buffer?.length) {
-      res.status(400).json({
-        success: false,
-        error: "This graphic requires a photo upload (JPG or PNG).",
-        details: {
-          customer_photo: [
-            "Attach a JPG or PNG photo to complete this order",
-          ],
-        },
-      });
-      return;
-    }
-
-    // Validate image bytes before creating a Stripe intent / purchase row.
-    let photoKind: ReturnType<typeof detectJpegOrPng> = null;
-    if (file?.buffer?.length) {
-      photoKind = detectJpegOrPng(file.buffer);
-      if (!photoKind) {
-        res.status(400).json({
-          success: false,
-          error:
-            "That file doesn’t look like a JPG or PNG. Please upload one of those.",
-        });
-        return;
-      }
-    }
-
-    const amount = shopPriceCents();
-    const intent = await getStripe().paymentIntents.create({
-      amount,
-      currency: SHOP_CURRENCY,
-      automatic_payment_methods: { enabled: true },
-      receipt_email: parsed.data.email,
-      description: `${SHOP_PRODUCT_NAME} — ${graphic.label} for “${parsed.data.angel_name}”`,
-      metadata: {
-        product: SHOP_PRODUCT_NAME,
-        graphic_code: graphic.code,
-        graphic_label: graphic.label,
-        angel_name: parsed.data.angel_name,
-        real_name: parsed.data.real_name,
-        requires_photo: graphic.requires_photo ? "true" : "false",
-      },
-    });
-
-    const purchase = await createPurchase({
-      angel_name: parsed.data.angel_name,
-      real_name: parsed.data.real_name,
-      email: parsed.data.email,
-      graphic_code: graphic.code,
-      note: null,
-      amount_cents: amount,
-      currency: SHOP_CURRENCY,
-      stripe_payment_intent_id: intent.id,
-      user_id: req.user?.id ?? null,
-    });
-
-    let hasCustomerPhoto = false;
-    if (file?.buffer?.length && photoKind) {
-      const savedCustomer = await saveCustomerPhoto(purchase.id, file.buffer);
-      if (savedCustomer) {
-        await upsertPurchasePhoto({
-          purchaseId: purchase.id,
-          contentType: savedCustomer.contentType,
-          originalFilename:
-            file.originalname || `customer.${savedCustomer.ext}`,
-          bytes: file.buffer,
-        });
-        await mergePurchaseMetadata(purchase.id, {
-          customer_photo_path: savedCustomer.path,
-          customer_photo_uploaded_at: new Date().toISOString(),
-        });
-        hasCustomerPhoto = true;
-      }
-    }
-
-    logger.info("Shop checkout started", {
-      purchase_id: purchase.id,
-      graphic_code: graphic.code,
-      has_customer_photo: hasCustomerPhoto,
-    });
-
-    res.status(201).json({
-      success: true,
-      client_secret: intent.client_secret,
-      purchase_id: purchase.id,
-      amount_cents: amount,
-      currency: SHOP_CURRENCY,
-    });
   })
 );
 
-/**
- * POST /shop/confirm — after the browser finishes payment, verify the result
- * directly with Stripe (never trusting the client) and update the purchase.
- */
 apiRouter.post(
   "/shop/confirm",
   checkoutLimiter,
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (_req, res) => {
     res.status(410).json({
       success: false,
       error:
         "Per-graphic purchases are retired. A $10 membership includes every graphic.",
-    });
-    return;
-
-    if (!stripeConfigured()) {
-      res.status(503).json({ success: false, error: "Shop unavailable" });
-      return;
-    }
-
-    const parsed = shopConfirmSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: "Invalid payment id" });
-      return;
-    }
-
-    const purchase = await getPurchaseByIntent(parsed.data.payment_intent_id);
-    if (!purchase) {
-      res.status(404).json({ success: false, error: "Purchase not found" });
-      return;
-    }
-
-    const intent = await getStripe().paymentIntents.retrieve(
-      parsed.data.payment_intent_id
-    );
-
-    let status = purchase.status;
-    if (intent.status === "succeeded") {
-      // Keep delivered if an admin already marked it; otherwise mark paid.
-      status = purchase.status === "delivered" ? "delivered" : "paid";
-    } else if (intent.status === "canceled" && purchase.status !== "delivered") {
-      status = "failed";
-    }
-
-    if (status !== purchase.status) {
-      await markPurchaseStatusByIntent(intent.id, status);
-      logger.info("Purchase status updated", { purchase_id: purchase.id, status });
-    }
-
-    res.json({
-      success: true,
-      status,
-      paid: status === "paid" || status === "delivered",
-      message:
-        status === "paid" || status === "delivered"
-          ? "Payment received! Your archive graphic is officially in the queue."
-          : "Payment not completed yet.",
     });
   })
 );

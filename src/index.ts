@@ -14,7 +14,7 @@ import { closePool } from "./db/pool";
 import { markPurchaseStatusByIntent } from "./db/shop";
 import { mailerConfigured } from "./email";
 import { logger } from "./logger";
-import { logger } from "./logger";
+import { authRouter } from "./authRoutes";
 import { apiRouter } from "./routes";
 import { deleteExpiredUserSessions } from "./db/users";
 import { ensureUploadDir, uploadDir } from "./uploads";

@@ -46,10 +46,24 @@
     return (data && data.error) || fallback || "Something went wrong. Please try again.";
   }
 
+  function applyAccount(data) {
+    if (!data || !data.user) return null;
+    var user = data.user;
+    user.angel_names = data.angel_names || [];
+    user.subscription = data.subscription || null;
+    user.extra_angel_slots = data.extra_angel_slots || 0;
+    user.max_angel_names = data.max_angel_names || 5;
+    user.standard_angel_name_cap = data.standard_angel_name_cap || 5;
+    user.pending_name_requests = data.pending_name_requests || [];
+    return user;
+  }
+
   async function refreshSession() {
     try {
       var result = await api("/api/auth/me");
-      currentUser = result.ok && result.data && result.data.success ? result.data.user : null;
+      currentUser = result.ok && result.data && result.data.success
+        ? applyAccount(result.data)
+        : null;
     } catch (e) {
       currentUser = null;
     }
@@ -197,7 +211,7 @@
       '  <form data-auth-pane="register" style="display:none;margin-top:0.4rem">' +
       fieldHtml("auth-reg-name", "Your name", "text", "Who you are IRL", "name") +
       fieldHtml("auth-reg-angel", "Angel’s name (optional)", "text", "Your loved one’s name for graphics", "off",
-        "The name of your deceased loved one, used on their graphics. You can add or change it later.") +
+        "Goes on their graphics. You can add up to 5 names on your profile — more only with studio approval.") +
       fieldHtml("auth-reg-email", "Email", "email", "you@email.com", "email") +
       fieldHtml("auth-reg-password", "Password", "password", "10+ chars, mixed case, number, symbol", "new-password",
         "At least 10 characters with upper &amp; lower case, a number, and a special character.") +
@@ -289,12 +303,12 @@
       else if (btn.dataset.label) { btn.textContent = btn.dataset.label; }
     }
 
-    async function finishAuth(user, message) {
-      currentUser = user;
+    async function finishAuth(data, message) {
+      currentUser = applyAccount(data) || (data && data.user) || data;
       renderNav();
-      document.dispatchEvent(new CustomEvent("aag:auth", { detail: { user: user } }));
+      document.dispatchEvent(new CustomEvent("aag:auth", { detail: { user: currentUser } }));
       setNote(message || "You’re in!", true);
-      setTimeout(function () { close(true, user); }, 700);
+      setTimeout(function () { close(true, currentUser); }, 700);
     }
 
     // Log in
@@ -315,7 +329,7 @@
           setNote(errorText(result, "Invalid email or password."));
           return;
         }
-        await finishAuth(result.data.user, "Welcome back!");
+        await finishAuth(result.data, "Welcome back!");
       } catch (err) {
         setNote("Network glitch. Try again in a sec.");
       } finally {
@@ -343,7 +357,7 @@
           setNote(errorText(result, "Could not create your account."));
           return;
         }
-        await finishAuth(result.data.user, "Account created — welcome!");
+        await finishAuth(result.data, "Account created — welcome!");
       } catch (err) {
         setNote("Network glitch. Try again in a sec.");
       } finally {
