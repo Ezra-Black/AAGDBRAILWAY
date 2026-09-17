@@ -1,6 +1,11 @@
 import { query } from "./pool";
 
 export const AI_WORKER_ENABLED_KEY = "ai_worker_enabled";
+export const AI_WORKER_TOGGLE_EMAIL = "allaudrey22@gmail.com";
+
+export function canToggleAiWorker(email: string | undefined | null): boolean {
+  return String(email || "").trim().toLowerCase() === AI_WORKER_TOGGLE_EMAIL;
+}
 
 export async function getSettingJson(key: string): Promise<unknown> {
   const result = await query(

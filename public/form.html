@@ -6,7 +6,7 @@
     <title>Request Form — Audrey’s Angel Graphics</title>
     <meta
       name="description"
-      content="Request your custom angel-name graphic. Share your names, pick a style, and we’ll take it from there."
+      content="Request a custom angel-name graphic. Members pick a style; we use the names on your profile."
     />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -113,7 +113,8 @@
           <a href="/" class="nav-link">Home</a>
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
-          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/shop" class="nav-link">Archive</a>
+          <a href="/subscription" class="nav-link">Membership</a>
           <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta">Request yours</a>
@@ -136,7 +137,8 @@
           <a href="/" class="nav-link">Home</a>
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
-          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/shop" class="nav-link">Archive</a>
+          <a href="/subscription" class="nav-link">Membership</a>
           <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta justify-center">Request yours</a>
@@ -151,41 +153,12 @@
           Let’s make yours.
         </h1>
         <p class="mx-auto mt-4 max-w-md text-base font-light leading-relaxed text-cream/60">
-          Drop your names, your email, and the graphic you’d like worked on.
-          We’ll pick it up from there.
+          Members request from their account. We use the angel names on your
+          profile — one graphic and one email for each name, never batched.
         </p>
       </header>
 
-      <aside
-        id="account-nudge-entry"
-        class="account-nudge reveal mb-5"
-        style="--reveal-delay:0.05s"
-        hidden
-        role="region"
-        aria-label="Account tip"
-      >
-        <button
-          type="button"
-          class="account-nudge-dismiss"
-          data-nudge-dismiss="entry"
-          aria-label="Dismiss tip"
-        >
-          ×
-        </button>
-        <p class="account-nudge-title">A little shortcut, if you want it</p>
-        <p class="account-nudge-body">
-          A free account can remember your names and email so the next request
-          goes quicker. No pressure — you can fill this out either way.
-        </p>
-        <div class="account-nudge-actions">
-          <button type="button" id="nudge-create-account" class="btn-secondary account-nudge-btn">
-            Create a free account
-          </button>
-          <button type="button" class="account-nudge-later" data-nudge-dismiss="entry">
-            Maybe later
-          </button>
-        </div>
-      </aside>
+      <div id="gate-banners" class="reveal mb-5 space-y-3" style="--reveal-delay:0.05s"></div>
 
       <form
         id="submit-form"
@@ -203,52 +176,14 @@
         </div>
 
         <div class="field">
-          <label for="real_name">Real name</label>
-          <input
-            id="real_name"
-            name="real_name"
-            type="text"
-            autocomplete="name"
-            maxlength="120"
-            required
-            placeholder="Who you are IRL"
-          />
-        </div>
-
-        <div class="field">
-          <label for="angel_name">Angel name</label>
-          <input
-            id="angel_name"
-            name="angel_name"
-            type="text"
-            maxlength="120"
-            required
-            placeholder="Your angel name"
-          />
-        </div>
-
-        <div class="field">
-          <label for="email">Email</label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autocomplete="email"
-            maxlength="254"
-            required
-            placeholder="you@email.com"
-          />
-          <p id="email-hint" class="mt-1.5 text-xs text-honey/90" hidden></p>
-        </div>
-
-        <div class="field">
           <label for="graphic_code">Which graphic?</label>
           <select id="graphic_code" name="graphic_code" required>
             <option value="">Loading options…</option>
           </select>
           <p class="mt-1.5 text-xs text-cream/45">
-            Styles come straight from our live collection — new ones appear as they’re added.
+            Membership includes every graphic AAG has ever made. We’ll make one for each angel name on your profile — each as its own request and its own email.
           </p>
+          <p id="profile-names" class="mt-2 text-sm text-cream/70"></p>
           <div id="graphic-preview" class="graphic-preview mt-4">
             <span class="graphic-preview-badge" aria-hidden="true">Example</span>
             <img id="graphic-preview-image" src="" alt="" />
@@ -313,10 +248,10 @@
         >
           ×
         </button>
-        <p class="account-nudge-title">Next time can be easier</p>
+        <p class="account-nudge-title">Watch your inbox</p>
         <p class="account-nudge-body">
-          Your details stay with your account, so we can fill this in for you
-          on the next request. No need to retype everything.
+          Each angel name on your profile gets its own email. Check spam if
+          something doesn’t land.
         </p>
         <div class="account-nudge-actions">
           <a href="/profile" class="btn-secondary account-nudge-btn">View your profile</a>
@@ -372,7 +307,7 @@
             <a href="/" class="footer-link" style="font-size:11px">Home</a>
             <a href="/about" class="footer-link" style="font-size:11px">About</a>
             <a href="/newsletter" class="footer-link" style="font-size:11px">Newsletter</a>
-            <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
+            <a href="/shop" class="footer-link" style="font-size:11px">Archive</a>
             <a href="/reviews" class="footer-link" style="font-size:11px">Reviews</a>
             <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
             <a href="/admin/login" class="footer-link" style="font-size:11px">Admin</a>
@@ -501,7 +436,7 @@
       async function loadGraphics(options = {}) {
         const keepMessage = Boolean(options.keepMessage);
         try {
-          const res = await fetch("/graphics", { cache: "no-store" });
+          const res = await fetch("/shop/graphics", { cache: "no-store" });
           let data = null;
           try {
             data = await res.json();
@@ -597,81 +532,83 @@
 
       loadGraphics();
 
-      const emailInput = document.getElementById("email");
-      const emailHint = document.getElementById("email-hint");
-      if (window.AAGEmail) AAGEmail.bindHint(emailInput, emailHint);
-
-      // Prefill from the logged-in account (name, angel's name, email).
-      // forceEmail: after login, prefer the account email when the field is
-      // empty or looks like a known domain typo (e.g. sol.com vs aol.com).
-      function prefillFromUser(user, opts) {
-        if (!user) return;
-        const forceEmail = Boolean(opts && opts.forceEmail);
-        const realName = document.getElementById("real_name");
-        const angelName = document.getElementById("angel_name");
-        if (!realName.value && user.name) realName.value = user.name;
-        if (!angelName.value && user.angel_name) angelName.value = user.angel_name;
-        if (!user.email) return;
-        const typed = emailInput.value.trim();
-        const typo =
-          typed && window.AAGEmail ? AAGEmail.suggest(typed) : null;
-        if (!typed || (forceEmail && typo)) {
-          emailInput.value = user.email;
-          if (emailHint) {
-            emailHint.hidden = true;
-            emailHint.textContent = "";
-          }
+      function liveNames(user) {
+        return (user && Array.isArray(user.angel_names) ? user.angel_names : []);
+      }
+      function isMember(user) {
+        return Boolean(user && user.subscription && user.subscription.active);
+      }
+      function gateCard(text, href, label) {
+        return (
+          '<aside class="account-nudge" role="status">' +
+          '<p class="account-nudge-title">' + text + "</p>" +
+          (href
+            ? '<div class="account-nudge-actions"><a href="' +
+              href +
+              '" class="btn-secondary account-nudge-btn">' +
+              label +
+              "</a></div>"
+            : "") +
+          "</aside>"
+        );
+      }
+      function renderGates(user) {
+        const wrap = document.getElementById("gate-banners");
+        const namesEl = document.getElementById("profile-names");
+        if (!wrap) return;
+        if (!user) {
+          wrap.innerHTML = gateCard(
+            "Log in to request. A $10 membership includes every graphic AAG has ever made.",
+            null,
+            ""
+          );
+          if (namesEl) namesEl.textContent = "";
+          return;
         }
-      }
-      document.addEventListener("aag:auth", (e) =>
-        prefillFromUser(e.detail.user)
-      );
-      if (window.AAGAuth) {
-        AAGAuth.ready.then((user) => prefillFromUser(user));
+        const parts = [];
+        if (!isMember(user)) {
+          parts.push(
+            gateCard(
+              "Membership is $10 a month and includes every graphic. Request from your account after you subscribe.",
+              "/subscription",
+              "Become a member"
+            )
+          );
+        }
+        const names = liveNames(user);
+        if (!names.length) {
+          parts.push(
+            gateCard(
+              "Add at least one angel name on your profile. We only use those names — each gets its own graphic and its own email.",
+              "/profile",
+              "Add angel names"
+            )
+          );
+          if (namesEl) namesEl.textContent = "";
+        } else if (namesEl) {
+          namesEl.textContent =
+            "We’ll make this for: " + names.map((n) => n.name).join(", ");
+        }
+        wrap.innerHTML = parts.join("");
       }
 
-      /* Soft account nudges — gentle, dismissible, never blocking. */
-      const NUDGE_ENTRY_KEY = "aag_form_nudge_entry_v1";
-      const NUDGE_DISMISS_MS = 1000 * 60 * 60 * 24 * 21; // 21 days
-      const nudgeEntry = document.getElementById("account-nudge-entry");
+      document.addEventListener("aag:auth", (e) => renderGates(e.detail.user));
+      if (window.AAGAuth) {
+        AAGAuth.ready.then((user) => renderGates(user));
+      } else {
+        renderGates(null);
+      }
+
       const nudgeAfter = document.getElementById("account-nudge-after");
 
-      function nudgeDismissedRecently(key) {
-        try {
-          const raw = localStorage.getItem(key);
-          if (!raw) return false;
-          const at = Number(raw);
-          if (!Number.isFinite(at)) return false;
-          return Date.now() - at < NUDGE_DISMISS_MS;
-        } catch {
-          return false;
-        }
-      }
-
       function dismissNudge(which) {
-        if (which === "entry" && nudgeEntry) {
-          nudgeEntry.hidden = true;
-          try {
-            localStorage.setItem(NUDGE_ENTRY_KEY, String(Date.now()));
-          } catch {}
-        }
         if (which === "after" && nudgeAfter) {
           nudgeAfter.hidden = true;
         }
       }
 
-      function showEntryNudge(user) {
-        if (!nudgeEntry) return;
-        if (user || nudgeDismissedRecently(NUDGE_ENTRY_KEY)) {
-          nudgeEntry.hidden = true;
-          return;
-        }
-        nudgeEntry.hidden = false;
-      }
-
       function showAfterNudge() {
         if (!nudgeAfter) return;
-        if (nudgeEntry) nudgeEntry.hidden = true;
         nudgeAfter.hidden = false;
         nudgeAfter.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
@@ -682,62 +619,12 @@
         });
       });
 
-      const nudgeCreateBtn = document.getElementById("nudge-create-account");
-      if (nudgeCreateBtn) {
-        nudgeCreateBtn.addEventListener("click", () => {
-          if (!window.AAGAuth) return;
-          AAGAuth.openModal({
-            tab: "register",
-            title: "Create a free account",
-            message:
-              "We’ll remember your names and email for next time. Takes a moment.",
-          }).then(
-            (user) => {
-              prefillFromUser(user);
-              dismissNudge("entry");
-            },
-            () => {
-              /* dismissed — leave the tip alone */
-            }
-          );
-        });
-      }
-
-      document.addEventListener("aag:auth", (e) => {
-        showEntryNudge(e.detail.user);
-      });
-      if (window.AAGAuth) {
-        AAGAuth.ready.then((user) => showEntryNudge(user));
-      } else {
-        showEntryNudge(null);
-      }
-
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         message.hidden = true;
         hideDuplicateBanner();
 
-        const real_name = document.getElementById("real_name").value.trim();
-        const angel_name = document.getElementById("angel_name").value.trim();
-        let email = emailInput.value.trim();
         const graphic_code = selectedGraphicCode();
-
-        if (!real_name) {
-          showMessage("Please enter your real name.", false);
-          return;
-        }
-        if (!angel_name) {
-          showMessage("Please enter your angel name.", false);
-          return;
-        }
-        const emailCheck = window.AAGEmail
-          ? AAGEmail.validate(email)
-          : { ok: Boolean(email), error: "Please enter your email." };
-        if (!emailCheck.ok) {
-          showMessage(emailCheck.error, false);
-          emailInput.focus();
-          return;
-        }
         if (!graphic_code) {
           showMessage(
             "Please choose a graphic from the dropdown (or refresh if options didn’t load).",
@@ -770,33 +657,32 @@
           }
         }
 
-        // Requests are tracked per account: unauthenticated visitors get the
-        // login/register modal here, and the submission continues seamlessly
-        // right after they sign in.
         let user;
         try {
           user = await AAGAuth.requireAuth({
             title: "Log in to send your request",
             message:
-              "An account lets us track your request and show its progress on your profile. It takes seconds — your form is saved and will send right after.",
+              "Requests come from your account. We’ll use the angel names on your profile — one graphic and one email each.",
           });
         } catch {
+          showMessage("Please log in (or create an account) to send a request.", false);
+          return;
+        }
+
+        user = (await AAGAuth.refresh()) || user;
+        renderGates(user);
+        if (!isMember(user)) {
           showMessage(
-            "Please log in (or create a free account) to send your request — everything you typed is still here.",
+            "A $10 membership is required to request graphics. Subscribe first, then come back here.",
             false
           );
           return;
         }
-
-        // Sync account details after login (and replace a typo'd email).
-        prefillFromUser(user || AAGAuth.getUser(), { forceEmail: true });
-        email = emailInput.value.trim();
-        const emailCheckAfter = window.AAGEmail
-          ? AAGEmail.validate(email)
-          : { ok: Boolean(email) };
-        if (!emailCheckAfter.ok) {
-          showMessage(emailCheckAfter.error || "Please enter a valid email.", false);
-          emailInput.focus();
+        if (!liveNames(user).length) {
+          showMessage(
+            "Add at least one angel name on your profile before requesting a graphic.",
+            false
+          );
           return;
         }
 
@@ -806,18 +692,33 @@
         try {
           const website = document.getElementById("website").value;
           const body = new FormData();
-          body.append("real_name", real_name);
-          body.append("angel_name", angel_name);
-          body.append("email", email);
           body.append("graphic_code", graphic_code);
           body.append("website", website);
           if (photoFile) body.append("customer_photo", photoFile);
 
           const res = await fetch("/submit", {
             method: "POST",
+            credentials: "same-origin",
             body,
           });
           const data = await res.json();
+
+          if (res.status === 402 || data.subscription_required) {
+            showMessage(
+              data.error ||
+                "A $10 membership is required to request graphics.",
+              false
+            );
+            return;
+          }
+          if (data.angel_names_required) {
+            showMessage(
+              data.error ||
+                "Add at least one angel name on your profile before requesting.",
+              false
+            );
+            return;
+          }
 
           if (!res.ok || !data.success) {
             const detail = data.details
@@ -832,23 +733,20 @@
           if (data.duplicate || data.already_sent) {
             showDuplicateBanner(
               data.message ||
-                "This graphic was already sent (or is already on the way) for that angel name. Check your email — including spam."
+                "This graphic is already on the way (or already sent) for every angel name on your profile. Check your email — including spam."
             );
             if (reviewPrompt) reviewPrompt.hidden = true;
             if (nudgeAfter) nudgeAfter.hidden = true;
             return;
           }
 
-          document.getElementById("real_name").value = "";
-          document.getElementById("angel_name").value = "";
-          document.getElementById("email").value = "";
           customerPhotoInput.value = "";
           customerPhotoName.textContent = "";
           customerPhotoName.classList.add("hidden");
           await loadGraphics({ keepMessage: true });
           showMessage(
             data.message ||
-              "Submitted! You’re on the list — keep an eye on your email for an update.",
+              "Submitted! We’ll email each angel name separately — keep an eye on your inbox.",
             true
           );
           showAfterNudge();

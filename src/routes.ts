@@ -22,18 +22,17 @@ import {
   archiveCompletedEntries,
   createEntry,
   emailExistsInEntries,
-  findExistingGraphicClaim,
-  findRecentDuplicateClaim,
-  findRecentSubmissionForRequester,
+  findOpenGraphicClaimForUser,
   getEntryByAngelName,
   getEntryById,
   getEntryByRealName,
-  listAngelGroupsForAdmin,
+  listAdminEntries,
   listEntries,
   listFailedPipelineAlerts,
   listPending,
-  markAngelNameComplete,
-  setAngelNameArchived,
+  markEntryComplete,
+  requeueEntry,
+  setEntryArchived,
   updateEntryStatus,
 } from "./db/entries";
 import { createAdmin, getAdminByEmail } from "./db/admins";
@@ -86,21 +85,15 @@ import { getAnalyticsSummary, recordPageView } from "./db/analytics";
 import {
   archiveGraphicOption,
   archivePaidPurchases,
-  createPurchase,
-  getArchiveGraphicByCode,
   getPurchaseById,
-  getPurchaseByIntent,
   listArchiveGraphics,
   listPurchasesForAdmin,
-  markPurchaseStatusByIntent,
-  mergePurchaseMetadata,
   setArchiveGraphicRequiresPhoto,
   setPurchaseArchived,
   setPurchaseStatus,
 } from "./db/shop";
 import {
   getPurchasePhoto,
-  upsertPurchasePhoto,
 } from "./db/purchasePhotos";
 import {
   createReview,
@@ -121,10 +114,13 @@ import {
   threadCounts,
 } from "./db/messages";
 import {
-  getStripe,
+  createBillingPortalSession,
+  createMembershipCheckoutSession,
+  MEMBERSHIP_INTERVAL,
+  MEMBERSHIP_PRODUCT_NAME,
+  membershipPriceCentsFallback,
+  resolveMembershipPrice,
   SHOP_CURRENCY,
-  SHOP_PRODUCT_NAME,
-  shopPriceCents,
   stripeConfigured,
   stripePublishableKey,
 } from "./stripe";
@@ -139,8 +135,12 @@ import {
   facebookConfigured,
   verifyFacebookToken,
 } from "./facebook";
-import { sendContactEmail, sendInboxReplyEmail, siteOriginFromRequest } from "./email";
-import { isAiWorkerEnabled, setAiWorkerEnabled } from "./db/settings";
+import { sendContactEmail, sendGraphicDeliveryEmail, sendInboxReplyEmail, siteOriginFromRequest } from "./email";
+import {
+  canToggleAiWorker,
+  isAiWorkerEnabled,
+  setAiWorkerEnabled,
+} from "./db/settings";
 import {
   adminGraphicCreateSchema,
   adminGraphicRequiresPhotoSchema,
@@ -158,14 +158,36 @@ import {
   newsletterSubscribeSchema,
   pageViewSchema,
   PASSWORD_RULES,
-  shopCheckoutSchema,
-  shopConfirmSchema,
+  reviewAngelNameRequestSchema,
   statusSchema,
   submitSchema,
   threadReplySchema,
   threadStatusSchema,
   uuidSchema,
 } from "./validation";
+import {
+  listAngelNameRequestsForAdmin,
+  listLiveAngelNames,
+  pendingAngelNameRequestCount,
+  reviewAngelNameRequest,
+} from "./db/angelNames";
+import {
+  getSubscriptionForUser,
+  listSubscriptionsForAdmin,
+  userHasActiveSubscription,
+} from "./db/subscriptions";
+import { buildAccountPayload } from "./account";
+import { safeAngelFilename } from "./worker/placeholders";
+
+function envTrim(name: string): string {
+  return process.env[name]?.trim() || "";
+}
+
+function adminJoinEnabled(): boolean {
+  return ["1", "true", "yes", "on"].includes(
+    envTrim("ALLOW_ADMIN_JOIN").toLowerCase()
+  );
+}
 
 export const apiRouter = Router();
 
@@ -205,13 +227,17 @@ apiRouter.post(
 );
 
 /**
- * POST /admin/join/check — email must already exist in form submissions
- * and must not already be an admin.
+ * POST /admin/join/check — disabled unless ALLOW_ADMIN_JOIN=true
  */
 apiRouter.post(
   "/admin/join/check",
   loginLimiter,
   asyncHandler(async (req, res) => {
+    if (!adminJoinEnabled()) {
+      res.status(404).json({ success: false, error: "Not found" });
+      return;
+    }
+
     const parsed = adminJoinCheckSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
@@ -251,11 +277,16 @@ apiRouter.post(
   })
 );
 
-/** POST /admin/join — create admin account for a known submission email */
+/** POST /admin/join — create admin; gated by ALLOW_ADMIN_JOIN=true */
 apiRouter.post(
   "/admin/join",
   loginLimiter,
   asyncHandler(async (req, res) => {
+    if (!adminJoinEnabled()) {
+      res.status(404).json({ success: false, error: "Not found" });
+      return;
+    }
+
     const parsed = adminJoinSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
@@ -318,8 +349,9 @@ apiRouter.get(
   })
 );
 
-/** GET /admin/entries — angel names grouped with graphics + all emails.
- *  Query params: graphic_code, q (search), status (pending|complete), archived (1/true).
+/** GET /admin/entries — one row per request.
+ *  Query: graphic_code, q, status (pending|processing|processed|failed|complete),
+ *  archived, limit, offset.
  */
 apiRouter.get(
   "/admin/entries",
@@ -334,55 +366,67 @@ apiRouter.get(
     const statusRaw =
       typeof req.query.status === "string" ? req.query.status.trim() : "";
     const status =
-      statusRaw === "pending" || statusRaw === "complete" ? statusRaw : null;
+      statusRaw === "pending" ||
+      statusRaw === "processing" ||
+      statusRaw === "processed" ||
+      statusRaw === "failed" ||
+      statusRaw === "complete"
+        ? statusRaw
+        : null;
     const archived =
       req.query.archived === "1" || req.query.archived === "true";
+    const limit = Math.min(Number(req.query.limit) || 100, 200);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
 
-    const groups = await listAngelGroupsForAdmin(2000, {
+    const { rows, total } = await listAdminEntries({
       graphicCode: graphicCode || null,
       search: search || undefined,
       status,
       archived,
+      limit,
+      offset,
     });
     res.json({
       success: true,
-      count: groups.length,
+      count: rows.length,
+      total,
+      limit,
+      offset,
       filter: graphicCode || null,
       archived,
-      groups,
+      entries: rows,
     });
   })
 );
 
-/** PATCH /admin/angel-names/archive — archive or restore all rows for a name */
+/** PATCH /admin/entries/:id/archive — archive or restore one request */
 apiRouter.patch(
-  "/admin/angel-names/archive",
+  "/admin/entries/:id/archive",
   requireAdmin,
   asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid entry ID" });
+      return;
+    }
     const parsed = z
-      .object({
-        angel_name: z.string().trim().min(1).max(120),
-        archived: z.boolean(),
-      })
+      .object({ archived: z.boolean() })
       .strict()
       .safeParse(req.body);
     if (!parsed.success) {
-      res
-        .status(400)
-        .json({ success: false, error: "angel_name and archived are required" });
+      res.status(400).json({ success: false, error: "archived is required" });
       return;
     }
-
-    const updated = await setAngelNameArchived(
-      parsed.data.angel_name,
-      parsed.data.archived
-    );
-    logger.info("Admin toggled angel name archive", {
-      angel_name: parsed.data.angel_name,
+    const ok = await setEntryArchived(idCheck.data, parsed.data.archived);
+    if (!ok) {
+      res.status(404).json({ success: false, error: "Entry not found" });
+      return;
+    }
+    logger.info("Admin toggled entry archive", {
+      id: idCheck.data,
       archived: parsed.data.archived,
-      updated,
     });
-    res.json({ success: true, updated });
+    res.json({ success: true });
   })
 );
 
@@ -438,9 +482,13 @@ apiRouter.post(
 apiRouter.get(
   "/admin/ai-worker",
   requireAdmin,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req: AdminRequest, res) => {
     const enabled = await isAiWorkerEnabled();
-    res.json({ success: true, enabled });
+    res.json({
+      success: true,
+      enabled,
+      can_toggle: canToggleAiWorker(req.admin?.email),
+    });
   })
 );
 
@@ -448,7 +496,14 @@ apiRouter.get(
 apiRouter.patch(
   "/admin/ai-worker",
   requireAdmin,
-  asyncHandler(async (req, res) => {
+  asyncHandler(async (req: AdminRequest, res) => {
+    if (!canToggleAiWorker(req.admin?.email)) {
+      res.status(403).json({
+        success: false,
+        error: "Only the owner account can turn AI on or off",
+      });
+      return;
+    }
     const enabled = req.body?.enabled;
     if (typeof enabled !== "boolean") {
       res.status(400).json({
@@ -458,11 +513,14 @@ apiRouter.patch(
       return;
     }
     await setAiWorkerEnabled(enabled);
-    logger.info("Admin toggled AI worker", { enabled });
+    logger.info("Admin toggled AI worker", {
+      enabled,
+      email: req.admin?.email,
+    });
     console.error(
       `[ai-worker] admin set enabled=${enabled}`
     );
-    res.json({ success: true, enabled });
+    res.json({ success: true, enabled, can_toggle: true });
   })
 );
 
@@ -503,6 +561,78 @@ apiRouter.post(
   asyncHandler(async (_req, res) => {
     const updated = await ackFailedPipelineAlerts();
     res.json({ success: true, updated });
+  })
+);
+
+apiRouter.get(
+  "/admin/members/name-requests",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const statusRaw =
+      typeof req.query.status === "string" ? req.query.status.trim() : "pending";
+    const status =
+      statusRaw === "pending" ||
+      statusRaw === "approved" ||
+      statusRaw === "denied" ||
+      statusRaw === "all"
+        ? statusRaw
+        : "pending";
+    const requests = await listAngelNameRequestsForAdmin({ status });
+    const pending = await pendingAngelNameRequestCount();
+    res.json({ success: true, count: requests.length, pending, requests });
+  })
+);
+
+apiRouter.patch(
+  "/admin/members/name-requests/:id",
+  requireAdmin,
+  asyncHandler(async (req: AdminRequest, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid request id" });
+      return;
+    }
+    const parsed = reviewAngelNameRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: "Validation failed",
+        details: parsed.error.flatten().fieldErrors,
+      });
+      return;
+    }
+    try {
+      const updated = await reviewAngelNameRequest({
+        id: idCheck.data,
+        adminId: req.admin!.id,
+        status: parsed.data.status,
+        adminNote: parsed.data.admin_note ?? null,
+      });
+      if (!updated) {
+        res.status(404).json({ success: false, error: "Request not found" });
+        return;
+      }
+      logger.info("Admin reviewed angel name request", {
+        id: updated.id,
+        status: updated.status,
+      });
+      res.json({ success: true, request: updated });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      res.status(code === "ALREADY_REVIEWED" ? 409 : 400).json({
+        success: false,
+        error: err instanceof Error ? err.message : "Could not review",
+      });
+    }
+  })
+);
+
+apiRouter.get(
+  "/admin/members/subscriptions",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const subscriptions = await listSubscriptionsForAdmin();
+    res.json({ success: true, count: subscriptions.length, subscriptions });
   })
 );
 
@@ -735,26 +865,93 @@ apiRouter.delete(
   })
 );
 
-/** PATCH /admin/angel-names/complete — mark all rows for a name as processed */
+/** PATCH /admin/entries/:id/complete — mark this request processed */
 apiRouter.patch(
-  "/admin/angel-names/complete",
+  "/admin/entries/:id/complete",
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const parsed = z
-      .object({ angel_name: z.string().trim().min(1).max(120) })
-      .strict()
-      .safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: "angel_name is required" });
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid entry ID" });
+      return;
+    }
+    const result = await markEntryComplete(idCheck.data);
+    if (!result.updated) {
+      if (result.reason === "processing") {
+        res.status(409).json({
+          success: false,
+          error:
+            "The worker is generating this graphic right now. Wait, or retry after it fails.",
+        });
+        return;
+      }
+      res.status(404).json({ success: false, error: "Entry not found or already complete" });
+      return;
+    }
+    logger.info("Admin marked entry complete", { id: idCheck.data });
+    res.json({ success: true });
+  })
+);
+
+/** POST /admin/entries/:id/retry — requeue, or resend email if art already exists */
+apiRouter.post(
+  "/admin/entries/:id/retry",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const idCheck = uuidSchema.safeParse(req.params.id);
+    if (!idCheck.success) {
+      res.status(400).json({ success: false, error: "Invalid entry ID" });
+      return;
+    }
+    const entry = await getEntryById(idCheck.data);
+    if (!entry) {
+      res.status(404).json({ success: false, error: "Entry not found" });
+      return;
+    }
+    if (entry.status === "processing") {
+      res.status(409).json({
+        success: false,
+        error: "This request is already being generated.",
+      });
       return;
     }
 
-    const updated = await markAngelNameComplete(parsed.data.angel_name);
-    logger.info("Admin marked angel name complete", {
-      angel_name: parsed.data.angel_name,
-      updated,
-    });
-    res.json({ success: true, updated });
+    const generated = await getEntryPhoto(entry.id, "generated");
+    const email = entry.email?.trim();
+    if (generated && email) {
+      const filename =
+        generated.original_filename || safeAngelFilename(entry.angel_name);
+      const sent = await sendGraphicDeliveryEmail({
+        to: email,
+        angelName: entry.angel_name,
+        filename,
+        image: generated.bytes,
+        contentType: generated.content_type,
+      });
+      if (!sent) {
+        res.status(502).json({
+          success: false,
+          error: "Could not send the email. Check SMTP, then try again.",
+        });
+        return;
+      }
+      await updateEntryStatus(entry.id, "processed", {
+        photo_sent: "true",
+        resent_at: new Date().toISOString(),
+        failure_acked: "true",
+      });
+      logger.info("Admin resent generated graphic", { id: entry.id });
+      res.json({ success: true, resent: true });
+      return;
+    }
+
+    const queued = await requeueEntry(entry.id);
+    if (!queued.updated) {
+      res.status(409).json({ success: false, error: "Could not requeue this request" });
+      return;
+    }
+    logger.info("Admin requeued entry", { id: entry.id });
+    res.json({ success: true, resent: false, requeued: true });
   })
 );
 
@@ -806,7 +1003,7 @@ apiRouter.post(
     });
   },
   rejectHoneypot,
-  attachUserIfPresent,
+  requireUser,
   asyncHandler(async (req: UserRequest, res) => {
     const parsed = submitSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -818,7 +1015,29 @@ apiRouter.post(
       return;
     }
 
-    const { real_name, angel_name, email, graphic_code } = parsed.data;
+    const user = req.user!;
+    const { graphic_code } = parsed.data;
+
+    const subscribed = await userHasActiveSubscription(user.id);
+    if (!subscribed) {
+      res.status(402).json({
+        success: false,
+        error: "A $10 membership is required to request graphics.",
+        subscription_required: true,
+      });
+      return;
+    }
+
+    const names = await listLiveAngelNames(user.id);
+    if (!names.length) {
+      res.status(400).json({
+        success: false,
+        error:
+          "Add at least one angel name on your profile before requesting a graphic.",
+        angel_names_required: true,
+      });
+      return;
+    }
 
     const validCode = await graphicCodeExists(graphic_code);
     if (!validCode) {
@@ -847,134 +1066,9 @@ apiRouter.post(
       return;
     }
 
-    // When true (default), the same angel name may request a different
-    // graphic. Duplicate blocking is scoped to email + angel + graphic.
-    const allowSameNameDifferentGraphic = !["0", "false", "no", "off"].includes(
-      String(process.env.ALLOW_SAME_NAME_DIFFERENT_GRAPHIC ?? "true")
-        .trim()
-        .toLowerCase()
-    );
-
-    const DUPLICATE_ALREADY_SENT_MESSAGE =
-      "This graphic was already sent (or is already on the way) for that angel name. Check your email — including spam.";
-    const cooldownHours = Number(process.env.SUBMIT_COOLDOWN_HOURS) || 24;
-    const RATE_LIMIT_MESSAGE = `You can only request one graphic every ${cooldownHours} hours. Please check your email for your current request, or try again later.`;
-
-    // Exact combo already on file — don't create another row.
-    const existingSameGraphic = await findExistingGraphicClaim(
-      email,
-      angel_name,
-      graphic_code
-    );
-    if (existingSameGraphic) {
-      logger.info("Blocked duplicate graphic claim", {
-        email,
-        angel_name,
-        graphic_code,
-        existing_id: existingSameGraphic.id,
-      });
-      res.status(200).json({
-        success: true,
-        duplicate: true,
-        already_sent: true,
-        message: DUPLICATE_ALREADY_SENT_MESSAGE,
-        entry: existingSameGraphic,
-      });
-      return;
-    }
-
-    // One request per email / account per cooldown window (default 24h).
-    const recentByRequester = await findRecentSubmissionForRequester(
-      email,
-      cooldownHours,
-      req.user?.id ?? null
-    );
-    if (recentByRequester) {
-      logger.info("Blocked submit — requester cooldown", {
-        email,
-        user_id: req.user?.id ?? null,
-        graphic_code,
-        existing_id: recentByRequester.id,
-        cooldown_hours: cooldownHours,
-      });
-      res.status(200).json({
-        success: true,
-        duplicate: true,
-        already_sent: true,
-        rate_limited: true,
-        message: RATE_LIMIT_MESSAGE,
-        entry: recentByRequester,
-      });
-      return;
-    }
-
-    // With the flag on, also catch same angel + same graphic inside the
-    // window (covers edge cases); with it off, any resubmit of that angel
-    // name for this email is held.
-    const recentSameClaim = await findRecentDuplicateClaim(
-      email,
-      angel_name,
-      cooldownHours,
-      allowSameNameDifferentGraphic ? graphic_code : null
-    );
-    if (recentSameClaim) {
-      logger.info("Blocked rapid multi-submit", {
-        email,
-        angel_name,
-        graphic_code,
-        existing_id: recentSameClaim.id,
-      });
-      res.status(200).json({
-        success: true,
-        duplicate: true,
-        already_sent: true,
-        message: DUPLICATE_ALREADY_SENT_MESSAGE,
-        entry: recentSameClaim,
-      });
-      return;
-    }
-
-    // Legacy mode: block a second graphic for an angel name that already
-    // exists anywhere (not just for this email).
-    if (!allowSameNameDifferentGraphic) {
-      const existingName = await getEntryByAngelName(angel_name);
-      if (existingName) {
-        logger.info("Blocked same-name different-graphic (flag off)", {
-          email,
-          angel_name,
-          graphic_code,
-          existing_id: existingName.id,
-        });
-        res.status(200).json({
-          success: true,
-          duplicate: true,
-          already_sent: true,
-          message: DUPLICATE_ALREADY_SENT_MESSAGE,
-          entry: existingName,
-        });
-        return;
-      }
-    }
-
-    let savedCustomer:
-      | { path: string; contentType: string; ext: string }
-      | null = null;
-
-    const entry = await createEntry({
-      real_name,
-      angel_name,
-      email,
-      graphic_code,
-      user_id: req.user?.id ?? null,
-    });
-
     if (file?.buffer?.length) {
-      savedCustomer = await saveCustomerPhoto(entry.id, file.buffer);
-      if (!savedCustomer) {
-        await updateEntryStatus(entry.id, "failed", {
-          error: "Invalid customer photo — JPG or PNG only",
-          failure_acked: "true",
-        });
+      const kind = detectJpegOrPng(file.buffer);
+      if (!kind) {
         res.status(400).json({
           success: false,
           error:
@@ -982,38 +1076,90 @@ apiRouter.post(
         });
         return;
       }
-      await upsertEntryPhoto({
-        entryId: entry.id,
-        kind: "customer",
-        contentType: savedCustomer.contentType,
-        originalFilename:
-          file.originalname || `customer.${savedCustomer.ext}`,
-        bytes: file.buffer,
-      });
-      await updateEntryStatus(entry.id, entry.status, {
-        customer_photo_path: savedCustomer.path,
-        customer_photo_uploaded_at: new Date().toISOString(),
-      });
     }
 
-    const refreshed = (await getEntryById(entry.id)) || entry;
+    const created = [];
+    const skipped = [];
 
-    logger.info("Entry created", {
-      id: refreshed.id,
-      angel_name: refreshed.angel_name,
-      graphic_code: refreshed.graphic_code,
-      status: refreshed.status,
-      has_customer_photo: Boolean(savedCustomer),
-      allow_same_name_different_graphic: allowSameNameDifferentGraphic,
+    for (const angel of names) {
+      const existing = await findOpenGraphicClaimForUser(
+        user.id,
+        angel.name,
+        graphic_code
+      );
+      if (existing) {
+        skipped.push({
+          angel_name: angel.name,
+          entry_id: existing.id,
+          status: existing.status,
+        });
+        continue;
+      }
+
+      const entry = await createEntry({
+        real_name: user.name,
+        angel_name: angel.name,
+        email: user.email,
+        graphic_code,
+        user_id: user.id,
+        metadata: { fanout: true, angel_name_id: angel.id },
+      });
+
+      if (file?.buffer?.length) {
+        const savedCustomer = await saveCustomerPhoto(entry.id, file.buffer);
+        if (savedCustomer) {
+          await upsertEntryPhoto({
+            entryId: entry.id,
+            kind: "customer",
+            contentType: savedCustomer.contentType,
+            originalFilename:
+              file.originalname || `customer.${savedCustomer.ext}`,
+            bytes: file.buffer,
+          });
+          await updateEntryStatus(entry.id, entry.status, {
+            customer_photo_path: savedCustomer.path,
+            customer_photo_uploaded_at: new Date().toISOString(),
+          });
+        }
+      }
+
+      created.push(entry);
+    }
+
+    if (!created.length) {
+      res.status(200).json({
+        success: true,
+        duplicate: true,
+        already_sent: true,
+        created_count: 0,
+        skipped_count: skipped.length,
+        skipped,
+        message:
+          "This graphic is already on the way (or already sent) for every angel name on your profile.",
+      });
+      return;
+    }
+
+    logger.info("Membership request fan-out", {
+      user_id: user.id,
+      graphic_code,
+      created: created.length,
+      skipped: skipped.length,
     });
 
+    const count = created.length;
     res.status(201).json({
       success: true,
       duplicate: false,
       already_sent: false,
+      created_count: count,
+      skipped_count: skipped.length,
+      skipped,
+      entries: created,
       message:
-        "Submitted! You’re on the list — keep an eye on your email for an update.",
-      entry: refreshed,
+        count === 1
+          ? `Submitted for ${created[0].angel_name}. Watch your email for that graphic.`
+          : `Submitted ${count} separate requests — one email per angel name.`,
     });
   })
 );
@@ -1919,25 +2065,152 @@ apiRouter.patch(
   })
 );
 
-/* ═══════════ Shop — the $5 AAG Archive Graphic ═══════════ */
+/* ═══════════ Membership + archive catalog ═══════════ */
 
-/** GET /shop/config — publishable key + price for the checkout page. */
+/** GET /shop/config — archive is free for members; Stripe is for $10 membership. */
 apiRouter.get(
   "/shop/config",
   readLimiter,
   asyncHandler(async (_req, res) => {
-    if (!stripeConfigured()) {
-      res.json({ success: true, enabled: false });
-      return;
+    let priceCents = membershipPriceCentsFallback();
+    let currency = SHOP_CURRENCY;
+    if (stripeConfigured()) {
+      try {
+        const offer = await resolveMembershipPrice();
+        priceCents = offer.price_cents;
+        currency = offer.currency;
+      } catch {
+        /* fall back */
+      }
     }
     res.json({
       success: true,
       enabled: true,
-      publishable_key: stripePublishableKey(),
-      price_cents: shopPriceCents(),
-      currency: SHOP_CURRENCY,
-      product_name: SHOP_PRODUCT_NAME,
+      priced: false,
+      membership_price_cents: priceCents,
+      currency,
+      product_name: MEMBERSHIP_PRODUCT_NAME,
+      stripe_enabled: stripeConfigured(),
+      publishable_key: stripeConfigured() ? stripePublishableKey() : "",
     });
+  })
+);
+
+apiRouter.get(
+  "/subscription/config",
+  attachUserIfPresent,
+  asyncHandler(async (req: UserRequest, res) => {
+    let priceCents = membershipPriceCentsFallback();
+    let currency = SHOP_CURRENCY;
+    let interval: string = MEMBERSHIP_INTERVAL;
+    if (stripeConfigured()) {
+      try {
+        const offer = await resolveMembershipPrice();
+        priceCents = offer.price_cents;
+        currency = offer.currency;
+        interval = offer.interval;
+      } catch {
+        /* fall back */
+      }
+    }
+    const account = req.user ? await buildAccountPayload(req.user) : null;
+    res.json({
+      success: true,
+      enabled: true,
+      checkout_enabled: stripeConfigured(),
+      checkout_hint: stripeConfigured()
+        ? null
+        : "Membership checkout isn’t available yet — Stripe keys aren’t set.",
+      currency,
+      price_cents: priceCents,
+      interval,
+      product_name: MEMBERSHIP_PRODUCT_NAME,
+      subscription: account?.subscription ?? null,
+      plans: [
+        {
+          id: "monthly",
+          name: "AAG Membership",
+          description:
+            "Ten dollars a month. Every graphic AAG has ever made, requested from your account.",
+          price_cents: priceCents,
+          currency,
+          interval,
+          featured: true,
+          features: [
+            "Every graphic AAG has ever made, included",
+            "Request from your account — no typing names on the form",
+            "Each angel name on your profile gets its own graphic and its own email",
+            "Up to 5 angel names (ask us if you need more)",
+            "Cancel anytime",
+          ],
+        },
+      ],
+    });
+  })
+);
+
+apiRouter.post(
+  "/subscription/checkout",
+  checkoutLimiter,
+  requireUser,
+  asyncHandler(async (req: UserRequest, res) => {
+    if (!stripeConfigured()) {
+      res.status(503).json({
+        success: false,
+        error: "Membership checkout isn’t available right now.",
+      });
+      return;
+    }
+
+    const user = req.user!;
+    if (await userHasActiveSubscription(user.id)) {
+      res.json({
+        success: true,
+        already_member: true,
+        url: "/profile",
+      });
+      return;
+    }
+
+    const origin = siteOriginFromRequest(req);
+    const existing = await getSubscriptionForUser(user.id);
+    const session = await createMembershipCheckoutSession({
+      userId: user.id,
+      email: user.email,
+      customerId: user.stripe_customer_id || existing?.stripe_customer_id,
+      successUrl: `${origin}/profile?membership=success`,
+      cancelUrl: `${origin}/subscription?canceled=1`,
+    });
+
+    res.json({ success: true, url: session.url });
+  })
+);
+
+apiRouter.post(
+  "/subscription/portal",
+  checkoutLimiter,
+  requireUser,
+  asyncHandler(async (req: UserRequest, res) => {
+    if (!stripeConfigured()) {
+      res.status(503).json({ success: false, error: "Billing portal unavailable" });
+      return;
+    }
+    const sub = await getSubscriptionForUser(req.user!.id);
+    const customerId =
+      req.user!.stripe_customer_id || sub?.stripe_customer_id;
+    if (!customerId) {
+      res.status(400).json({
+        success: false,
+        error: "No billing account yet. Subscribe first.",
+      });
+      return;
+    }
+    const origin = siteOriginFromRequest(req);
+    const portal = await createBillingPortalSession({
+      customerId,
+      returnUrl: `${origin}/profile`,
+    });
+    res.json({ success: true, url: portal.url });
   })
 );
 
@@ -1952,211 +2225,29 @@ apiRouter.get(
 );
 
 /**
- * POST /shop/checkout — start a purchase.
- * Validates the order, creates a Stripe PaymentIntent for the fixed price
- * (amount is always set server-side), and records a pending purchase.
- * Accepts JSON or multipart/form-data. Field "customer_photo" (jpg/png)
- * is required when the selected archive graphic has requires_photo enabled.
+ * POST /shop/checkout and /shop/confirm — retired. Membership covers the archive.
  */
 apiRouter.post(
   "/shop/checkout",
   checkoutLimiter,
-  (req: Request, res: Response, next: NextFunction) => {
-    const contentType = String(req.headers["content-type"] || "");
-    if (!contentType.includes("multipart/form-data")) {
-      next();
-      return;
-    }
-    photoUpload.single("customer_photo")(req, res, (err: unknown) => {
-      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-        res.status(413).json({
-          success: false,
-          error: "Photo is too large — 5 MB max. Use JPG or PNG.",
-        });
-        return;
-      }
-      if (err) {
-        next(err);
-        return;
-      }
-      next();
-    });
-  },
-  rejectHoneypot,
-  attachUserIfPresent,
-  asyncHandler(async (req: UserRequest, res) => {
-    if (!stripeConfigured()) {
-      res.status(503).json({
-        success: false,
-        error: "The shop isn’t available right now. Please try again later.",
-      });
-      return;
-    }
-
-    const parsed = shopCheckoutSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        success: false,
-        error: "Validation failed",
-        details: parsed.error.flatten().fieldErrors,
-      });
-      return;
-    }
-
-    const graphic = await getArchiveGraphicByCode(parsed.data.graphic_code);
-    if (!graphic) {
-      res.status(400).json({
-        success: false,
-        error: "Please pick a graphic from the list.",
-        details: { graphic_code: ["Unknown archive graphic"] },
-      });
-      return;
-    }
-
-    const file = (
-      req as Request & { file?: { buffer?: Buffer; originalname?: string } }
-    ).file;
-    if (graphic.requires_photo && !file?.buffer?.length) {
-      res.status(400).json({
-        success: false,
-        error: "This graphic requires a photo upload (JPG or PNG).",
-        details: {
-          customer_photo: [
-            "Attach a JPG or PNG photo to complete this order",
-          ],
-        },
-      });
-      return;
-    }
-
-    // Validate image bytes before creating a Stripe intent / purchase row.
-    let photoKind: ReturnType<typeof detectJpegOrPng> = null;
-    if (file?.buffer?.length) {
-      photoKind = detectJpegOrPng(file.buffer);
-      if (!photoKind) {
-        res.status(400).json({
-          success: false,
-          error:
-            "That file doesn’t look like a JPG or PNG. Please upload one of those.",
-        });
-        return;
-      }
-    }
-
-    const amount = shopPriceCents();
-    const intent = await getStripe().paymentIntents.create({
-      amount,
-      currency: SHOP_CURRENCY,
-      automatic_payment_methods: { enabled: true },
-      receipt_email: parsed.data.email,
-      description: `${SHOP_PRODUCT_NAME} — ${graphic.label} for “${parsed.data.angel_name}”`,
-      metadata: {
-        product: SHOP_PRODUCT_NAME,
-        graphic_code: graphic.code,
-        graphic_label: graphic.label,
-        angel_name: parsed.data.angel_name,
-        real_name: parsed.data.real_name,
-        requires_photo: graphic.requires_photo ? "true" : "false",
-      },
-    });
-
-    const purchase = await createPurchase({
-      angel_name: parsed.data.angel_name,
-      real_name: parsed.data.real_name,
-      email: parsed.data.email,
-      graphic_code: graphic.code,
-      note: null,
-      amount_cents: amount,
-      currency: SHOP_CURRENCY,
-      stripe_payment_intent_id: intent.id,
-      user_id: req.user?.id ?? null,
-    });
-
-    let hasCustomerPhoto = false;
-    if (file?.buffer?.length && photoKind) {
-      const savedCustomer = await saveCustomerPhoto(purchase.id, file.buffer);
-      if (savedCustomer) {
-        await upsertPurchasePhoto({
-          purchaseId: purchase.id,
-          contentType: savedCustomer.contentType,
-          originalFilename:
-            file.originalname || `customer.${savedCustomer.ext}`,
-          bytes: file.buffer,
-        });
-        await mergePurchaseMetadata(purchase.id, {
-          customer_photo_path: savedCustomer.path,
-          customer_photo_uploaded_at: new Date().toISOString(),
-        });
-        hasCustomerPhoto = true;
-      }
-    }
-
-    logger.info("Shop checkout started", {
-      purchase_id: purchase.id,
-      graphic_code: graphic.code,
-      has_customer_photo: hasCustomerPhoto,
-    });
-
-    res.status(201).json({
-      success: true,
-      client_secret: intent.client_secret,
-      purchase_id: purchase.id,
-      amount_cents: amount,
-      currency: SHOP_CURRENCY,
+  asyncHandler(async (_req, res) => {
+    res.status(410).json({
+      success: false,
+      error:
+        "Per-graphic purchases are retired. A $10 membership includes every graphic. Request from your account.",
+      membership_required: true,
     });
   })
 );
 
-/**
- * POST /shop/confirm — after the browser finishes payment, verify the result
- * directly with Stripe (never trusting the client) and update the purchase.
- */
 apiRouter.post(
   "/shop/confirm",
   checkoutLimiter,
-  asyncHandler(async (req, res) => {
-    if (!stripeConfigured()) {
-      res.status(503).json({ success: false, error: "Shop unavailable" });
-      return;
-    }
-
-    const parsed = shopConfirmSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ success: false, error: "Invalid payment id" });
-      return;
-    }
-
-    const purchase = await getPurchaseByIntent(parsed.data.payment_intent_id);
-    if (!purchase) {
-      res.status(404).json({ success: false, error: "Purchase not found" });
-      return;
-    }
-
-    const intent = await getStripe().paymentIntents.retrieve(
-      parsed.data.payment_intent_id
-    );
-
-    let status = purchase.status;
-    if (intent.status === "succeeded") {
-      // Keep delivered if an admin already marked it; otherwise mark paid.
-      status = purchase.status === "delivered" ? "delivered" : "paid";
-    } else if (intent.status === "canceled" && purchase.status !== "delivered") {
-      status = "failed";
-    }
-
-    if (status !== purchase.status) {
-      await markPurchaseStatusByIntent(intent.id, status);
-      logger.info("Purchase status updated", { purchase_id: purchase.id, status });
-    }
-
-    res.json({
-      success: true,
-      status,
-      paid: status === "paid" || status === "delivered",
-      message:
-        status === "paid" || status === "delivered"
-          ? "Payment received! Your archive graphic is officially in the queue."
-          : "Payment not completed yet.",
+  asyncHandler(async (_req, res) => {
+    res.status(410).json({
+      success: false,
+      error:
+        "Per-graphic purchases are retired. A $10 membership includes every graphic.",
     });
   })
 );

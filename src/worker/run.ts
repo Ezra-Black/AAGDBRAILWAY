@@ -29,7 +29,7 @@ import {
 } from "../email";
 import { logger } from "../logger";
 import { editAngelGraphic } from "../xai/imagine";
-import { upsertEntryPhoto } from "../db/entryPhotos";
+import { upsertEntryPhoto, getEntryPhoto } from "../db/entryPhotos";
 import { isAiWorkerEnabled } from "../db/settings";
 import {
   resolvePlaceholderForXai,
@@ -169,6 +169,34 @@ async function processEntry(entry: Entry): Promise<void> {
       id: entry.id,
       duplicate_of: prior.id,
     });
+    return;
+  }
+
+  const existingArt = await getEntryPhoto(entry.id, "generated");
+  if (existingArt) {
+    const filename =
+      existingArt.original_filename || safeAngelFilename(entry.angel_name);
+    const sent = await sendGraphicDeliveryEmail({
+      to: email,
+      angelName: entry.angel_name,
+      filename,
+      image: existingArt.bytes,
+      contentType: existingArt.content_type,
+    });
+    if (!sent) {
+      await failEntry(
+        entry,
+        "Existing graphic found but SMTP delivery failed (check Resend/SMTP env)."
+      );
+      return;
+    }
+    await updateEntryStatus(entry.id, "processed", {
+      photo_sent: "true",
+      resent_existing: "true",
+      delivered_at: new Date().toISOString(),
+      failure_acked: "true",
+    });
+    logger.info("Delivered existing generated graphic", { id: entry.id });
     return;
   }
 

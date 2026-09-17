@@ -168,6 +168,31 @@ export interface AdminGroupFilters {
   status?: "pending" | "complete" | null;
 }
 
+export type AdminEntryStatusFilter =
+  | "pending"
+  | "processing"
+  | "processed"
+  | "failed"
+  | "complete"
+  | null;
+
+export interface AdminEntryFilters {
+  graphicCode?: string | null;
+  archived?: boolean;
+  search?: string;
+  status?: AdminEntryStatusFilter;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AdminEntryRow extends AdminEntryListItem {
+  user_id: string | null;
+  user_email: string | null;
+  user_name: string | null;
+  subscription_status: string | null;
+  subscription_active: boolean;
+}
+
 /** Group submissions by angel name for the admin portal. */
 export async function listAngelGroupsForAdmin(
   limit = 2000,
@@ -257,6 +282,195 @@ export async function listAngelGroupsForAdmin(
   return list.sort((a, b) => b.latest_at.getTime() - a.latest_at.getTime());
 }
 
+export async function listAdminEntries(
+  filters: AdminEntryFilters = {}
+): Promise<{ rows: AdminEntryRow[]; total: number }> {
+  const limit = Math.min(Math.max(filters.limit ?? 100, 1), 200);
+  const offset = Math.max(filters.offset ?? 0, 0);
+  const archivedClause = filters.archived
+    ? "e.archived_at IS NOT NULL"
+    : "e.archived_at IS NULL";
+  const params: unknown[] = [];
+  const extra: string[] = [];
+
+  if (filters.graphicCode?.trim()) {
+    params.push(filters.graphicCode.trim());
+    extra.push(
+      `lower(trim(coalesce(e.graphic_code, ''))) = lower(trim($${params.length}))`
+    );
+  }
+  if (filters.search?.trim()) {
+    params.push(`%${filters.search.trim()}%`);
+    extra.push(
+      `(e.angel_name ILIKE $${params.length}
+        OR e.real_name ILIKE $${params.length}
+        OR e.email ILIKE $${params.length}
+        OR e.graphic_code ILIKE $${params.length}
+        OR g.label ILIKE $${params.length}
+        OR u.email ILIKE $${params.length}
+        OR u.name ILIKE $${params.length})`
+    );
+  }
+  if (filters.status === "pending" || filters.status === "processing" || filters.status === "processed" || filters.status === "failed") {
+    params.push(filters.status);
+    extra.push(`e.status = $${params.length}`);
+  } else if (filters.status === "complete") {
+    extra.push(`e.status IN ('processed', 'failed')`);
+  }
+
+  const where = [archivedClause, ...extra].join(" AND ");
+  const countResult = await query(
+    `SELECT COUNT(*)::int AS n
+     FROM entries e
+     LEFT JOIN graphic_options g ON g.code = e.graphic_code
+     LEFT JOIN users u ON u.id = e.user_id
+     WHERE ${where}`,
+    params
+  );
+  const total = Number(countResult.rows[0]?.n ?? 0);
+
+  params.push(limit);
+  const limitIdx = params.length;
+  params.push(offset);
+  const offsetIdx = params.length;
+
+  const result = await query(
+    `SELECT
+       e.id,
+       e.angel_name,
+       e.graphic_code,
+       g.label AS graphic_label,
+       e.real_name,
+       e.email,
+       e.status,
+       e.created_at,
+       e.user_id,
+       u.email AS user_email,
+       u.name AS user_name,
+       s.status AS subscription_status,
+       EXISTS (
+         SELECT 1 FROM entry_photos p
+         WHERE p.entry_id = e.id AND p.kind = 'generated'
+       ) AS has_generated_photo,
+       EXISTS (
+         SELECT 1 FROM entry_photos p
+         WHERE p.entry_id = e.id AND p.kind = 'customer'
+       ) AS has_customer_photo
+     FROM entries e
+     LEFT JOIN graphic_options g ON g.code = e.graphic_code
+     LEFT JOIN users u ON u.id = e.user_id
+     LEFT JOIN subscriptions s ON s.user_id = e.user_id
+     WHERE ${where}
+     ORDER BY e.created_at DESC
+     LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+    params
+  );
+
+  const rows: AdminEntryRow[] = result.rows.map((row) => {
+    const status = String(row.subscription_status || "");
+    return {
+      id: row.id as string,
+      angel_name: row.angel_name as string,
+      graphic_code: (row.graphic_code as string) ?? null,
+      graphic_label: (row.graphic_label as string) ?? null,
+      real_name: row.real_name as string,
+      email: (row.email as string) ?? null,
+      status: row.status as EntryStatus,
+      created_at: row.created_at as Date,
+      has_generated_photo: Boolean(row.has_generated_photo),
+      has_customer_photo: Boolean(row.has_customer_photo),
+      user_id: row.user_id ? String(row.user_id) : null,
+      user_email: row.user_email ? String(row.user_email) : null,
+      user_name: row.user_name ? String(row.user_name) : null,
+      subscription_status: status || null,
+      subscription_active: status === "active" || status === "trialing",
+    };
+  });
+
+  return { rows, total };
+}
+
+export async function setEntryArchived(
+  id: string,
+  archived: boolean
+): Promise<boolean> {
+  const result = await query(
+    `UPDATE entries
+     SET archived_at = ${archived ? "NOW()" : "NULL"},
+         updated_at = NOW()
+     WHERE id = $1`,
+    [id]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function markEntryComplete(id: string): Promise<{
+  updated: boolean;
+  reason?: "not_found" | "processing";
+}> {
+  const current = await getEntryById(id);
+  if (!current) return { updated: false, reason: "not_found" };
+  if (current.status === "processing") {
+    return { updated: false, reason: "processing" };
+  }
+  const result = await query(
+    `UPDATE entries
+     SET status = 'processed',
+         updated_at = NOW(),
+         metadata = metadata || jsonb_build_object(
+           'manually_completed', 'true',
+           'manually_completed_at', NOW()::text
+         )
+     WHERE id = $1
+       AND status IN ('pending', 'failed')`,
+    [id]
+  );
+  return { updated: (result.rowCount ?? 0) > 0 };
+}
+
+export async function requeueEntry(id: string): Promise<{
+  updated: boolean;
+  reason?: "not_found" | "processing";
+}> {
+  const current = await getEntryById(id);
+  if (!current) return { updated: false, reason: "not_found" };
+  if (current.status === "processing") {
+    return { updated: false, reason: "processing" };
+  }
+  const result = await query(
+    `UPDATE entries
+     SET status = 'pending',
+         archived_at = NULL,
+         updated_at = NOW(),
+         metadata = metadata || jsonb_build_object(
+           'retried_at', NOW()::text,
+           'failure_acked', 'true'
+         )
+     WHERE id = $1`,
+    [id]
+  );
+  return { updated: (result.rowCount ?? 0) > 0 };
+}
+
+export async function findOpenGraphicClaimForUser(
+  userId: string,
+  angelName: string,
+  graphicCode: string
+): Promise<Entry | null> {
+  const result = await query(
+    `SELECT * FROM entries
+     WHERE archived_at IS NULL
+       AND user_id = $1
+       AND lower(angel_name) = lower($2)
+       AND lower(coalesce(graphic_code, '')) = lower($3)
+       AND status IN ('pending', 'processing', 'processed')
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [userId, angelName, graphicCode]
+  );
+  return result.rows[0] ? mapRow(result.rows[0]) : null;
+}
+
 /** Archive (or restore) every submission for an angel name. */
 export async function setAngelNameArchived(
   angelName: string,
@@ -272,17 +486,13 @@ export async function setAngelNameArchived(
   return result.rowCount ?? 0;
 }
 
-/** Bulk clean-up: archive every fully completed, unarchived submission. */
+/** Bulk clean-up: archive finished rows (processed or failed). */
 export async function archiveCompletedEntries(): Promise<number> {
   const result = await query(
     `UPDATE entries
      SET archived_at = NOW(), updated_at = NOW()
      WHERE archived_at IS NULL
-       AND status = 'processed'
-       AND lower(angel_name) NOT IN (
-         SELECT lower(angel_name) FROM entries
-         WHERE archived_at IS NULL AND status IN ('pending', 'processing')
-       )`
+       AND status IN ('processed', 'failed')`
   );
   return result.rowCount ?? 0;
 }

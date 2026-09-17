@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>The Archive Shop — Audrey’s Angel Graphics</title>
+    <title>The Archive — Audrey’s Angel Graphics</title>
     <meta
       name="description"
-      content="Own a piece of the archive — past angel graphic designs, made for your angel name. $5 each, guided checkout."
+      content="Every graphic AAG has ever made. Members request from their account — one graphic and one email per angel name."
     />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -34,73 +34,36 @@
       src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7362424039626637"
       crossorigin="anonymous"
     ></script>
-    <script src="https://js.stripe.com/v3/"></script>
     <style>
-      /* Guided wizard — larger type and controls for easy reading */
-      .wizard .field label {
-        font-size: 1rem;
-      }
-      .wizard .field input,
-      .wizard .field select,
-      .wizard .field textarea {
-        font-size: 1.05rem;
-        padding: 1rem 1.1rem;
-      }
-      .wizard-step {
-        display: none;
-      }
-      .wizard-step.active {
-        display: block;
-        animation: stepIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
-      }
-      .wizard-step.leaving {
-        animation: stepOut 0.28s ease both;
-      }
-      @keyframes stepIn {
-        from { opacity: 0; transform: translateY(16px); }
-        to   { opacity: 1; transform: translateY(0); }
-      }
-      @keyframes stepOut {
-        from { opacity: 1; transform: translateY(0); }
-        to   { opacity: 0; transform: translateY(-10px); }
-      }
-      .progress-track {
-        height: 6px;
-        border-radius: 9999px;
-        background: rgba(255, 255, 255, 0.07);
+      .archive-card {
+        text-align: left;
+        width: 100%;
+        border-radius: 1.35rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(12, 9, 5, 0.45);
         overflow: hidden;
-      }
-      .progress-fill {
-        height: 100%;
-        border-radius: 9999px;
-        background: linear-gradient(90deg, #f6d56a, #e8a838);
-        transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-      }
-      .big-btn {
-        font-size: 1.05rem;
-        padding: 1rem 2.2rem;
-      }
-      .back-btn {
-        background: none;
-        border: 0;
-        color: rgba(255, 246, 228, 0.5);
-        font-family: inherit;
-        font-size: 0.95rem;
         cursor: pointer;
-        padding: 0.6rem 1rem;
-        border-radius: 9999px;
-        transition: color 0.25s ease;
+        font-family: inherit;
+        color: inherit;
+        padding: 0;
+        transition: border-color 0.25s ease, transform 0.25s ease;
       }
-      .back-btn:hover { color: var(--cream); }
-      .summary-row {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        padding: 0.55rem 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-        font-size: 0.95rem;
+      .archive-card:hover {
+        border-color: rgba(240, 196, 92, 0.4);
       }
-      .summary-row:last-child { border-bottom: 0; }
+      .archive-card.selected {
+        border-color: rgba(240, 196, 92, 0.7);
+        box-shadow: 0 0 0 1px rgba(240, 196, 92, 0.2);
+      }
+      .archive-card img {
+        width: 100%;
+        aspect-ratio: 3 / 2;
+        object-fit: cover;
+        background: rgba(12, 9, 5, 0.7);
+      }
+      .archive-card-body {
+        padding: 0.9rem 1rem 1.05rem;
+      }
       .price-badge {
         display: inline-flex;
         align-items: center;
@@ -113,52 +76,12 @@
         font-size: 0.9rem;
         padding: 0.45rem 1.1rem;
       }
-      .check-ring {
-        width: 72px;
-        height: 72px;
-        border-radius: 9999px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin: 0 auto;
-        background: rgba(110, 231, 183, 0.1);
-        border: 1px solid rgba(110, 231, 183, 0.45);
-        animation: stepIn 0.6s ease both;
-      }
-      .graphic-preview {
-        display: none;
-        position: relative;
-        overflow: hidden;
-        aspect-ratio: 3 / 2;
-        border-radius: 1.35rem;
-        border: 1px solid rgba(240, 196, 92, 0.24);
-        background: rgba(12, 9, 5, 0.55);
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-      }
-      .graphic-preview.visible {
-        display: block;
-        animation: stepIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
-      }
-      .graphic-preview img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-      .graphic-preview-label {
-        position: absolute;
-        inset: auto 0 0;
-        padding: 2.5rem 1.1rem 1rem;
-        background: linear-gradient(transparent, rgba(7, 5, 3, 0.92));
-        color: var(--cream);
-        font-weight: 650;
-      }
     </style>
   </head>
   <body data-no-popup>
     <div class="orb" style="width:300px;height:300px;background:#f0c45c;top:8%;left:6%;opacity:0.14"></div>
     <div class="orb" style="width:340px;height:340px;background:#e8a838;bottom:8%;right:4%;opacity:0.1;animation-delay:1.4s"></div>
 
-    <!-- Navigation -->
     <header class="fixed inset-x-0 top-0 z-40 px-4 pt-4">
       <nav class="glass-nav mx-auto flex max-w-5xl items-center justify-between rounded-full px-5 py-3">
         <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-wide" style="color:var(--cream);text-decoration:none">
@@ -171,7 +94,8 @@
           <a href="/" class="nav-link">Home</a>
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
-          <a href="/shop" class="nav-link active">Shop</a>
+          <a href="/shop" class="nav-link active">Archive</a>
+          <a href="/subscription" class="nav-link">Membership</a>
           <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta">Request yours</a>
@@ -194,7 +118,8 @@
           <a href="/" class="nav-link">Home</a>
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
-          <a href="/shop" class="nav-link active">Shop</a>
+          <a href="/shop" class="nav-link active">Archive</a>
+          <a href="/subscription" class="nav-link">Membership</a>
           <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta justify-center">Request yours</a>
@@ -202,214 +127,56 @@
       </div>
     </header>
 
-    <main class="relative z-10 mx-auto max-w-2xl px-5 pb-20 pt-36 sm:pt-44">
-      <!-- Hero -->
+    <main class="relative z-10 mx-auto max-w-3xl px-5 pb-20 pt-36 sm:pt-44">
       <section class="reveal text-center">
-        <p class="eyebrow">The archive shop</p>
+        <p class="eyebrow">The archive</p>
         <h1 class="headline mt-4 text-4xl font-bold text-cream sm:text-5xl">
-          Own a piece of<br />the <span class="gold-text">archive</span>.
+          Every graphic<br />we’ve <span class="gold-text">ever made</span>.
         </h1>
         <p class="mx-auto mt-5 max-w-lg text-base font-light leading-relaxed text-cream/60 sm:text-lg">
-          Every graphic style we’ve ever offered lives on in our archive.
-          Pick one, tell us your angel name, and we’ll craft it for you.
+          Membership is $10 a month. Pick a graphic, and we’ll make one for each
+          angel name on your profile — each as its own request and its own email.
         </p>
-        <p class="mt-5"><span class="price-badge" id="price-badge">✦ $5 per graphic</span></p>
+        <p class="mt-5"><span class="price-badge">✦ $10 / month · whole archive</span></p>
       </section>
 
-      <!-- Wizard -->
-      <section class="glass-panel wizard reveal mt-12 rounded-[2rem] p-6 sm:p-10" style="--reveal-delay:0.1s">
-        <!-- Progress -->
-        <div id="progress-wrap">
-          <div class="flex items-baseline justify-between">
-            <p id="step-label" class="text-sm font-semibold text-cream/80">Step 1 of 4</p>
-            <p id="step-name" class="text-xs text-cream/45">Choose your graphic</p>
-          </div>
-          <div class="progress-track mt-3">
-            <div id="progress-fill" class="progress-fill" style="width:25%"></div>
-          </div>
-        </div>
+      <div id="gate-banners" class="reveal mt-10 space-y-3"></div>
 
-        <!-- Shop disabled notice -->
-        <div id="shop-disabled" class="hidden py-10 text-center">
-          <p class="text-lg text-cream/70">The shop is taking a short break.</p>
-          <p class="mt-2 text-sm text-cream/45">
-            Please check back soon, or
-            <a href="/contact" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">send us a message</a>.
-          </p>
-        </div>
+      <section class="glass-panel reveal mt-8 rounded-[2rem] p-6 sm:p-10" style="--reveal-delay:0.1s">
+        <p id="profile-names" class="text-sm text-cream/70"></p>
+        <div id="archive-grid" class="mt-6 grid gap-4 sm:grid-cols-2"></div>
+        <p id="archive-empty" class="mt-6 hidden text-center text-sm text-cream/45">
+          The archive is empty right now. Check back soon.
+        </p>
 
-        <!-- Step 1: graphic -->
-        <div class="wizard-step active" data-step="1">
-          <h2 class="headline mt-8 text-2xl font-semibold text-cream">
-            Which graphic would you like?
-          </h2>
-          <p class="mt-2 text-[15px] font-light leading-relaxed text-cream/55">
-            These are designs from our past collections. Take your time — you
-            can always come back to this step.
-          </p>
-          <div id="graphic-preview" class="graphic-preview mt-6">
-            <img id="graphic-preview-image" src="" alt="" />
-            <p id="graphic-preview-label" class="graphic-preview-label"></p>
+        <form id="archive-form" class="mt-8 space-y-4" novalidate>
+          <div
+            aria-hidden="true"
+            style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden"
+          >
+            <label for="website">Website</label>
+            <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
           </div>
-          <div class="field mt-6">
-            <label for="shop_graphic">Graphic from the archive</label>
-            <select id="shop_graphic">
-              <option value="">Loading the archive…</option>
-            </select>
-          </div>
-          <div id="customer-photo-field" class="field mt-4 hidden">
-            <label for="shop_customer_photo">Your photo <span class="text-honey/80">(required for this graphic)</span></label>
+          <input type="hidden" id="graphic_code" name="graphic_code" value="" />
+          <div id="customer-photo-field" class="field hidden">
+            <label for="customer_photo">Your photo <span class="text-honey/80">(required for this graphic)</span></label>
             <input
-              id="shop_customer_photo"
+              id="customer_photo"
               name="customer_photo"
               type="file"
               accept="image/jpeg,image/png,.jpg,.jpeg,.png"
             />
-            <p class="mt-1.5 text-xs text-cream/45">
-              JPG or PNG only, 5 MB max. We’ll use this photo with your archive graphic order.
-            </p>
+            <p class="mt-1.5 text-xs text-cream/45">JPG or PNG only, 5 MB max.</p>
             <p id="customer-photo-name" class="mt-1 hidden text-xs text-cream/40"></p>
           </div>
-          <p id="err-1" class="mt-3 hidden text-sm text-rose-300"></p>
-        </div>
-
-        <!-- Step 2: names -->
-        <div class="wizard-step" data-step="2">
-          <h2 class="headline mt-8 text-2xl font-semibold text-cream">
-            Who is this graphic for?
-          </h2>
-          <p class="mt-2 text-[15px] font-light leading-relaxed text-cream/55">
-            The angel name is the star of the artwork. Your real name just
-            helps us keep good records.
-          </p>
-          <div class="field mt-6">
-            <label for="shop_angel_name">Angel name</label>
-            <input id="shop_angel_name" type="text" maxlength="120" placeholder="The name to feature" />
-          </div>
-          <div class="field mt-4">
-            <label for="shop_real_name">Your real name</label>
-            <input id="shop_real_name" type="text" autocomplete="name" maxlength="120" placeholder="Who you are IRL" />
-          </div>
-          <p id="err-2" class="mt-3 hidden text-sm text-rose-300"></p>
-        </div>
-
-        <!-- Step 3: email -->
-        <div class="wizard-step" data-step="3">
-          <h2 class="headline mt-8 text-2xl font-semibold text-cream">
-            Where should we send it?
-          </h2>
-          <p class="mt-2 text-[15px] font-light leading-relaxed text-cream/55">
-            Your finished graphic — and your payment receipt — will arrive at
-            this email address.
-          </p>
-          <div class="field mt-6">
-            <label for="shop_email">Email address</label>
-            <input id="shop_email" type="email" autocomplete="email" maxlength="254" placeholder="you@email.com" />
-            <p id="shop-email-hint" class="mt-1.5 text-xs text-honey/90" hidden></p>
-          </div>
-          <p id="err-3" class="mt-3 hidden text-sm text-rose-300"></p>
-        </div>
-
-        <!-- Step 4: review + pay -->
-        <div class="wizard-step" data-step="4">
-          <h2 class="headline mt-8 text-2xl font-semibold text-cream">
-            Review and pay
-          </h2>
-          <p class="mt-2 text-[15px] font-light leading-relaxed text-cream/55">
-            One last look — then pay securely below. Payment is handled by
-            Stripe; we never see your card number.
-          </p>
-          <div class="mt-6 rounded-2xl border border-white/10 px-5 py-3" style="background:rgba(12,9,5,0.5)">
-            <div class="summary-row"><span class="text-cream/50">Graphic</span><span id="sum-graphic" class="text-right font-medium text-cream"></span></div>
-            <div class="summary-row"><span class="text-cream/50">Angel name</span><span id="sum-angel" class="text-right font-medium text-cream"></span></div>
-            <div class="summary-row"><span class="text-cream/50">Email</span><span id="sum-email" class="break-all text-right font-medium text-cream"></span></div>
-            <div id="sum-photo-row" class="summary-row hidden"><span class="text-cream/50">Your photo</span><span id="sum-photo" class="text-right font-medium text-cream"></span></div>
-            <div class="summary-row"><span class="text-cream/50">Total</span><span id="sum-total" class="gold-text text-right text-lg font-bold"></span></div>
-          </div>
-          <div id="payment-loading" class="mt-6 text-center text-sm text-cream/50">
-            Preparing secure payment…
-          </div>
-          <div id="payment-element" class="mt-6"></div>
-          <div id="checkout-unavailable" class="mt-6 hidden rounded-2xl border border-white/10 px-5 py-6 text-center" style="background:rgba(12,9,5,0.5)">
-            <p class="text-sm text-cream/70">Online checkout is opening very soon.</p>
-            <p class="mt-2 text-xs text-cream/45">
-              In the meantime,
-              <a href="/contact" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">send us a message</a>
-              with the details above and we’ll take your order personally.
-            </p>
-          </div>
-          <p id="err-4" class="mt-3 hidden text-sm text-rose-300"></p>
-          <button type="button" id="pay-btn" class="btn-primary big-btn mt-6 w-full" disabled>
-            Pay <span id="pay-amount">$5</span> securely
+          <button type="submit" id="submit-btn" class="btn-primary w-full" disabled>
+            Choose a graphic
           </button>
-          <p class="mt-3 text-center text-xs text-cream/40">
-            🔒 Secure checkout powered by Stripe.
-            All sales are final —
-            <a href="/refunds" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">refund policy</a>.
-          </p>
-        </div>
-
-        <!-- Step 5: success -->
-        <div class="wizard-step" data-step="5">
-          <div class="mt-10 text-center">
-            <div class="check-ring">
-              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#6ee7b7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4.5 12.5l5 5 10-11" />
-              </svg>
-            </div>
-            <h2 class="headline mt-6 text-3xl font-semibold text-cream">
-              Thank you!
-            </h2>
-            <p id="success-detail" class="mx-auto mt-3 max-w-md text-[15px] font-light leading-relaxed text-cream/60">
-              Your payment went through and your archive graphic is officially
-              in the queue. A receipt is on its way to your email, and your
-              finished piece will follow soon.
-            </p>
-            <div class="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-              <button type="button" id="leave-review-btn" class="btn-primary">
-                Leave a review
-              </button>
-              <a href="/" class="btn-secondary">Back to home</a>
-            </div>
-            <p class="mx-auto mt-4 max-w-sm text-xs font-light text-cream/40">
-              A short note helps other families — we’ll read it before it goes live.
-            </p>
-          </div>
-        </div>
-
-        <!-- Nav buttons -->
-        <div id="wizard-nav" class="mt-8 flex items-center justify-between gap-3">
-          <button type="button" id="btn-back" class="back-btn" style="visibility:hidden">
-            ← Go back
-          </button>
-          <button type="button" id="btn-next" class="btn-primary big-btn">
-            Continue →
-          </button>
-        </div>
+          <p id="message" hidden class="rounded-2xl px-4 py-3.5 text-sm leading-relaxed"></p>
+        </form>
       </section>
-
-      <p class="reveal mt-8 text-center text-sm text-cream/45" style="--reveal-delay:0.2s">
-        Questions or need a hand?
-        <a href="/contact" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">We’re happy to help.</a>
-      </p>
     </main>
 
-    <!-- Ad 1 -->
-    <div class="relative z-10 mx-auto max-w-5xl px-5 py-8">
-      <ins
-        class="adsbygoogle"
-        style="display: block"
-        data-ad-client="ca-pub-7362424039626637"
-        data-ad-slot="1156003258"
-        data-ad-format="auto"
-        data-full-width-responsive="true"
-      ></ins>
-      <script>
-        (adsbygoogle = window.adsbygoogle || []).push({});
-      </script>
-    </div>
-
-    <!-- Footer -->
     <footer class="relative z-10 mt-8 px-5 pb-10">
       <div class="mx-auto max-w-5xl">
         <hr class="divider-glow" />
@@ -422,123 +189,170 @@
           </nav>
           <div class="flex items-center gap-4">
             <a href="/" class="footer-link" style="font-size:11px">Home</a>
-            <a href="/about" class="footer-link" style="font-size:11px">About</a>
-            <a href="/newsletter" class="footer-link" style="font-size:11px">Newsletter</a>
-            <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
-            <a href="/reviews" class="footer-link" style="font-size:11px">Reviews</a>
-            <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
-            <a href="/admin/login" class="footer-link" style="font-size:11px">Admin</a>
+            <a href="/shop" class="footer-link" style="font-size:11px">Archive</a>
+            <a href="/subscription" class="footer-link" style="font-size:11px">Membership</a>
           </div>
-          <p>
-            built by
-            <a href="https://buymeacoffee.com/ezrablack" target="_blank" rel="noopener noreferrer" class="underline decoration-honey/30 underline-offset-2 hover:text-cream/50">ezra black</a>
-          </p>
         </div>
       </div>
     </footer>
 
     <script src="/assets/site.js"></script>
     <script src="/assets/auth.js"></script>
-    <script src="/assets/emailCheck.js"></script>
-    <script src="/assets/reviews.js"></script>
-    <script>
-      document.getElementById("leave-review-btn")?.addEventListener("click", () => {
-        window.AAGReviews.open({ source: "shop" });
-      });
-    </script>
     <script>
       document.getElementById("year").textContent = new Date().getFullYear();
 
-      /* ── Wizard state ─────────────────────────────────── */
-      const STEP_NAMES = {
-        1: "Choose your graphic",
-        2: "Your names",
-        3: "Your email",
-        4: "Review & pay",
-      };
-      let currentStep = 1;
-      let shopConfig = null;
+      const grid = document.getElementById("archive-grid");
+      const empty = document.getElementById("archive-empty");
+      const form = document.getElementById("archive-form");
+      const btn = document.getElementById("submit-btn");
+      const message = document.getElementById("message");
+      const graphicInput = document.getElementById("graphic_code");
+      const customerPhotoField = document.getElementById("customer-photo-field");
+      const customerPhotoInput = document.getElementById("customer_photo");
+      const customerPhotoName = document.getElementById("customer-photo-name");
       let graphicsCache = [];
 
-      // Stripe bits
-      let stripe = null;
-      let elements = null;
-      let paymentElement = null;
-      let lastCheckoutKey = "";
-      let currentIntentId = "";
-
-      const stepEls = document.querySelectorAll(".wizard-step");
-      const btnBack = document.getElementById("btn-back");
-      const btnNext = document.getElementById("btn-next");
-      const wizardNav = document.getElementById("wizard-nav");
-      const progressWrap = document.getElementById("progress-wrap");
-      const graphicSelect = document.getElementById("shop_graphic");
-      const graphicPreview = document.getElementById("graphic-preview");
-      const graphicPreviewImage = document.getElementById("graphic-preview-image");
-      const graphicPreviewLabel = document.getElementById("graphic-preview-label");
-      const customerPhotoField = document.getElementById("customer-photo-field");
-      const customerPhotoInput = document.getElementById("shop_customer_photo");
-      const customerPhotoName = document.getElementById("customer-photo-name");
-
-      function fmtPrice(cents, currency) {
-        return new Intl.NumberFormat("en-US", {
-          style: "currency",
-          currency: (currency || "usd").toUpperCase(),
-          minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
-        }).format(cents / 100);
+      function esc(value) {
+        const div = document.createElement("div");
+        div.textContent = String(value ?? "");
+        return div.innerHTML;
       }
 
-      function showError(step, text) {
-        const el = document.getElementById("err-" + step);
-        if (!el) return;
-        el.textContent = text || "";
-        el.classList.toggle("hidden", !text);
+      function liveNames(user) {
+        return user && Array.isArray(user.angel_names) ? user.angel_names : [];
+      }
+      function isMember(user) {
+        return Boolean(user && user.subscription && user.subscription.active);
+      }
+      function gateCard(text, href, label) {
+        return (
+          '<aside class="account-nudge" role="status">' +
+          '<p class="account-nudge-title">' +
+          text +
+          "</p>" +
+          (href
+            ? '<div class="account-nudge-actions"><a href="' +
+              href +
+              '" class="btn-secondary account-nudge-btn">' +
+              label +
+              "</a></div>"
+            : "") +
+          "</aside>"
+        );
+      }
+      function renderGates(user) {
+        const wrap = document.getElementById("gate-banners");
+        const namesEl = document.getElementById("profile-names");
+        if (!user) {
+          wrap.innerHTML = gateCard(
+            "Log in and subscribe to request from the archive. $10 a month includes every graphic.",
+            "/subscription",
+            "Membership"
+          );
+          namesEl.textContent = "";
+          return;
+        }
+        const parts = [];
+        if (!isMember(user)) {
+          parts.push(
+            gateCard(
+              "A $10 membership includes the whole archive. Subscribe, then request from your account.",
+              "/subscription",
+              "Become a member"
+            )
+          );
+        }
+        const names = liveNames(user);
+        if (!names.length) {
+          parts.push(
+            gateCard(
+              "Add at least one angel name on your profile. Each name gets its own graphic and its own email.",
+              "/profile",
+              "Add angel names"
+            )
+          );
+          namesEl.textContent = "";
+        } else {
+          namesEl.textContent =
+            "We’ll make the selected graphic for: " + names.map((n) => n.name).join(", ");
+        }
+        wrap.innerHTML = parts.join("");
       }
 
       function selectedGraphic() {
-        return graphicsCache.find((item) => item.code === graphicSelect.value);
+        return graphicsCache.find((item) => item.code === graphicInput.value);
       }
 
-      function selectedPhotoFile() {
-        return customerPhotoInput.files && customerPhotoInput.files[0]
-          ? customerPhotoInput.files[0]
-          : null;
+      function showMessage(text, ok) {
+        message.hidden = false;
+        message.textContent = text;
+        message.className =
+          "rounded-2xl px-4 py-3.5 text-sm leading-relaxed " +
+          (ok
+            ? "border border-emerald-400/40 bg-emerald-500/15 text-emerald-100"
+            : "border border-rose-400/40 bg-rose-500/15 text-rose-100");
       }
 
-      function updateCustomerPhotoField() {
+      function selectGraphic(code) {
+        graphicInput.value = code || "";
+        document.querySelectorAll(".archive-card").forEach((el) => {
+          el.classList.toggle("selected", el.dataset.code === code);
+        });
         const graphic = selectedGraphic();
         const needs = Boolean(graphic && graphic.requires_photo);
         customerPhotoField.classList.toggle("hidden", !needs);
-        customerPhotoInput.required = needs;
         if (!needs) {
           customerPhotoInput.value = "";
           customerPhotoName.textContent = "";
           customerPhotoName.classList.add("hidden");
         }
+        btn.disabled = !code;
+        btn.textContent = code ? "Request this graphic" : "Choose a graphic";
       }
 
-      function updateGraphicPreview() {
-        const graphic = selectedGraphic();
-        updateCustomerPhotoField();
-        if (!graphic || !graphic.image_url) {
-          graphicPreview.classList.remove("visible");
-          graphicPreviewImage.removeAttribute("src");
-          graphicPreviewImage.alt = "";
-          graphicPreviewLabel.textContent = "";
-          return;
+      async function loadArchive() {
+        try {
+          const res = await fetch("/shop/graphics", { cache: "no-store" });
+          const data = await res.json();
+          graphicsCache = Array.isArray(data.graphics) ? data.graphics : [];
+          empty.classList.toggle("hidden", graphicsCache.length > 0);
+          grid.innerHTML = graphicsCache
+            .map((g) => {
+              const img = g.image_url
+                ? '<img src="' + esc(g.image_url) + '" alt="Sample of ' + esc(g.label) + '" />'
+                : '<div style="aspect-ratio:3/2;background:rgba(240,196,92,0.08)"></div>';
+              return (
+                '<button type="button" class="archive-card" data-code="' +
+                esc(g.code) +
+                '">' +
+                img +
+                '<div class="archive-card-body">' +
+                '<p class="font-medium text-cream">' +
+                esc(g.label || g.code) +
+                "</p>" +
+                (g.requires_photo
+                  ? '<p class="mt-1 text-xs text-honey/80">Needs a photo</p>'
+                  : "") +
+                "</div></button>"
+              );
+            })
+            .join("");
+          grid.querySelectorAll(".archive-card").forEach((el) => {
+            el.addEventListener("click", () => selectGraphic(el.dataset.code));
+          });
+          const requested = new URLSearchParams(location.search).get("graphic");
+          if (requested && graphicsCache.some((g) => g.code === requested)) {
+            selectGraphic(requested);
+          }
+        } catch {
+          empty.classList.remove("hidden");
+          empty.textContent = "Couldn’t load the archive. Refresh and try again.";
         }
-
-        graphicPreviewImage.src = graphic.image_url;
-        graphicPreviewImage.alt = graphic.label + " graphic preview";
-        graphicPreviewLabel.textContent = graphic.label;
-        graphicPreview.classList.add("visible");
       }
 
-      graphicSelect.addEventListener("change", updateGraphicPreview);
       customerPhotoInput.addEventListener("change", () => {
-        const file = selectedPhotoFile();
+        const file = customerPhotoInput.files && customerPhotoInput.files[0];
         if (!file) {
-          customerPhotoName.textContent = "";
           customerPhotoName.classList.add("hidden");
           return;
         }
@@ -547,455 +361,79 @@
         customerPhotoName.classList.remove("hidden");
       });
 
-      function setStep(next) {
-        const current = document.querySelector(".wizard-step.active");
-        const target = document.querySelector('.wizard-step[data-step="' + next + '"]');
-        if (!target || current === target) return;
-
-        if (current) {
-          current.classList.add("leaving");
-          setTimeout(() => {
-            current.classList.remove("active", "leaving");
-            target.classList.add("active");
-            afterStepChange(next);
-          }, 280);
-        } else {
-          target.classList.add("active");
-          afterStepChange(next);
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        message.hidden = true;
+        const graphic_code = graphicInput.value.trim();
+        if (!graphic_code) {
+          showMessage("Choose a graphic first.", false);
+          return;
         }
-      }
-
-      function afterStepChange(step) {
-        currentStep = step;
-        const isSuccess = step === 5;
-        wizardNav.style.display = isSuccess ? "none" : "flex";
-        btnNext.style.display = step === 4 ? "none" : "inline-flex";
-        progressWrap.style.display = isSuccess ? "none" : "block";
-
-        if (!isSuccess) {
-          document.getElementById("step-label").textContent = "Step " + step + " of 4";
-          document.getElementById("step-name").textContent = STEP_NAMES[step] || "";
-          document.getElementById("progress-fill").style.width = step * 25 + "%";
-          btnBack.style.visibility = step === 1 ? "hidden" : "visible";
-        }
-
-        if (step === 4) preparePayment();
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      }
-
-      function validateStep(step) {
-        showError(step, "");
-        if (step === 1) {
-          if (!graphicSelect.value) {
-            showError(1, "Please choose a graphic from the list to continue.");
-            return false;
-          }
-          const graphic = selectedGraphic();
-          const needsPhoto = Boolean(graphic && graphic.requires_photo);
-          const photoFile = selectedPhotoFile();
-          if (needsPhoto && !photoFile) {
-            showError(1, "This graphic needs a JPG or PNG photo attached.");
-            return false;
-          }
-          if (photoFile) {
-            const name = String(photoFile.name || "").toLowerCase();
-            const okExt =
-              name.endsWith(".jpg") ||
-              name.endsWith(".jpeg") ||
-              name.endsWith(".png");
-            const okType =
-              photoFile.type === "image/jpeg" || photoFile.type === "image/png";
-            if (!okExt && !okType) {
-              showError(1, "Please upload a JPG or PNG photo only.");
-              return false;
-            }
-            if (photoFile.size > 5 * 1024 * 1024) {
-              showError(1, "Photo is too large — 5 MB max.");
-              return false;
-            }
-          }
-        }
-        if (step === 2) {
-          if (!document.getElementById("shop_angel_name").value.trim()) {
-            showError(2, "Please enter the angel name for the artwork.");
-            return false;
-          }
-          if (!document.getElementById("shop_real_name").value.trim()) {
-            showError(2, "Please enter your real name too.");
-            return false;
-          }
-        }
-        if (step === 3) {
-          const email = document.getElementById("shop_email").value.trim();
-          const emailCheck = window.AAGEmail
-            ? AAGEmail.validate(email)
-            : {
-                ok: Boolean(email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)),
-                error: "Please enter a valid email address.",
-              };
-          if (!emailCheck.ok) {
-            showError(3, emailCheck.error || "Please enter a valid email address.");
-            return false;
-          }
-        }
-        return true;
-      }
-
-      btnNext.addEventListener("click", async () => {
-        if (!validateStep(currentStep)) return;
-
-        // Purchases are tracked per account: gate the payment step behind
-        // login. The wizard state is untouched, so after signing in the
-        // visitor lands straight on review & pay.
-        if (currentStep === 3) {
-          let user;
-          try {
-            user = await AAGAuth.requireAuth({
-              title: "Log in to complete your order",
-              message:
-                "An account lets us tie this order to you so you can track it from your profile. Your order details are saved — checkout continues right after.",
-            });
-          } catch {
-            showError(
-              3,
-              "Please log in (or create a free account) to continue to payment — your order details are still here."
-            );
-            return;
-          }
-          prefillShopFromUser(user || AAGAuth.getUser(), { forceEmail: true });
-          if (!validateStep(3)) return;
-        }
-
-        setStep(currentStep + 1);
-      });
-      btnBack.addEventListener("click", () => {
-        if (currentStep > 1) setStep(currentStep - 1);
-      });
-
-      // Step 4 has its own back affordance: recreate nav under payment
-      document.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && currentStep < 4) {
-          e.preventDefault();
-          btnNext.click();
-        }
-      });
-
-      /* ── Data loading ─────────────────────────────────── */
-      async function loadShop() {
-        try {
-          const [cfgRes, gRes] = await Promise.all([
-            fetch("/shop/config", { cache: "no-store" }),
-            fetch("/shop/graphics", { cache: "no-store" }),
-          ]);
-          const cfg = await cfgRes.json().catch(() => ({}));
-          const g = await gRes.json().catch(() => ({}));
-
-          // Stripe keys are optional: without them the shop still shows the
-          // archive, and the final step points people to the contact page.
-          if (cfgRes.ok && cfg.success && cfg.enabled) {
-            try {
-              stripe = Stripe(cfg.publishable_key);
-              shopConfig = cfg;
-              const price = fmtPrice(cfg.price_cents, cfg.currency);
-              document.getElementById("price-badge").textContent = "✦ " + price + " per graphic";
-              document.getElementById("pay-amount").textContent = price;
-            } catch {
-              stripe = null;
-              shopConfig = null;
-            }
-          }
-
-          graphicsCache = (g.success && g.graphics) || [];
-          graphicSelect.innerHTML = "";
-          if (!graphicsCache.length) {
-            disableShop();
-            return;
-          }
-          const placeholder = document.createElement("option");
-          placeholder.value = "";
-          placeholder.textContent = "Tap here to see the archive…";
-          graphicSelect.appendChild(placeholder);
-          for (const item of graphicsCache) {
-            const opt = document.createElement("option");
-            opt.value = item.code;
-            opt.textContent = item.label;
-            graphicSelect.appendChild(opt);
-          }
-
-          // Fairy Ring is the first purchasable visual product when available.
-          const fairyRing = graphicsCache.find(
-            (item) => item.code === "fairy-ring" && item.image_url
-          );
-          if (fairyRing) {
-            graphicSelect.value = fairyRing.code;
-            updateGraphicPreview();
-          }
-        } catch {
-          disableShop();
-        }
-      }
-
-      function disableShop() {
-        document.getElementById("shop-disabled").classList.remove("hidden");
-        document.querySelectorAll(".wizard-step").forEach((el) => el.classList.remove("active"));
-        wizardNav.style.display = "none";
-        progressWrap.style.display = "none";
-      }
-
-      /* ── Payment ──────────────────────────────────────── */
-      function checkoutPayload() {
-        return {
-          graphic_code: graphicSelect.value,
-          angel_name: document.getElementById("shop_angel_name").value.trim(),
-          real_name: document.getElementById("shop_real_name").value.trim(),
-          email: document.getElementById("shop_email").value.trim(),
-        };
-      }
-
-      function checkoutCacheKey(payload, photoFile) {
-        return JSON.stringify({
-          ...payload,
-          photo: photoFile
-            ? photoFile.name + ":" + photoFile.size + ":" + photoFile.lastModified
-            : null,
-        });
-      }
-
-      async function preparePayment() {
-        const payload = checkoutPayload();
         const graphic = selectedGraphic();
-        const photoFile = selectedPhotoFile();
-
-        // Re-check photo before creating a PaymentIntent (user may have
-        // cleared the file after leaving step 1).
+        const photoFile =
+          customerPhotoInput.files && customerPhotoInput.files[0]
+            ? customerPhotoInput.files[0]
+            : null;
         if (graphic && graphic.requires_photo && !photoFile) {
-          showError(4, "This graphic needs a JPG or PNG photo — go back to step 1 to attach one.");
+          showMessage("This graphic needs a JPG or PNG photo attached.", false);
           return;
         }
 
-        document.getElementById("sum-graphic").textContent = graphic ? graphic.label : payload.graphic_code;
-        document.getElementById("sum-angel").textContent = payload.angel_name;
-        document.getElementById("sum-email").textContent = payload.email;
-        const photoRow = document.getElementById("sum-photo-row");
-        const photoSum = document.getElementById("sum-photo");
-        if (photoFile) {
-          photoSum.textContent = photoFile.name;
-          photoRow.classList.remove("hidden");
-        } else {
-          photoSum.textContent = "";
-          photoRow.classList.add("hidden");
+        let user;
+        try {
+          user = await AAGAuth.requireAuth({
+            title: "Log in to request from the archive",
+            message: "We’ll use the angel names on your profile — one graphic and one email each.",
+          });
+        } catch {
+          showMessage("Please log in to request a graphic.", false);
+          return;
         }
-        document.getElementById("sum-total").textContent = shopConfig
-          ? fmtPrice(shopConfig.price_cents, shopConfig.currency)
-          : "$5";
-
-        const payBtn = document.getElementById("pay-btn");
-        const loading = document.getElementById("payment-loading");
-        showError(4, "");
-
-        // Payments not configured yet — show the contact fallback instead.
-        if (!shopConfig || !stripe) {
-          loading.style.display = "none";
-          payBtn.style.display = "none";
-          document.getElementById("checkout-unavailable").classList.remove("hidden");
+        user = (await AAGAuth.refresh()) || user;
+        renderGates(user);
+        if (!isMember(user)) {
+          showMessage("Subscribe for $10 a month, then request from the archive.", false);
+          return;
+        }
+        if (!liveNames(user).length) {
+          showMessage("Add at least one angel name on your profile first.", false);
           return;
         }
 
-        // Reuse the payment element if nothing changed (e.g. they went back
-        // to double-check and returned without edits).
-        const key = checkoutCacheKey(payload, photoFile);
-        if (key === lastCheckoutKey && paymentElement) {
-          payBtn.disabled = false;
-          return;
-        }
-        lastCheckoutKey = key;
-
-        payBtn.disabled = true;
-        loading.style.display = "block";
-        if (paymentElement) {
-          paymentElement.unmount();
-          paymentElement = null;
-        }
-
+        btn.disabled = true;
+        btn.textContent = "Sending…";
         try {
           const body = new FormData();
-          body.append("graphic_code", payload.graphic_code);
-          body.append("angel_name", payload.angel_name);
-          body.append("real_name", payload.real_name);
-          body.append("email", payload.email);
+          body.append("graphic_code", graphic_code);
+          body.append("website", document.getElementById("website").value);
           if (photoFile) body.append("customer_photo", photoFile);
-
-          const res = await fetch("/shop/checkout", {
+          const res = await fetch("/submit", {
             method: "POST",
+            credentials: "same-origin",
             body,
           });
           const data = await res.json();
           if (!res.ok || !data.success) {
-            const detail = data.details
-              ? Object.values(data.details).flat().join(" ")
-              : data.error || "Could not start checkout. Please try again.";
-            showError(4, detail);
-            loading.style.display = "none";
+            showMessage(data.error || "Something went wrong.", false);
             return;
           }
-
-          currentIntentId = (data.client_secret || "").split("_secret")[0];
-
-          elements = stripe.elements({
-            clientSecret: data.client_secret,
-            appearance: {
-              theme: "night",
-              variables: {
-                colorPrimary: "#f0c45c",
-                colorBackground: "#17110a",
-                colorText: "#fff6e4",
-                colorDanger: "#fca5a5",
-                fontFamily: "Inter, system-ui, sans-serif",
-                borderRadius: "12px",
-                spacingUnit: "5px",
-              },
-            },
-          });
-          paymentElement = elements.create("payment", { layout: "tabs" });
-          paymentElement.mount("#payment-element");
-          paymentElement.on("ready", () => {
-            loading.style.display = "none";
-            payBtn.disabled = false;
-          });
+          showMessage(
+            data.message ||
+              "Submitted. We’ll email each angel name separately.",
+            true
+          );
         } catch {
-          loading.style.display = "none";
-          showError(4, "Network problem preparing payment. Please try again.");
-        }
-      }
-
-      document.getElementById("pay-btn").addEventListener("click", async () => {
-        const payBtn = document.getElementById("pay-btn");
-        showError(4, "");
-        payBtn.disabled = true;
-        payBtn.textContent = "Processing…";
-
-        try {
-          const result = await stripe.confirmPayment({
-            elements,
-            confirmParams: {
-              return_url: window.location.origin + "/shop",
-            },
-            redirect: "if_required",
-          });
-
-          if (result.error) {
-            showError(4, result.error.message || "Payment didn’t go through. Please try again.");
-            return;
-          }
-
-          const intent = result.paymentIntent;
-          if (intent && intent.status === "succeeded") {
-            await confirmOnServer(intent.id);
-            setStep(5);
-          } else if (intent && intent.status === "processing") {
-            showError(4, "Your payment is processing — this page will update shortly.");
-            setTimeout(() => pollIntent(intent.id, 6), 2500);
-          } else {
-            showError(4, "Payment wasn’t completed. Please try again.");
-          }
-        } catch {
-          showError(4, "Something went wrong during payment. You have not been charged twice — please try again.");
+          showMessage("Network glitch. Try again in a sec.", false);
         } finally {
-          payBtn.disabled = false;
-          payBtn.innerHTML = 'Pay <span id="pay-amount">' +
-            fmtPrice(shopConfig.price_cents, shopConfig.currency) +
-            "</span> securely";
+          btn.disabled = !graphicInput.value;
+          btn.textContent = graphicInput.value ? "Request this graphic" : "Choose a graphic";
         }
       });
 
-      async function confirmOnServer(intentId) {
-        try {
-          await fetch("/shop/confirm", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ payment_intent_id: intentId }),
-          });
-        } catch {}
-      }
-
-      async function pollIntent(intentId, attemptsLeft) {
-        if (attemptsLeft <= 0) return;
-        try {
-          const res = await fetch("/shop/confirm", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ payment_intent_id: intentId }),
-          });
-          const data = await res.json();
-          if (data.paid) {
-            setStep(5);
-            return;
-          }
-        } catch {}
-        setTimeout(() => pollIntent(intentId, attemptsLeft - 1), 2500);
-      }
-
-      /* Handle return from redirect-based payment methods */
-      async function handleRedirectReturn() {
-        const params = new URLSearchParams(window.location.search);
-        const intentId = params.get("payment_intent");
-        if (!intentId) return false;
-
-        window.history.replaceState({}, "", "/shop");
-        try {
-          const res = await fetch("/shop/confirm", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ payment_intent_id: intentId }),
-          });
-          const data = await res.json();
-          if (data.paid) {
-            setStep(5);
-            return true;
-          }
-          if (params.get("redirect_status") === "failed") {
-            showError(1, "Your payment didn’t complete. Please try again — you have not been charged.");
-          }
-        } catch {}
-        return false;
-      }
-
-      const shopEmailInput = document.getElementById("shop_email");
-      const shopEmailHint = document.getElementById("shop-email-hint");
-      if (window.AAGEmail) AAGEmail.bindHint(shopEmailInput, shopEmailHint);
-
-      // Prefill checkout fields from the logged-in account. After login,
-      // replace a known domain typo with the account email.
-      function prefillShopFromUser(user, opts) {
-        if (!user) return;
-        const forceEmail = Boolean(opts && opts.forceEmail);
-        const realName = document.getElementById("shop_real_name");
-        const angelName = document.getElementById("shop_angel_name");
-        if (!realName.value && user.name) realName.value = user.name;
-        if (!angelName.value && user.angel_name) angelName.value = user.angel_name;
-        if (!user.email) return;
-        const typed = shopEmailInput.value.trim();
-        const typo =
-          typed && window.AAGEmail ? AAGEmail.suggest(typed) : null;
-        if (!typed || (forceEmail && typo)) {
-          shopEmailInput.value = user.email;
-          if (shopEmailHint) {
-            shopEmailHint.hidden = true;
-            shopEmailHint.textContent = "";
-          }
-        }
-      }
-      document.addEventListener("aag:auth", (e) =>
-        prefillShopFromUser(e.detail.user)
-      );
-      if (window.AAGAuth) {
-        AAGAuth.ready.then((user) => prefillShopFromUser(user));
-      }
-
-      (async () => {
-        await loadShop();
-        await handleRedirectReturn();
-      })();
+      document.addEventListener("aag:auth", (e) => renderGates(e.detail.user));
+      if (window.AAGAuth) AAGAuth.ready.then((user) => renderGates(user));
+      else renderGates(null);
+      loadArchive();
     </script>
   </body>
 </html>

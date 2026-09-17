@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Membership — Audrey’s Angel Graphics</title>
+    <meta
+      name="description"
+      content="$10 a month for every graphic AAG has ever made. Request from your account — one email per angel name."
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              dusk: "#0a0806",
+              honey: "#f0c45c",
+              cream: "#fff6e4",
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/site.css" />
+    <style>
+      .plan-card {
+        position: relative;
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(12, 9, 5, 0.45);
+        padding: 1.5rem 1.35rem;
+        transition:
+          border-color 0.3s ease,
+          background 0.3s ease,
+          transform 0.3s ease;
+        cursor: pointer;
+        text-align: left;
+        width: 100%;
+        font-family: inherit;
+        color: inherit;
+      }
+      .plan-card:hover {
+        border-color: rgba(240, 196, 92, 0.35);
+        background: rgba(12, 9, 5, 0.65);
+      }
+      .plan-card.selected {
+        border-color: rgba(240, 196, 92, 0.55);
+        background: rgba(240, 196, 92, 0.08);
+        box-shadow: 0 0 0 1px rgba(240, 196, 92, 0.15);
+      }
+      .plan-card.featured::before {
+        content: "Best value";
+        position: absolute;
+        top: -0.65rem;
+        right: 1rem;
+        font-size: 0.68rem;
+        font-weight: 650;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--dusk);
+        background: linear-gradient(90deg, #f6d56a, #e8a838);
+        border-radius: 9999px;
+        padding: 0.2rem 0.65rem;
+      }
+      .feature-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.65rem;
+        padding: 0.45rem 0;
+        font-size: 0.95rem;
+        color: rgba(255, 246, 228, 0.7);
+      }
+      .feature-row svg {
+        flex-shrink: 0;
+        margin-top: 0.15rem;
+      }
+      .preview-banner {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border-radius: 9999px;
+        border: 1px solid rgba(251, 191, 36, 0.4);
+        background: rgba(251, 191, 36, 0.1);
+        color: #fde68a;
+        font-size: 0.75rem;
+        font-weight: 650;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        padding: 0.35rem 0.85rem;
+      }
+      .summary-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.55rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 0.95rem;
+      }
+      .summary-row:last-child {
+        border-bottom: 0;
+      }
+      .price-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        border-radius: 9999px;
+        border: 1px solid rgba(240, 196, 92, 0.4);
+        background: rgba(240, 196, 92, 0.1);
+        color: var(--gold);
+        font-weight: 650;
+        font-size: 0.9rem;
+        padding: 0.45rem 1.1rem;
+      }
+      .big-btn {
+        font-size: 1.05rem;
+        padding: 1rem 2.2rem;
+      }
+    </style>
+  </head>
+  <body data-no-popup>
+    <div class="orb" style="width:300px;height:300px;background:#f0c45c;top:8%;left:6%;opacity:0.14"></div>
+    <div class="orb" style="width:340px;height:340px;background:#e8a838;bottom:8%;right:4%;opacity:0.1;animation-delay:1.4s"></div>
+
+    <header class="fixed inset-x-0 top-0 z-40 px-4 pt-4">
+      <nav class="glass-nav mx-auto flex max-w-5xl items-center justify-between rounded-full px-5 py-3">
+        <a href="/" class="flex items-center gap-2 text-sm font-semibold tracking-wide" style="color:var(--cream);text-decoration:none">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 2l2.4 7.2L22 12l-7.6 2.8L12 22l-2.4-7.2L2 12l7.6-2.8L12 2z" fill="#f0c45c" />
+          </svg>
+          Audrey’s Angel Graphics
+        </a>
+        <div class="hidden items-center gap-7 text-sm sm:flex">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/newsletter" class="nav-link">Newsletter</a>
+          <a href="/shop" class="nav-link">Archive</a>
+          <a href="/subscription" class="nav-link active">Membership</a>
+          <a href="/reviews" class="nav-link">Reviews</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta">Request yours</a>
+        </div>
+        <button
+          id="menu-toggle"
+          type="button"
+          class="sm:hidden"
+          aria-label="Open menu"
+          aria-expanded="false"
+          style="background:none;border:0;color:var(--cream);cursor:pointer;padding:0.25rem"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+      </nav>
+      <div id="mobile-menu" class="mobile-menu glass-nav mx-auto mt-2 max-w-5xl rounded-3xl p-5 sm:hidden">
+        <div class="flex flex-col gap-4 text-sm">
+          <a href="/" class="nav-link">Home</a>
+          <a href="/about" class="nav-link">About</a>
+          <a href="/newsletter" class="nav-link">Newsletter</a>
+          <a href="/shop" class="nav-link">Archive</a>
+          <a href="/subscription" class="nav-link active">Membership</a>
+          <a href="/reviews" class="nav-link">Reviews</a>
+          <a href="/contact" class="nav-link">Contact</a>
+          <a href="/form" class="nav-cta justify-center">Request yours</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="relative z-10 mx-auto max-w-2xl px-5 pb-20 pt-36 sm:pt-44">
+      <section class="reveal text-center">
+        <p class="eyebrow">Membership</p>
+        <h1 class="headline mt-4 text-4xl font-bold text-cream sm:text-5xl">
+          Every graphic,<br />for <span class="gold-text">$10 a month</span>.
+        </h1>
+        <p class="mx-auto mt-5 max-w-lg text-base font-light leading-relaxed text-cream/60 sm:text-lg">
+          Members request from their account. We use the angel names on your
+          profile — each name gets its own graphic and its own email.
+        </p>
+        <p class="mt-5">
+          <span class="price-badge" id="price-badge">✦ $10 / month</span>
+        </p>
+      </section>
+
+      <section class="glass-panel reveal mt-12 rounded-[2rem] p-6 sm:p-10" style="--reveal-delay:0.1s">
+        <div id="sub-loading" class="py-10 text-center text-sm text-cream/50">
+          Loading plans…
+        </div>
+
+        <div id="sub-error" class="hidden py-10 text-center">
+          <p class="text-lg text-cream/70">Couldn’t load membership.</p>
+          <p class="mt-2 text-sm text-cream/45">
+            Refresh, or
+            <a href="/contact" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">send us a message</a>.
+          </p>
+        </div>
+
+        <div id="sub-body" class="hidden">
+          <h2 class="headline text-2xl font-semibold text-cream">
+            AAG Membership
+          </h2>
+          <p class="mt-2 text-[15px] font-light leading-relaxed text-cream/55">
+            Ten dollars a month. Cancel anytime in Stripe’s billing portal.
+          </p>
+
+          <div id="plan-list" class="mt-6 grid gap-3 sm:grid-cols-2" role="listbox" aria-label="Membership plans"></div>
+
+          <div class="mt-8">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-cream/45">
+              What’s included
+            </h3>
+            <div id="feature-list" class="mt-3"></div>
+          </div>
+
+          <div class="mt-8 rounded-2xl border border-white/10 px-5 py-3" style="background:rgba(12,9,5,0.5)">
+            <div class="summary-row">
+              <span class="text-cream/50">Plan</span>
+              <span id="sum-plan" class="text-right font-medium text-cream">—</span>
+            </div>
+            <div class="summary-row">
+              <span class="text-cream/50">Billing</span>
+              <span id="sum-interval" class="text-right font-medium text-cream">—</span>
+            </div>
+            <div class="summary-row">
+              <span class="text-cream/50">Total</span>
+              <span id="sum-total" class="gold-text text-right text-lg font-bold">—</span>
+            </div>
+          </div>
+
+          <button type="button" id="subscribe-btn" class="btn-primary big-btn mt-6 w-full" disabled>
+            Continue to checkout
+          </button>
+          <p id="subscribe-hint" class="mt-3 text-center text-xs text-cream/40">
+            Secure checkout powered by Stripe.
+          </p>
+          <p id="already-member" class="mt-4 hidden text-center text-sm text-emerald-300">
+            You’re already a member.
+            <a href="/profile" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">Open your profile</a>
+            to request graphics or manage billing.
+          </p>
+          <p id="canceled-note" class="mt-4 hidden text-center text-sm text-cream/55">
+            Checkout was canceled. You can try again whenever you’re ready.
+          </p>
+        </div>
+      </section>
+
+      <p class="reveal mt-8 text-center text-sm text-cream/45" style="--reveal-delay:0.2s">
+        Back to the
+        <a href="/shop" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">archive</a>
+        or
+        <a href="/form" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">request form</a>.
+      </p>
+    </main>
+
+    <footer class="relative z-10 mt-8 px-5 pb-10">
+      <div class="mx-auto max-w-5xl">
+        <hr class="divider-glow" />
+        <div class="mt-8 flex flex-wrap items-center justify-between gap-3 text-[11px] text-cream/30">
+          <p>© <span id="year"></span> Audrey’s Angel Graphics</p>
+          <nav data-legal-links class="flex flex-wrap items-center gap-3">
+            <a href="/privacy" class="footer-link" style="font-size:11px">Privacy</a>
+            <a href="/terms" class="footer-link" style="font-size:11px">Terms</a>
+            <a href="/refunds" class="footer-link" style="font-size:11px">Refunds</a>
+          </nav>
+          <div class="flex items-center gap-4">
+            <a href="/shop" class="footer-link" style="font-size:11px">Archive</a>
+            <a href="/admin/" class="footer-link" style="font-size:11px">Admin</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="/assets/site.js"></script>
+    <script src="/assets/auth.js"></script>
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      const checkSvg =
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f0c45c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>';
+
+      let plans = [];
+      let selectedId = null;
+
+      function formatMoney(cents, currency) {
+        const amount = (Number(cents) || 0) / 100;
+        try {
+          return new Intl.NumberFormat("en-US", {
+            style: "currency",
+            currency: (currency || "usd").toUpperCase(),
+            minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+          }).format(amount);
+        } catch {
+          return "$" + amount.toFixed(2);
+        }
+      }
+
+      function intervalLabel(interval) {
+        if (interval === "year") return "Billed yearly";
+        if (interval === "month") return "Billed monthly";
+        return interval || "—";
+      }
+
+      function renderFeatures(features) {
+        const wrap = document.getElementById("feature-list");
+        wrap.innerHTML = (features || [])
+          .map(
+            (f) =>
+              '<div class="feature-row">' +
+              checkSvg +
+              "<span>" +
+              escapeHtml(f) +
+              "</span></div>"
+          )
+          .join("");
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function selectPlan(id) {
+        selectedId = id;
+        const plan = plans.find((p) => p.id === id);
+        document.querySelectorAll(".plan-card").forEach((el) => {
+          el.classList.toggle("selected", el.dataset.planId === id);
+          el.setAttribute("aria-selected", el.dataset.planId === id ? "true" : "false");
+        });
+        if (!plan) return;
+        document.getElementById("sum-plan").textContent = plan.name;
+        document.getElementById("sum-interval").textContent = intervalLabel(plan.interval);
+        document.getElementById("sum-total").textContent =
+          formatMoney(plan.price_cents, plan.currency) +
+          (plan.interval === "year" ? " / year" : " / month");
+        document.getElementById("price-badge").textContent =
+          "✦ " + formatMoney(plan.price_cents, plan.currency) + " · " + plan.name;
+        renderFeatures(plan.features);
+      }
+
+      function renderPlans() {
+        const list = document.getElementById("plan-list");
+        list.innerHTML = plans
+          .map((plan) => {
+            const featured = plan.featured ? " featured" : "";
+            return (
+              '<button type="button" role="option" class="plan-card' +
+              featured +
+              '" data-plan-id="' +
+              escapeHtml(plan.id) +
+              '" aria-selected="false">' +
+              '<p class="text-sm font-semibold text-cream">' +
+              escapeHtml(plan.name) +
+              "</p>" +
+              '<p class="mt-2 text-2xl font-bold text-cream" style="letter-spacing:-0.03em">' +
+              formatMoney(plan.price_cents, plan.currency) +
+              '<span class="ml-1 text-sm font-medium text-cream/45">' +
+              (plan.interval === "year" ? "/ year" : "/ month") +
+              "</span></p>" +
+              '<p class="mt-2 text-xs font-light leading-relaxed text-cream/45">' +
+              escapeHtml(plan.description || "") +
+              "</p>" +
+              "</button>"
+            );
+          })
+          .join("");
+
+        list.querySelectorAll(".plan-card").forEach((el) => {
+          el.addEventListener("click", () => selectPlan(el.dataset.planId));
+        });
+
+        const preferred =
+          plans.find((p) => p.featured)?.id || plans[0]?.id || null;
+        if (preferred) selectPlan(preferred);
+      }
+
+      async function boot() {
+        try {
+          const res = await fetch("/subscription/config", {
+            credentials: "include",
+          });
+          if (!res.ok) {
+            document.getElementById("sub-loading").classList.add("hidden");
+            document.getElementById("sub-error").classList.remove("hidden");
+            return;
+          }
+          const data = await res.json();
+          plans = Array.isArray(data.plans) ? data.plans : [];
+          document.getElementById("sub-loading").classList.add("hidden");
+          if (!plans.length) {
+            document.getElementById("sub-error").classList.remove("hidden");
+            return;
+          }
+          document.getElementById("sub-body").classList.remove("hidden");
+          renderPlans();
+
+          const btn = document.getElementById("subscribe-btn");
+          const hint = document.getElementById("subscribe-hint");
+          const already = document.getElementById("already-member");
+          if (data.subscription && data.subscription.active) {
+            btn.disabled = true;
+            btn.textContent = "You’re a member";
+            already.classList.remove("hidden");
+            hint.textContent = "Manage billing from your profile.";
+          } else if (data.checkout_enabled) {
+            btn.disabled = false;
+            hint.textContent = "Secure checkout powered by Stripe";
+          } else {
+            btn.disabled = true;
+            btn.textContent = "Checkout coming soon";
+            hint.textContent =
+              data.checkout_hint ||
+              "Membership checkout isn’t available yet.";
+          }
+
+          btn.addEventListener("click", async () => {
+            hint.textContent = "";
+            try {
+              await AAGAuth.requireAuth({
+                title: "Log in to subscribe",
+                message: "Create an account or log in, then we’ll send you to Stripe.",
+              });
+            } catch {
+              hint.textContent = "Log in first so we can attach the membership to your account.";
+              return;
+            }
+            btn.disabled = true;
+            btn.textContent = "Opening Stripe…";
+            try {
+              const checkout = await fetch("/subscription/checkout", {
+                method: "POST",
+                credentials: "include",
+              });
+              const result = await checkout.json();
+              if (result.already_member && result.url) {
+                window.location.href = result.url;
+                return;
+              }
+              if (!checkout.ok || !result.url) {
+                hint.textContent = result.error || "Couldn’t start checkout.";
+                btn.disabled = false;
+                btn.textContent = "Continue to checkout";
+                return;
+              }
+              window.location.href = result.url;
+            } catch {
+              hint.textContent = "Network glitch. Try again in a sec.";
+              btn.disabled = false;
+              btn.textContent = "Continue to checkout";
+            }
+          });
+        } catch {
+          document.getElementById("sub-loading").classList.add("hidden");
+          document.getElementById("sub-error").classList.remove("hidden");
+        }
+      }
+
+      if (new URLSearchParams(location.search).get("canceled") === "1") {
+        document.getElementById("canceled-note").classList.remove("hidden");
+      }
+
+      boot();
+    </script>
+  </body>
+</html>

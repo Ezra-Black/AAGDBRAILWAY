@@ -93,7 +93,8 @@
           <a href="/" class="nav-link">Home</a>
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
-          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/shop" class="nav-link">Archive</a>
+          <a href="/subscription" class="nav-link">Membership</a>
           <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta">Request yours</a>
@@ -116,7 +117,8 @@
           <a href="/" class="nav-link">Home</a>
           <a href="/about" class="nav-link">About</a>
           <a href="/newsletter" class="nav-link">Newsletter</a>
-          <a href="/shop" class="nav-link">Shop</a>
+          <a href="/shop" class="nav-link">Archive</a>
+          <a href="/subscription" class="nav-link">Membership</a>
           <a href="/reviews" class="nav-link">Reviews</a>
           <a href="/contact" class="nav-link">Contact</a>
           <a href="/form" class="nav-cta justify-center">Request yours</a>
@@ -130,8 +132,8 @@
         <p class="eyebrow">Your account</p>
         <h1 class="headline mt-4 text-4xl font-bold text-cream">Log in to see your profile.</h1>
         <p class="mx-auto mt-4 max-w-md text-base font-light leading-relaxed text-cream/60">
-          Your profile keeps your angel’s name, photo, and every request and
-          order in one place.
+          Your profile keeps your angel names, photo, membership, and every
+          request in one place.
         </p>
         <button type="button" id="signed-out-login" class="btn-primary mt-8">Log in / create account</button>
       </section>
@@ -146,6 +148,24 @@
           <p class="mt-3 text-sm text-cream/50">
             Member since <span id="member-since">—</span>
           </p>
+        </section>
+
+        <!-- Membership -->
+        <section class="glass-panel mt-10 rounded-[2rem] p-6 sm:p-8">
+          <h2 class="headline text-xl font-semibold text-cream">Membership</h2>
+          <p class="mt-2 text-sm font-light text-cream/55">
+            $10 a month includes every graphic AAG has ever made. Request from
+            your account — we’ll make one for each angel name on this profile.
+          </p>
+          <p id="membership-status" class="mt-4 text-sm text-cream/70"></p>
+          <p id="membership-success" class="mt-3 hidden text-sm text-emerald-300">
+            Welcome — your membership is active. Add angel names below, then request a graphic.
+          </p>
+          <div class="mt-5 flex flex-wrap gap-3">
+            <a id="membership-subscribe" href="/subscription" class="btn-primary" style="padding:0.6rem 1.3rem;font-size:0.8125rem">Become a member</a>
+            <button type="button" id="membership-portal" class="btn-secondary hidden" style="padding:0.6rem 1.3rem;font-size:0.8125rem">Manage billing</button>
+          </div>
+          <p id="membership-note" role="status" aria-live="polite" class="mt-2 min-h-[1.1rem] text-xs text-cream/50"></p>
         </section>
 
         <!-- Photo + profile -->
@@ -172,14 +192,6 @@
                 <input id="pf-name" type="text" maxlength="120" autocomplete="name" />
               </div>
               <div class="field">
-                <label for="pf-angel">Angel’s name</label>
-                <input id="pf-angel" type="text" maxlength="120" placeholder="Your loved one’s name" />
-                <p class="mt-1.5 text-xs text-cream/45">
-                  The name of your deceased loved one — this is the name we
-                  feature on their graphics.
-                </p>
-              </div>
-              <div class="field">
                 <label for="pf-email">Email</label>
                 <input id="pf-email" type="email" maxlength="254" autocomplete="email" />
               </div>
@@ -187,6 +199,32 @@
               <p id="profile-note" role="status" aria-live="polite" class="min-h-[1.1rem] text-xs text-cream/50"></p>
             </form>
           </div>
+        </section>
+
+        <!-- Angel names -->
+        <section class="glass-panel mt-6 rounded-[2rem] p-6 sm:p-8">
+          <h2 class="headline text-xl font-semibold text-cream">Angel names</h2>
+          <p class="mt-2 text-sm font-light text-cream/55">
+            Requests use only these names. Each one gets its own graphic and its
+            own email. You can keep up to 5 here. Removing a name, or asking for
+            more than 5, needs studio approval.
+          </p>
+          <div id="names-list" class="mt-5 space-y-3"></div>
+          <form id="add-name-form" class="mt-5 space-y-3">
+            <div class="field">
+              <label for="add-angel-name">Add an angel name</label>
+              <input id="add-angel-name" type="text" maxlength="120" placeholder="Your loved one’s name" />
+            </div>
+            <button type="submit" class="btn-primary w-full sm:w-auto">Add name</button>
+          </form>
+          <form id="extra-name-form" class="mt-5 hidden space-y-3">
+            <div class="field">
+              <label for="extra-name-note">Need more than 5?</label>
+              <textarea id="extra-name-note" rows="3" maxlength="500" placeholder="Tell us why you need extra names — AAG reviews special accommodations."></textarea>
+            </div>
+            <button type="submit" class="btn-secondary w-full sm:w-auto">Request extra names</button>
+          </form>
+          <p id="names-note" role="status" aria-live="polite" class="mt-3 min-h-[1.1rem] text-xs text-cream/50"></p>
         </section>
 
         <!-- Change password -->
@@ -255,22 +293,16 @@
         <section class="glass-panel mt-6 rounded-[2rem] p-6 sm:p-8">
           <h2 class="headline text-xl font-semibold text-cream">Your activity</h2>
           <p class="mt-2 text-sm font-light text-cream/55">
-            Every graphic request and archive order tied to your account.
+            Every graphic request tied to your account.
           </p>
-
           <h3 class="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-cream/40">Graphic requests</h3>
           <div id="activity-requests" class="mt-2 text-sm text-cream/70">
             <p class="py-3 text-cream/40">Loading…</p>
           </div>
 
-          <h3 class="mt-8 text-xs font-semibold uppercase tracking-[0.2em] text-cream/40">Shop orders</h3>
-          <div id="activity-orders" class="mt-2 text-sm text-cream/70">
-            <p class="py-3 text-cream/40">Loading…</p>
-          </div>
-
           <div class="mt-8 flex flex-wrap gap-3">
             <a href="/form" class="btn-secondary" style="padding:0.6rem 1.3rem;font-size:0.8125rem">Make a new request</a>
-            <a href="/shop" class="btn-secondary" style="padding:0.6rem 1.3rem;font-size:0.8125rem">Browse the archive shop</a>
+            <a href="/shop" class="btn-secondary" style="padding:0.6rem 1.3rem;font-size:0.8125rem">Browse the archive</a>
           </div>
         </section>
 
@@ -296,7 +328,7 @@
             <a href="/" class="footer-link" style="font-size:11px">Home</a>
             <a href="/about" class="footer-link" style="font-size:11px">About</a>
             <a href="/newsletter" class="footer-link" style="font-size:11px">Newsletter</a>
-            <a href="/shop" class="footer-link" style="font-size:11px">Shop</a>
+            <a href="/shop" class="footer-link" style="font-size:11px">Archive</a>
             <a href="/reviews" class="footer-link" style="font-size:11px">Reviews</a>
             <a href="/contact" class="footer-link" style="font-size:11px">Contact</a>
           </div>
@@ -360,9 +392,121 @@
         document.getElementById("hello-name").textContent = (user.name || "friend").split(/\s+/)[0];
         document.getElementById("member-since").textContent = fmtDate(user.created_at);
         document.getElementById("pf-name").value = user.name || "";
-        document.getElementById("pf-angel").value = user.angel_name || "";
         document.getElementById("pf-email").value = user.email || "";
         renderAvatar(user);
+        renderMembership(user);
+        renderNames(user);
+      }
+
+      function renderMembership(user) {
+        const statusEl = document.getElementById("membership-status");
+        const subscribe = document.getElementById("membership-subscribe");
+        const portalBtn = document.getElementById("membership-portal");
+        const sub = user && user.subscription;
+        if (sub && sub.active) {
+          const end = sub.current_period_end ? fmtDate(sub.current_period_end) : null;
+          statusEl.textContent = sub.cancel_at_period_end
+            ? ("Membership stays active through " + (end || "the end of this period") + ", then it ends.")
+            : ("You’re a member" + (end ? " · renews " + end : "") + ".");
+          subscribe.classList.add("hidden");
+          portalBtn.classList.remove("hidden");
+        } else if (sub && sub.status) {
+          statusEl.textContent = "Membership status: " + sub.status + ". Subscribe again to request graphics.";
+          subscribe.classList.remove("hidden");
+          portalBtn.classList.toggle("hidden", !sub.status);
+        } else {
+          statusEl.textContent = "No membership yet. $10 a month includes the whole archive.";
+          subscribe.classList.remove("hidden");
+          portalBtn.classList.add("hidden");
+        }
+      }
+
+      function pendingForName(user, nameId) {
+        return (user.pending_name_requests || []).some(
+          (r) => r.type === "remove" && r.angel_name_id === nameId
+        );
+      }
+
+      function renderNames(user) {
+        const list = document.getElementById("names-list");
+        const addForm = document.getElementById("add-name-form");
+        const extraForm = document.getElementById("extra-name-form");
+        const names = user.angel_names || [];
+        const max = user.max_angel_names || 5;
+        if (!names.length) {
+          list.innerHTML =
+            '<p class="text-sm text-amber-200/90">No angel names yet. Add one below — we can’t make a graphic without it.</p>';
+        } else {
+          list.innerHTML = names
+            .map((n) => {
+              const pending = pendingForName(user, n.id);
+              return (
+                '<div class="activity-row">' +
+                "<div><p class=\"font-medium text-cream\">" +
+                esc(n.name) +
+                "</p>" +
+                '<p class="text-xs text-cream/40">' +
+                (n.slot_kind === "extra" ? "extra name" : "profile name") +
+                "</p></div>" +
+                (pending
+                  ? '<span class="status-pill status-pending">removal pending</span>'
+                  : '<button type="button" class="btn-secondary" data-remove-name="' +
+                    esc(n.id) +
+                    '" style="padding:0.4rem 0.9rem;font-size:0.75rem">Request removal</button>') +
+                "</div>"
+              );
+            })
+            .join("");
+          list.querySelectorAll("[data-remove-name]").forEach((btn) => {
+            btn.addEventListener("click", () =>
+              requestNameRemoval(btn.getAttribute("data-remove-name"))
+            );
+          });
+        }
+        addForm.classList.toggle("hidden", names.length >= max);
+        extraForm.classList.toggle(
+          "hidden",
+          names.length < max ||
+            (user.pending_name_requests || []).some((r) => r.type === "extra_slot")
+        );
+        if ((user.pending_name_requests || []).some((r) => r.type === "extra_slot")) {
+          extraForm.classList.add("hidden");
+          const noteEl = document.getElementById("names-note");
+          if (noteEl && !noteEl.textContent) {
+            note("names-note", "Extra-name request is waiting on the studio.", true);
+          }
+        }
+      }
+
+      async function applyAccount(data) {
+        if (data && data.user) {
+          await AAGAuth.refresh();
+        }
+        renderUser(AAGAuth.getUser());
+      }
+
+      async function requestNameRemoval(id) {
+        const reason = window.prompt(
+          "Removing a name needs studio approval. Optional note for the team:"
+        );
+        if (reason === null) return;
+        try {
+          const res = await fetch("/api/auth/angel-names/" + id + "/remove-request", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user_note: reason }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            note("names-note", detailText(data, "Couldn’t send that request."));
+            return;
+          }
+          await applyAccount(data);
+          note("names-note", data.message || "Removal request sent.", true);
+        } catch {
+          note("names-note", "Network glitch — try again.");
+        }
       }
 
       /* ── Inbox ─────────────────────────────────────────── */
@@ -570,21 +714,9 @@
                 "</div>"
               ).join("")
             : '<p class="py-3 text-cream/40">No requests yet — <a href="/form" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">make your first one</a>.</p>';
-
-          const ordEl = document.getElementById("activity-orders");
-          ordEl.innerHTML = data.orders.length
-            ? data.orders.map((o) =>
-                '<div class="activity-row">' +
-                '<div><p class="font-medium text-cream">' + esc(o.angel_name) + "</p>" +
-                '<p class="text-xs text-cream/40">' + esc(o.graphic_code) + " · $" + (o.amount_cents / 100).toFixed(2) + " · " + fmtDate(o.created_at) + "</p></div>" +
-                statusPill(o.status) +
-                "</div>"
-              ).join("")
-            : '<p class="py-3 text-cream/40">No orders yet — <a href="/shop" class="underline decoration-honey/40 underline-offset-2 hover:text-cream">browse the archive</a>.</p>';
         } catch {
           document.getElementById("activity-requests").innerHTML =
             '<p class="py-3 text-rose-300/80">Couldn’t load your activity. Refresh to try again.</p>';
-          document.getElementById("activity-orders").innerHTML = "";
         }
       }
 
@@ -660,7 +792,6 @@
         const body = {
           name: document.getElementById("pf-name").value.trim(),
           email: document.getElementById("pf-email").value.trim(),
-          angel_name: document.getElementById("pf-angel").value.trim(),
         };
         try {
           const res = await fetch("/api/auth/profile", {
@@ -717,17 +848,99 @@
         } catch {}
       });
 
+      document.getElementById("add-name-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = document.getElementById("add-angel-name").value.trim();
+        if (!name) {
+          note("names-note", "Enter an angel name first.");
+          return;
+        }
+        try {
+          const res = await fetch("/api/auth/angel-names", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            note("names-note", detailText(data, "Couldn’t add that name."));
+            return;
+          }
+          document.getElementById("add-angel-name").value = "";
+          await applyAccount(data);
+          note("names-note", data.message || "Name added.", true);
+        } catch {
+          note("names-note", "Network glitch — try again.");
+        }
+      });
+
+      document.getElementById("extra-name-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        try {
+          const res = await fetch("/api/auth/angel-names/extra-request", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_note: document.getElementById("extra-name-note").value.trim(),
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            note("names-note", detailText(data, "Couldn’t send that request."));
+            return;
+          }
+          document.getElementById("extra-name-note").value = "";
+          await applyAccount(data);
+          note("names-note", data.message || "Request sent.", true);
+        } catch {
+          note("names-note", "Network glitch — try again.");
+        }
+      });
+
+      document.getElementById("membership-portal").addEventListener("click", async () => {
+        note("membership-note", "");
+        try {
+          const res = await fetch("/subscription/portal", {
+            method: "POST",
+            credentials: "same-origin",
+          });
+          const data = await res.json();
+          if (!res.ok || !data.url) {
+            note("membership-note", detailText(data, "Couldn’t open billing."));
+            return;
+          }
+          window.location.href = data.url;
+        } catch {
+          note("membership-note", "Network glitch — try again.");
+        }
+      });
+
+      async function waitForMembership() {
+        const params = new URLSearchParams(location.search);
+        if (params.get("membership") !== "success") return;
+        document.getElementById("membership-success").classList.remove("hidden");
+        for (let i = 0; i < 8; i++) {
+          const user = await AAGAuth.refresh();
+          renderUser(user || AAGAuth.getUser());
+          if (user && user.subscription && user.subscription.active) return;
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+      }
+
       /* ── Boot: require a session for this page ─────────── */
       (async () => {
         try {
           const user = await AAGAuth.requireAuth({
             title: "Log in to your profile",
-            message: "Your profile keeps your angel’s name, photo, and all your requests and orders together.",
+            message: "Your profile keeps your angel names, photo, membership, and requests together.",
           });
           renderUser(user);
           portal.classList.remove("hidden");
           loadInbox();
           loadActivity();
+          await waitForMembership();
           if (location.hash === "#inbox") {
             document.getElementById("inbox").scrollIntoView({ behavior: "smooth" });
           }
